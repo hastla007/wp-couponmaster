@@ -49,10 +49,12 @@ final class VCAP_FCS_Fake_Service {
 }
 
 $fake   = new VCAP_FCS_Fake_Service();
-$filter = static function ( $current ) use ( $fake ) {
-	return null === $current ? $fake : $current;
+// Priority 20 and unconditional: since 1.2.0 the core registers its own service (VoucherRequests, priority 10),
+// the fake must replace it for these checks.
+$filter = static function () use ( $fake ) {
+	return $fake;
 };
-add_filter( 'vcap_voucher_request_service_v1', $filter );
+add_filter( 'vcap_voucher_request_service_v1', $filter, 20 );
 $service = new RequestService( new RequestRepository() );
 $before  = array_sum( ( new RequestRepository() )->counts() );
 $job     = array(
@@ -111,10 +113,10 @@ $test = $service->handle_job( array_merge( $job, array( 'entry_id' => 4717, 'tes
 vcap_fcs_assert( 'test_ok' === $test['code'] && ! isset( $fake->by_ref[ 'formcaptain:' . substr( md5( (string) home_url() ), 0, 8 ) . ':7:4717' ] ), 'test mode stores nothing in the service' );
 
 // VC-FC-06: entry deleted / consent withdrawn → forget_reference() of the service (when it has the method).
-remove_filter( 'vcap_voucher_request_service_v1', $filter );
+remove_filter( 'vcap_voucher_request_service_v1', $filter, 20 );
 delete_option( RequestService::FORGET_UNSUPPORTED_OPTION );
 vcap_fcs_assert( ! method_exists( $fake, 'forget_reference' ), 'the first fake service has no forget_reference()' );
-add_filter( 'vcap_voucher_request_service_v1', $filter );
+add_filter( 'vcap_voucher_request_service_v1', $filter, 20 );
 $by_ref_before = $fake->by_ref;
 Bootstrap::entry_deleted( 4711, 7, 'manual' );
 Bootstrap::consent_withdrawn( 4712, 7, 'admin' );
@@ -122,7 +124,7 @@ vcap_fcs_assert( $by_ref_before === $fake->by_ref, 'without forget_reference(): 
 $flag = get_option( RequestService::FORGET_UNSUPPORTED_OPTION, false );
 Bootstrap::entry_deleted( 4713, 7, 'manual' );
 vcap_fcs_assert( false !== $flag && $flag === get_option( RequestService::FORGET_UNSUPPORTED_OPTION ), 'the missing method is recorded once for the admin notice' );
-remove_filter( 'vcap_voucher_request_service_v1', $filter );
+remove_filter( 'vcap_voucher_request_service_v1', $filter, 20 );
 
 /** Fake with the VC-FC-06 contract: forget_reference( string ): bool|WP_Error, claim stays "rejected". */
 final class VCAP_FCS_Forgetting_Service {
@@ -154,10 +156,10 @@ final class VCAP_FCS_Forgetting_Service {
 	}
 }
 $forgetting = new VCAP_FCS_Forgetting_Service();
-$filter2    = static function ( $current ) use ( $forgetting ) {
-	return null === $current ? $forgetting : $current;
+$filter2    = static function () use ( $forgetting ) {
+	return $forgetting;
 };
-add_filter( 'vcap_voucher_request_service_v1', $filter2 );
+add_filter( 'vcap_voucher_request_service_v1', $filter2, 20 );
 $ref_a = RequestService::reference( 7, 5001 );
 $ref_b = RequestService::reference( 7, 5002 );
 $service->handle_job( array_merge( $job, array( 'entry_id' => 5001 ) ) );
@@ -178,8 +180,11 @@ vcap_fcs_assert( ! isset( $forgetting->by_ref[ $ref_b ] ) && $ref_b === end( $fo
 $again = $service->handle_job( array_merge( $job, array( 'entry_id' => 5001 ) ) );
 vcap_fcs_assert( 'success' === $again['status'] && 'already_rejected' === $again['code'] && ! isset( $forgetting->by_ref[ $ref_a ] ), 'a late redelivery after forgetting stores nothing new (claim rejected)' );
 vcap_fcs_assert( false === RequestService::forget_in_core( 7, 9999 ), 'forgetting an unknown entry answers false without an error' );
-remove_filter( 'vcap_voucher_request_service_v1', $filter2 );
+remove_filter( 'vcap_voucher_request_service_v1', $filter2, 20 );
 delete_option( RequestService::FORGET_UNSUPPORTED_OPTION );
 
+vcap_fcs_assert( RequestService::core_service() instanceof \VCAP\Integrations\VoucherRequests, 'with Voucher Captain 1.2.0 or newer the adapter finds the core service' );
+add_filter( 'vcap_voucher_request_service_v1', '__return_null', 20 );
 vcap_fcs_assert( null === RequestService::core_service(), 'without the service the adapter uses its own table again' );
+remove_filter( 'vcap_voucher_request_service_v1', '__return_null', 20 );
 echo "Request service hand-over checks passed.\n";

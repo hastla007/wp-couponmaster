@@ -586,6 +586,7 @@ jobs:
         run: |
           php wp-cli.phar --path=wp-test eval 'echo form_captain_contract_version(), PHP_EOL;'
           php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/form-captain-integration.php"
+          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/form-captain-request-service.php"
 
   browser-e2e:
     runs-on: ubuntu-latest
