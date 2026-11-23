@@ -9,7 +9,7 @@
  *
  * settings  – option name => attributes. Missing attributes take these values:
  *             type     'string' (also: 'bool' = 'yes'/'no', 'int', 'decimal', 'text' = several lines, 'select',
- *                      'list' = array of strings, 'post' = post/page ID, 'table' = list of rows, checked by
+ *                      'list' = array of strings, 'post' = post/page ID, 'map' = key-value array of an add-on (keys and nested values kept, text cleaned; the add-on checks the content with vcap_settings_validate_value), 'table' = list of rows, checked by
  *                      VCAP\Admin\CountryTableField::validate())
  *             default  '' – what Settings::get() returns while the option was never saved
  *             min/max  null – bounds of 'int'/'decimal', also checked on the server when the settings are saved
