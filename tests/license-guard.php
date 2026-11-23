@@ -157,6 +157,27 @@ foreach ( false === $build ? array() : $build as $number => $line ) {
 	}
 }
 
+// SET-VC-07 (docs/FREE-PREMIUM.md rule 3): the hint lines on add-on functions are text only – the list in
+// config/pro-hints.php may use no other keys and call no function except __().
+$hints_file = "$root/config/pro-hints.php";
+if ( is_file( $hints_file ) ) {
+	$hints_src = (string) file_get_contents( $hints_file );
+	$hints_php = preg_replace( '#/\*.*?\*/#s', '', $hints_src ); // Without the doc comment.
+	preg_match_all( "/'([a-z_]+)'\s*=>/", $hints_php, $hint_keys );
+	foreach ( array_unique( $hint_keys[1] ) as $key ) {
+		if ( ! in_array( $key, array( 'id', 'section', 'title', 'text', 'link' ), true ) ) {
+			$hits[] = sprintf( 'config/pro-hints.php: key "%s" – a hint line has only id, section, title, text, link (text only)', $key );
+		}
+	}
+	$hints_code = preg_replace( "/'(?:[^'\\\\]|\\\\.)*'/s", "''", $hints_php ); // Without the texts.
+	preg_match_all( '/\b([A-Za-z_][A-Za-z0-9_]*)\s*\(/', $hints_code, $hint_calls );
+	foreach ( array_unique( $hint_calls[1] ) as $call ) {
+		if ( ! in_array( $call, array( '__', 'array', 'defined' ), true ) ) {
+			$hits[] = sprintf( 'config/pro-hints.php: call %s() – a hint line is text only (no option, no network, no code)', $call );
+		}
+	}
+}
+
 if ( $hits ) {
 	fwrite( STDERR, "License guard: licensing, update or unlisted network code in the core (docs/FREE-PREMIUM.md):\n  " . implode( "\n  ", $hits ) . "\n" );
 	exit( 1 );

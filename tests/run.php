@@ -2897,10 +2897,13 @@ array_pop( $GLOBALS['vcap_test_filters']['vcap_pdf_fonts'] );
 
 check( 'S6: referral rewards are "Individual use only" (several rewards cannot be stacked)', (bool) preg_match( '/function reward_coupon\(.*?set_individual_use\( true \).*?return \$coupon->save\(\)/s', $sec_src( 'src/Referrals.php' ) ) );
 
-// A6 (free core): the code of the core names no premium offer, upgrade or add-on product.
+// A6 (free core): the code of the core names no premium offer, upgrade or add-on product – except the hint lines of
+// decision S1 (23.11.2026, FREE-PREMIUM.md rule 3), which may name the add-on (src/Admin/ProHints.php), but never as
+// an upgrade prompt.
 $a6_upsell = array();
 foreach ( new RecursiveIteratorIterator( new RecursiveDirectoryIterator( dirname( __DIR__ ) . '/src', FilesystemIterator::SKIP_DOTS ) ) as $a6_file ) {
-	if ( 'php' === $a6_file->getExtension() && preg_match( '/upgrade to|go pro\b|pro version|premium feature|captain[ -]pro/i', (string) file_get_contents( $a6_file->getPathname() ) ) ) {
+	$a6_pattern = str_ends_with( $a6_file->getPathname(), '/src/Admin/ProHints.php' ) ? '/upgrade to|go pro\b|pro version|premium feature/i' : '/upgrade to|go pro\b|pro version|premium feature|captain[ -]pro/i';
+	if ( 'php' === $a6_file->getExtension() && preg_match( $a6_pattern, (string) file_get_contents( $a6_file->getPathname() ) ) ) {
 		$a6_upsell[] = substr( $a6_file->getPathname(), strlen( dirname( __DIR__ ) ) + 1 );
 	}
 }
@@ -3564,6 +3567,33 @@ remove_filter( 'vcap_contact_read_allowed', $wf15_allow );
 unset( $GLOBALS['vcap_test_options'][ VCAP\API\V1\ContactService::OPTION_ENABLED ] );
 $wf15_fields = VCAP\API\V1\ContactService::settings_fields( array(), 'api' );
 check( 'VOUCH-WF-15: the switch is in "Integrations (API)" with default "no"; functions and contract 1.5.0 are documented', 1 === count( array_filter( $wf15_fields, static fn( $f ) => VCAP\API\V1\ContactService::OPTION_ENABLED === ( $f['id'] ?? '' ) && 'checkbox' === $f['type'] && 'no' === $f['default'] ) ) && array() === VCAP\API\V1\ContactService::settings_fields( array(), 'codes' ) && function_exists( 'vcap_read_voucher_contact' ) && function_exists( 'vcap_record_contact_consent' ) && function_exists( 'vcap_withdraw_contact_consent' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'API.md' ), '### Contact and consent (since 1.3.0, contract 1.5.0)' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'CONNECTORS.md' ), '| 1.5.0 | 1.3.0 | contact and consent' ) );
+// SET-VC-07 (owner's decision S1, 23.11.2026): hint lines on add-on functions – text only, replaceable, hideable.
+if ( ! function_exists( 'wp_nonce_url' ) ) {
+	function wp_nonce_url( $url, $action = -1 ) { return $url . '&_wpnonce=test'; }
+}
+$s7_fields = VCAP\Admin\ProHints::append( array( array( 'id' => 'vcap_x', 'type' => 'text' ) ), 'delivery' );
+$s7_lines  = array_values( array_filter( $s7_fields, static fn( $f ) => VCAP\Admin\ProHints::FIELD_TYPE === ( $f['type'] ?? '' ) ) );
+check( 'SET-VC-07: a section gets one block "Extensions" with its hint lines after its own fields (Delivery: text messages, wallet)', 'vcap_x' === $s7_fields[0]['id'] && 'title' === $s7_fields[1]['type'] && 'sectionend' === end( $s7_fields )['type'] && array( 'vcap_hint_sms_delivery', 'vcap_hint_wallet_passes' ) === array_column( $s7_lines, 'id' ) && array( false, false ) === array_column( $s7_lines, 'is_option' ) );
+$s7_repl = VCAP\Admin\ProHints::append( array( array( 'id' => 'vcap_pro_sms', 'type' => 'text', 'replaces' => 'sms_delivery' ) ), 'delivery' );
+$s7_both = VCAP\Admin\ProHints::append( array( array( 'id' => 'a', 'type' => 'text', 'replaces' => array( 'sms_delivery', 'wallet_passes' ) ) ), 'delivery' );
+check( 'SET-VC-07: a field of the add-on with replaces => id removes its line; with all lines replaced no block remains', array( 'vcap_hint_wallet_passes' ) === array_column( array_filter( $s7_repl, static fn( $f ) => VCAP\Admin\ProHints::FIELD_TYPE === ( $f['type'] ?? '' ) ), 'id' ) && 1 === count( $s7_both ) );
+check( 'SET-VC-07: General has the own-brand line, a section without listed functions gets no block', array( 'vcap_hint_white_label' ) === array_column( array_filter( VCAP\Admin\ProHints::append( array(), '' ), static fn( $f ) => VCAP\Admin\ProHints::FIELD_TYPE === ( $f['type'] ?? '' ) ), 'id' ) && array() === VCAP\Admin\ProHints::append( array(), 'codes' ) );
+$s7_hide = static fn() => true;
+add_filter( 'vcap_pro_hints_hidden', $s7_hide );
+$s7_hidden = VCAP\Admin\ProHints::append( array(), 'delivery' );
+remove_filter( 'vcap_pro_hints_hidden', $s7_hide );
+check( 'SET-VC-07: hidden for the user, no line is shown', array() === $s7_hidden );
+ob_start();
+VCAP\Admin\ProHints::render( array_merge( $s7_lines[0], array( 'link' => 'https://example.test/pro' ) ) );
+$s7_html = (string) ob_get_clean();
+check( 'SET-VC-07: a line renders title, "Pro" mark and text – no input, select, textarea, button or disabled control', str_contains( $s7_html, 'Text messages' ) && str_contains( $s7_html, '>Pro<' ) && ! preg_match( '/<(input|select|textarea|button)\b|disabled/i', $s7_html ) && str_contains( $s7_html, 'https://example.test/pro' ) );
+$s7_extra = static fn( $h ) => array_merge( $h, array( array( 'id' => 'evil', 'section' => 'codes', 'title' => 'X', 'text' => 'Y', 'link' => 'http://plain.test' ), array( 'id' => 'empty', 'section' => 'codes', 'title' => 'X', 'text' => '' ), array( 'id' => 'ok', 'section' => 'codes', 'title' => '<b>T</b>', 'text' => 'Z' ) ) );
+add_filter( 'vcap_settings_hints', $s7_extra );
+$s7_ids = array_column( VCAP\Admin\ProHints::hints(), 'title', 'id' );
+remove_filter( 'vcap_settings_hints', $s7_extra );
+check( 'SET-VC-07: vcap_settings_hints adds lines; a non-https link or an empty text drops the line, tags are stripped', 'T' === ( $s7_ids['ok'] ?? '' ) && ! isset( $s7_ids['evil'] ) && ! isset( $s7_ids['empty'] ) && isset( $s7_ids['white_label'] ) );
+$s7_doc = (string) file_get_contents( VCAP_PATH . 'docs/FREE-PREMIUM.md' );
+check( 'SET-VC-07: FREE-PREMIUM.md rule 3 allows the hint lines (decision S1) and still forbids license code', str_contains( $s7_doc, 'Entscheidung S1 vom 23.11.2026' ) && str_contains( $s7_doc, 'Kein Lizenz- oder Update-Code im Kern' ) );
 $e17_main = (string) file_get_contents( VCAP_PATH . 'voucher-captain.php' );
 $e17_apim = (string) file_get_contents( VCAP_PATH . 'API.md' );
 $e17_conn = (string) file_get_contents( VCAP_PATH . 'CONNECTORS.md' );

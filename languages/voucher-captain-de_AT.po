@@ -14842,3 +14842,51 @@ msgstr "Einwilligung zur Kontaktaufnahme widerrufen"
 
 msgid "Contact read by an add-on"
 msgstr "Kontakt von einem Add-on gelesen"
+
+msgid "(opens in a new tab)"
+msgstr "(öffnet in einem neuen Tab)"
+
+msgid "Apple Wallet and Google Wallet"
+msgstr "Apple Wallet und Google Wallet"
+
+msgid "Company orders"
+msgstr "Firmenbestellungen"
+
+msgid "Company orders: upload a recipient list and issue many vouchers at once. Available with Voucher Captain Pro."
+msgstr "Firmenbestellungen: Laden Sie eine Empfängerliste hoch und stellen Sie viele Gutscheine auf einmal aus. Verfügbar mit Voucher Captain Pro."
+
+msgid "Customers add vouchers to Apple Wallet or Google Wallet, with your colours, logo and barcode. Available with Voucher Captain Pro."
+msgstr "Kunden legen Gutscheine in Apple Wallet oder Google Wallet ab, mit Ihren Farben, Ihrem Logo und Barcode. Verfügbar mit Voucher Captain Pro."
+
+msgid "Extensions"
+msgstr "Erweiterungen"
+
+msgid "Functions of the separate add-on Voucher Captain Pro. %s"
+msgstr "Funktionen des getrennten Zusatz-Plugins Voucher Captain Pro. %s"
+
+msgid "Hide hints on extensions"
+msgstr "Hinweise auf Erweiterungen ausblenden"
+
+msgid "Hide hints on extensions in the voucher settings"
+msgstr "Hinweise auf Erweiterungen in den Gutschein-Einstellungen ausblenden"
+
+msgid "Hints on extensions"
+msgstr "Hinweise auf Erweiterungen"
+
+msgid "Learn more"
+msgstr "Mehr erfahren"
+
+msgid "Pro"
+msgstr "Pro"
+
+msgid "Send the voucher link by text message (seven, Twilio, MessageBird), with your own text, sender and consent. Available with Voucher Captain Pro."
+msgstr "Verschicken Sie den Gutschein-Link per SMS (seven, Twilio, MessageBird), mit eigenem Text, Absender und Einwilligung. Verfügbar mit Voucher Captain Pro."
+
+msgid "Text messages"
+msgstr "SMS"
+
+msgid "Your own brand"
+msgstr "Eigene Marke"
+
+msgid "Your own name, logo and menu title instead of “Voucher Captain”. Available with Voucher Captain Pro."
+msgstr "Eigener Name, eigenes Logo und eigener Menütitel statt „Voucher Captain“. Verfügbar mit Voucher Captain Pro."

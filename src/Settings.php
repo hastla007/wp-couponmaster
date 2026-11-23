@@ -306,7 +306,10 @@ final class Settings {
 		 * Fields of a section of the "Vouchers" settings tab (args: WooCommerce settings fields, section id – '' is
 		 * "General"). Add-ons add fields to a core section or fill their own section from "vcap_settings_sections".
 		 */
-		return apply_filters( 'vcap_settings_fields', $fields, $section );
+		$fields = apply_filters( 'vcap_settings_fields', $fields, $section );
+		// SET-VC-07: hint lines for add-on functions after the add-ons' own fields (a field with 'replaces' removes
+		// its line); text only, see docs/FREE-PREMIUM.md rule 3.
+		return Admin\ProHints::append( is_array( $fields ) ? $fields : array(), $section );
 	}
 
 	/** Section "Delivery & downloads" (and bundled delivery). */
