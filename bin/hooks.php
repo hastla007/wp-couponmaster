@@ -85,10 +85,18 @@ function vcap_hooks_doc( string $before ): string {
 	return trim( preg_replace( '/\s+/', ' ', implode( ' ', $lines ) ) );
 }
 
-/** The `@since x.y.z` of the doc comment that ends right before a hook call, or ''. */
+/**
+ * The `@since x.y.z` of the doc comment of the statement with the hook call, or ''. Same rule as vcap_hooks_doc(): the
+ * comment may be followed by the start of that statement (`return (bool) apply_filters(`, `$max = max( 1, apply_filters(`),
+ * but not by another statement or block.
+ */
 function vcap_hooks_since( string $before ): string {
 	$end = strrpos( $before, '*/' );
-	if ( false === $end || '' !== trim( substr( $before, $end + 2 ) ) ) {
+	if ( false === $end ) {
+		return '';
+	}
+	$between = substr( $before, $end + 2 );
+	if ( str_contains( $between, ';' ) || str_contains( $between, '{' ) || str_contains( $between, '}' ) || substr_count( $between, "\n" ) > 3 ) {
 		return '';
 	}
 	$start = strrpos( substr( $before, 0, $end ), '/*' );
