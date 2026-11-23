@@ -264,6 +264,8 @@ return array(
 		'vcap_onboarding_dismissed',
 		'vcap_onboarding_done',
 		'vcap_validity_choice',
+		// SET-VC-02: the country profile applied last (id, time, user).
+		'vcap_country_profile',
 		'vcap_mail_failures',
 		'vcap_debug_log_until',
 		// Counters, locks and bookkeeping of running work.

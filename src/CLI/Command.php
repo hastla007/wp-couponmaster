@@ -2,6 +2,7 @@
 namespace VCAP\CLI;
 
 use VCAP\Admin\DataRemoval;
+use VCAP\CountryProfiles;
 use VCAP\Delivery;
 use VCAP\Diagnostics;
 use VCAP\Health;
@@ -456,19 +457,26 @@ final class Command {
 	}
 
 	/**
-	 * Reads and changes the settings of the register (SET-VC-17): list, get, set, export, import, reset.
+	 * Reads and changes the settings of the register (SET-VC-17): list, get, set, export, import, reset, profile.
 	 *
 	 * Values are checked like on the settings page (type, bounds, choices); secrets are never shown, exported or set.
-	 * Every change is recorded in the change log with the source "WP-CLI". Country profiles (SET-VC-02) do not exist
-	 * yet, so there is no "profile" sub-command.
+	 * Every change is recorded in the change log with the source "WP-CLI". "profile" lists the country profiles
+	 * (SET-VC-02), shows the changes one would make (current -> suggested) and applies them after a confirmation;
+	 * like on the settings page, values you set yourself and the link parameter are kept unless --all is given.
 	 *
 	 * ## OPTIONS
 	 *
 	 * <action>
-	 * : list, get, set, export, import or reset.
+	 * : list, get, set, export, import, reset or profile.
 	 *
 	 * [<arg>...]
-	 * : get <key> | set <key> <value> | import <file> | reset [<section>|all].
+	 * : get <key> | set <key> <value> | import <file> | reset [<section>|all] | profile <list|show|apply>.
+	 *
+	 * [--country=<profile>]
+	 * : profile show, apply: the profile (DE, AT, CH, EU, OTHER, or one added by the filter vcap_country_profiles).
+	 *
+	 * [--all]
+	 * : profile apply: also replace values you set yourself and the link parameter.
 	 *
 	 * [--section=<section>]
 	 * : list: only this section (general, redemption, promotions, codes, delivery, privacy, api, …).
@@ -483,10 +491,10 @@ final class Command {
 	 * : export: print an automatic backup instead (newest, or the one with this timestamp).
 	 *
 	 * [--dry-run]
-	 * : import, reset: only show what would change.
+	 * : import, reset, profile apply: only show what would change.
 	 *
 	 * [--yes]
-	 * : import, reset: do not ask for confirmation.
+	 * : import, reset, profile apply: do not ask for confirmation.
 	 *
 	 * ## EXAMPLES
 	 *
@@ -496,6 +504,9 @@ final class Command {
 	 *     wp vcap settings export --file=settings.json
 	 *     wp vcap settings import settings.json --dry-run
 	 *     wp vcap settings reset codes --yes
+	 *     wp vcap settings profile list
+	 *     wp vcap settings profile show --country=AT
+	 *     wp vcap settings profile apply --country=DE --dry-run
 	 *
 	 * @param array $args       Positional arguments.
 	 * @param array $assoc_args Options.
@@ -525,8 +536,11 @@ final class Command {
 			case 'reset':
 				$this->settings_reset( (string) ( $args[0] ?? '' ), $assoc_args );
 				return;
+			case 'profile':
+				$this->settings_profile( (string) ( $args[0] ?? '' ), $assoc_args );
+				return;
 		}
-		self::error( 'Usage: wp vcap settings list|get|set|export|import|reset (country profiles are not available yet).' );
+		self::error( 'Usage: wp vcap settings list|get|set|export|import|reset|profile' );
 	}
 
 	/** Section id of a section argument ('general' = General, '' / 'all' = all sections = null), false when unknown. */
@@ -663,6 +677,82 @@ final class Command {
 		}
 		$result = SettingsTransfer::reset( $section );
 		self::success( sprintf( '%d settings reset. Previous settings: wp vcap settings export --backup=%d', count( $result['changed'] ), $result['backup'] ) );
+	}
+
+	/**
+	 * "wp vcap settings profile <list|show|apply> [--country=] [--dry-run] [--yes] [--all]" (SET-VC-02): a profile is a
+	 * suggestion – "show" and "--dry-run" change nothing, "apply" asks first, saves a backup and records the source
+	 * "country profile" in the change log.
+	 */
+	private function settings_profile( string $action, array $assoc_args ): void {
+		if ( 'list' === $action ) {
+			$rows    = array();
+			$applied = CountryProfiles::applied();
+			foreach ( CountryProfiles::all() as $id => $profile ) {
+				$rows[] = array(
+					'profile' => $id,
+					'name'    => CountryProfiles::label( $id ),
+					'country' => $profile['country'],
+					'checked' => $profile['checked'] ? 'yes' : ( '' !== $profile['country'] ? 'no (legal check pending)' : 'no (neutral, not checked)' ),
+					'applied' => null !== $applied && $applied['id'] === $id ? 'yes' : '',
+				);
+			}
+			self::table( $rows, array( 'profile', 'name', 'country', 'checked', 'applied' ), (string) ( $assoc_args['format'] ?? 'table' ) );
+			return;
+		}
+		if ( ! in_array( $action, array( 'show', 'apply' ), true ) ) {
+			self::error( 'Usage: wp vcap settings profile <list|show|apply> [--country=<profile>] [--dry-run] [--yes] [--all]' );
+			return;
+		}
+		$id      = strtoupper( (string) ( $assoc_args['country'] ?? CountryProfiles::for_base_country() ) );
+		$preview = CountryProfiles::preview( $id );
+		if ( is_wp_error( $preview ) ) {
+			self::error( $preview->get_error_message() );
+			return;
+		}
+		self::line( sprintf( '%s (%s): %s', CountryProfiles::label( $id ), $id, CountryProfiles::status( $id ) ) );
+		$all      = isset( $assoc_args['all'] );
+		$selected = array();
+		foreach ( $preview as $item => $row ) {
+			$mark = '' !== $row['review'] ? ' [' . $row['review'] . ']' : '';
+			if ( '' !== $row['error'] ) {
+				self::warning( sprintf( '%s: %s', $row['label'], $row['error'] ) );
+				continue;
+			}
+			if ( ! $row['changed'] ) {
+				self::line( sprintf( '  = %s: %s (already set)%s', $row['label'], $row['to'], $mark ) );
+				continue;
+			}
+			$take = $row['preselected'] || $all;
+			if ( $take ) {
+				$selected[] = $item;
+			}
+			$why = $take ? '' : ( $row['opt_in'] ? ' (suggestion only, kept – use --all)' : ' (your own value, kept – use --all)' );
+			self::line( sprintf( '  %s %s: %s -> %s%s%s', $take ? '*' : '-', $row['label'], $row['from'], $row['to'], $why, $mark ) );
+		}
+		foreach ( CountryProfiles::hints( $id ) as $hint ) {
+			self::line( sprintf( '  i %s: %s%s', $hint['label'], $hint['text'], '' !== $hint['review'] ? ' [' . $hint['review'] . ']' : '' ) );
+		}
+		if ( 'show' === $action ) {
+			return;
+		}
+		if ( isset( $assoc_args['dry-run'] ) ) {
+			self::line( sprintf( 'Dry run: %d settings would change.', count( $selected ) ) );
+			return;
+		}
+		if ( $selected && ! isset( $assoc_args['yes'] ) ) {
+			\WP_CLI::confirm( sprintf( 'Apply %d values of the country profile %s?', count( $selected ), $id ) );
+		}
+		$result = CountryProfiles::apply( $id, $selected );
+		if ( is_wp_error( $result ) ) {
+			self::error( wp_strip_all_tags( $result->get_error_message() ) );
+			return;
+		}
+		self::success(
+			$result['changed']
+				? sprintf( '%d settings changed from the country profile %s. Previous settings: wp vcap settings export --backup=%d', count( $result['changed'] ), $id, $result['backup'] )
+				: sprintf( 'Country profile %s chosen; no setting was changed.', $id )
+		);
 	}
 
 	/**

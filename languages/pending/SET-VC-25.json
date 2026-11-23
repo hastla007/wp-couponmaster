@@ -1,0 +1,42 @@
+{
+	"Choose a country profile: suggested settings for the country you sell in (validity, receipt number, retention, date format), shown as a preview before anything changes": {
+		"du": "Länderprofil wählen: vorgeschlagene Einstellungen für das Land, in dem du verkaufst (Gültigkeit, Belegnummer, Aufbewahrung, Datumsformat), als Vorschau, bevor sich etwas ändert",
+		"sie": "Länderprofil wählen: vorgeschlagene Einstellungen für das Land, in dem Sie verkaufen (Gültigkeit, Belegnummer, Aufbewahrung, Datumsformat), als Vorschau, bevor sich etwas ändert",
+		"at": "Länderprofil wählen: vorgeschlagene Einstellungen für das Land, in dem Sie verkaufen (Gültigkeit, Belegnummer, Aufbewahrung, Datumsformat), als Vorschau, bevor sich etwas ändert"
+	},
+	"Show suggestions for %s": {
+		"du": "Vorschläge für %s anzeigen",
+		"sie": "Vorschläge für %s anzeigen",
+		"at": "Vorschläge für %s anzeigen"
+	},
+	"Choose another profile": {
+		"du": "Anderes Profil wählen",
+		"sie": "Anderes Profil wählen",
+		"at": "Anderes Profil wählen"
+	},
+	"Mandatory texts per country: redemption conditions for every country you sell to (have them checked legally). Missing for: %s": {
+		"du": "Pflichttexte pro Land: Einlösebedingungen für jedes Land, in das du verkaufst (rechtlich prüfen lassen). Fehlen für: %s",
+		"sie": "Pflichttexte pro Land: Einlösebedingungen für jedes Land, in das Sie verkaufen (rechtlich prüfen lassen). Fehlen für: %s",
+		"at": "Pflichttexte pro Land: Einlösebedingungen für jedes Land, in das Sie verkaufen (rechtlich prüfen lassen). Fehlen für: %s"
+	},
+	"Mandatory texts per country: redemption conditions for every country you sell to (have them checked legally)": {
+		"du": "Pflichttexte pro Land: Einlösebedingungen für jedes Land, in das du verkaufst (rechtlich prüfen lassen)",
+		"sie": "Pflichttexte pro Land: Einlösebedingungen für jedes Land, in das Sie verkaufen (rechtlich prüfen lassen)",
+		"at": "Pflichttexte pro Land: Einlösebedingungen für jedes Land, in das Sie verkaufen (rechtlich prüfen lassen)"
+	},
+	"Confirm the tax type once it is checked (details in TAX.md of the plugin documentation).": {
+		"du": "Bestätige die Steuerart, sobald sie geprüft ist (Einzelheiten in TAX.md der Plugin-Dokumentation).",
+		"sie": "Bestätigen Sie die Steuerart, sobald sie geprüft ist (Einzelheiten in TAX.md der Plugin-Dokumentation).",
+		"at": "Bestätigen Sie die Steuerart, sobald sie geprüft ist (Einzelheiten in TAX.md der Plugin-Dokumentation)."
+	},
+	"Open tax setting": {
+		"du": "Steuer-Einstellung öffnen",
+		"sie": "Steuer-Einstellung öffnen",
+		"at": "Steuer-Einstellung öffnen"
+	},
+	"Retention: after how many days recipient data of used or expired vouchers is anonymised (default: kept). Set a period that fits your country, or mark the step as done to keep the data.": {
+		"du": "Aufbewahrung: nach wie vielen Tagen Empfängerdaten eingelöster oder abgelaufener Gutscheine anonymisiert werden (Standard: behalten). Lege eine Frist fest, die zu deinem Land passt, oder markiere den Schritt als erledigt, um die Daten zu behalten.",
+		"sie": "Aufbewahrung: nach wie vielen Tagen Empfängerdaten eingelöster oder abgelaufener Gutscheine anonymisiert werden (Standard: behalten). Legen Sie eine Frist fest, die zu Ihrem Land passt, oder markieren Sie den Schritt als erledigt, um die Daten zu behalten.",
+		"at": "Aufbewahrung: nach wie vielen Tagen Empfängerdaten eingelöster oder abgelaufener Gutscheine anonymisiert werden (Standard: behalten). Legen Sie eine Frist fest, die zu Ihrem Land passt, oder markieren Sie den Schritt als erledigt, um die Daten zu behalten."
+	}
+}

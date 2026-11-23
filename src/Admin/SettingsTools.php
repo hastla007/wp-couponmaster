@@ -189,7 +189,7 @@ final class SettingsTools {
 		if ( $backups ) {
 			echo '<h4>' . esc_html__( 'Automatic backups', 'voucher-captain' ) . '</h4><ul>';
 			foreach ( $backups as $time => $backup ) {
-				$reason = SettingsLog::VIA_RESET === $backup['reason'] ? __( 'before a reset', 'voucher-captain' ) : __( 'before an import', 'voucher-captain' );
+				$reason = SettingsLog::VIA_RESET === $backup['reason'] ? __( 'before a reset', 'voucher-captain' ) : ( SettingsLog::VIA_PROFILE === $backup['reason'] ? __( 'before a country profile', 'voucher-captain' ) : __( 'before an import', 'voucher-captain' ) );
 				echo '<li><a href="' . esc_url( self::action_url( 'vcap_settings_backup', array( 'backup' => $time ) ) ) . '">' . esc_html( wp_date( 'Y-m-d H:i', $time ) ) . '</a> – ' . esc_html( $reason ) . '</li>';
 			}
 			echo '</ul><p class="description">' . esc_html__( 'Download a backup and import it to restore the settings it contains.', 'voucher-captain' ) . '</p>';

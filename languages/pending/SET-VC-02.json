@@ -1,0 +1,280 @@
+{
+	"Germany": {
+		"du": "Deutschland",
+		"sie": "Deutschland",
+		"at": "Deutschland"
+	},
+	"Austria": {
+		"du": "Österreich",
+		"sie": "Österreich",
+		"at": "Österreich"
+	},
+	"Switzerland": {
+		"du": "Schweiz",
+		"sie": "Schweiz",
+		"at": "Schweiz"
+	},
+	"EU (other member states)": {
+		"du": "EU (übrige Mitgliedstaaten)",
+		"sie": "EU (übrige Mitgliedstaaten)",
+		"at": "EU (übrige Mitgliedstaaten)"
+	},
+	"Other countries": {
+		"du": "Andere Länder",
+		"sie": "Andere Länder",
+		"at": "Andere Länder"
+	},
+	"Legal check pending": {
+		"du": "Rechtsprüfung offen",
+		"sie": "Rechtsprüfung offen",
+		"at": "Rechtsprüfung offen"
+	},
+	"Checked for this country.": {
+		"du": "Für dieses Land geprüft.",
+		"sie": "Für dieses Land geprüft.",
+		"at": "Für dieses Land geprüft."
+	},
+	"Legal check pending: the suggested values have not been legally or tax checked for this country yet. Have them checked before you rely on them.": {
+		"du": "Rechtsprüfung offen: Die vorgeschlagenen Werte sind für dieses Land noch nicht rechtlich und steuerlich geprüft. Lass sie prüfen, bevor du dich darauf verlässt.",
+		"sie": "Rechtsprüfung offen: Die vorgeschlagenen Werte sind für dieses Land noch nicht rechtlich und steuerlich geprüft. Lassen Sie sie prüfen, bevor Sie sich darauf verlassen.",
+		"at": "Rechtsprüfung offen: Die vorgeschlagenen Werte sind für dieses Land noch nicht rechtlich und steuerlich geprüft. Lassen Sie sie prüfen, bevor Sie sich darauf verlassen."
+	},
+	"Not checked: neutral values only – nothing with legal weight is suggested. Set validity, receipt duty and retention for your countries yourself.": {
+		"du": "Nicht geprüft: nur neutrale Werte – nichts mit rechtlichem Gewicht wird vorgeschlagen. Lege Gültigkeit, Belegpflicht und Aufbewahrung für deine Länder selbst fest.",
+		"sie": "Nicht geprüft: nur neutrale Werte – nichts mit rechtlichem Gewicht wird vorgeschlagen. Legen Sie Gültigkeit, Belegpflicht und Aufbewahrung für Ihre Länder selbst fest.",
+		"at": "Nicht geprüft: nur neutrale Werte – nichts mit rechtlichem Gewicht wird vorgeschlagen. Legen Sie Gültigkeit, Belegpflicht und Aufbewahrung für Ihre Länder selbst fest."
+	},
+	"Validity of products without their own expiry": {
+		"du": "Gültigkeit von Produkten ohne eigenes Ablaufdatum",
+		"sie": "Gültigkeit von Produkten ohne eigenes Ablaufdatum",
+		"at": "Gültigkeit von Produkten ohne eigenes Ablaufdatum"
+	},
+	"Statutory validity per country: row %s": {
+		"du": "Gesetzliche Gültigkeit pro Land: Zeile %s",
+		"sie": "Gesetzliche Gültigkeit pro Land: Zeile %s",
+		"at": "Gesetzliche Gültigkeit pro Land: Zeile %s"
+	},
+	"statutory validity": {
+		"du": "gesetzliche Gültigkeit",
+		"sie": "gesetzliche Gültigkeit",
+		"at": "gesetzliche Gültigkeit"
+	},
+	"fixed number of days": {
+		"du": "feste Anzahl Tage",
+		"sie": "feste Anzahl Tage",
+		"at": "feste Anzahl Tage"
+	},
+	"no row (market data or default applies)": {
+		"du": "keine Zeile (Marktdaten oder Standard gelten)",
+		"sie": "keine Zeile (Marktdaten oder Standard gelten)",
+		"at": "keine Zeile (Marktdaten oder Standard gelten)"
+	},
+	"never expires": {
+		"du": "läuft nie ab",
+		"sie": "läuft nie ab",
+		"at": "läuft nie ab"
+	},
+	"%d year|%d years": {
+		"du": [
+			"%d Jahr",
+			"%d Jahre"
+		],
+		"sie": [
+			"%d Jahr",
+			"%d Jahre"
+		],
+		"at": [
+			"%d Jahr",
+			"%d Jahre"
+		]
+	},
+	"to the end of the year": {
+		"du": "zum Jahresende",
+		"sie": "zum Jahresende",
+		"at": "zum Jahresende"
+	},
+	"0 (keep)": {
+		"du": "0 (behalten)",
+		"sie": "0 (behalten)",
+		"at": "0 (behalten)"
+	},
+	"WordPress date format": {
+		"du": "Datumsformat von WordPress",
+		"sie": "Datumsformat von WordPress",
+		"at": "Datumsformat von WordPress"
+	},
+	"There is no country profile \"%s\".": {
+		"du": "Es gibt kein Länderprofil „%s“.",
+		"sie": "Es gibt kein Länderprofil „%s“.",
+		"at": "Es gibt kein Länderprofil „%s“."
+	},
+	"Germany: multi-purpose vouchers (gift cards, value vouchers) are taxed when they are redeemed, single-purpose vouchers when they are sold (§ 3 (13)–(15) UStG). Usual setup: setting \"Multi-purpose vouchers as payment\" on and gift cards sold with the tax status \"None\". See TAX.md and have it confirmed by your tax adviser.": {
+		"du": "Deutschland: Mehrzweckgutscheine (Geschenkkarten, Wertgutscheine) werden bei der Einlösung besteuert, Einzweckgutscheine beim Verkauf (§ 3 Abs. 13–15 UStG). Übliche Einrichtung: Einstellung „Mehrzweckgutscheine als Zahlung“ aktiv und Geschenkkarten mit dem Steuerstatus „Keine“ verkaufen. Siehe TAX.md und lass es von deiner Steuerberatung bestätigen.",
+		"sie": "Deutschland: Mehrzweckgutscheine (Geschenkkarten, Wertgutscheine) werden bei der Einlösung besteuert, Einzweckgutscheine beim Verkauf (§ 3 Abs. 13–15 UStG). Übliche Einrichtung: Einstellung „Mehrzweckgutscheine als Zahlung“ aktiv und Geschenkkarten mit dem Steuerstatus „Keine“ verkaufen. Siehe TAX.md und lassen Sie es von Ihrer Steuerberatung bestätigen.",
+		"at": "Deutschland: Mehrzweckgutscheine (Geschenkkarten, Wertgutscheine) werden bei der Einlösung besteuert, Einzweckgutscheine beim Verkauf (§ 3 Abs. 13–15 UStG). Übliche Einrichtung: Einstellung „Mehrzweckgutscheine als Zahlung“ aktiv und Geschenkkarten mit dem Steuerstatus „Keine“ verkaufen. Siehe TAX.md und lassen Sie es von Ihrer Steuerberatung bestätigen."
+	},
+	"Austria: the EU voucher rules apply – multi-purpose vouchers are taxed when they are redeemed, single-purpose vouchers when they are sold. Usual setup: setting \"Multi-purpose vouchers as payment\" on and gift cards sold with the tax status \"None\". See TAX.md and have it confirmed by your tax adviser.": {
+		"du": "Österreich: Es gelten die EU-Gutscheinregeln – Mehrzweckgutscheine werden bei der Einlösung besteuert, Einzweckgutscheine beim Verkauf. Übliche Einrichtung: Einstellung „Mehrzweckgutscheine als Zahlung“ aktiv und Geschenkkarten mit dem Steuerstatus „Keine“ verkaufen. Siehe TAX.md und lass es von deiner Steuerberatung bestätigen.",
+		"sie": "Österreich: Es gelten die EU-Gutscheinregeln – Mehrzweckgutscheine werden bei der Einlösung besteuert, Einzweckgutscheine beim Verkauf. Übliche Einrichtung: Einstellung „Mehrzweckgutscheine als Zahlung“ aktiv und Geschenkkarten mit dem Steuerstatus „Keine“ verkaufen. Siehe TAX.md und lassen Sie es von Ihrer Steuerberatung bestätigen.",
+		"at": "Österreich: Es gelten die EU-Gutscheinregeln – Mehrzweckgutscheine werden bei der Einlösung besteuert, Einzweckgutscheine beim Verkauf. Übliche Einrichtung: Einstellung „Mehrzweckgutscheine als Zahlung“ aktiv und Geschenkkarten mit dem Steuerstatus „Keine“ verkaufen. Siehe TAX.md und lassen Sie es von Ihrer Steuerberatung bestätigen."
+	},
+	"Switzerland: Swiss VAT law applies, not the EU voucher rules. Have the treatment of value vouchers and the setting \"Multi-purpose vouchers as payment\" checked by your tax adviser; see TAX.md.": {
+		"du": "Schweiz: Es gilt das Schweizer Mehrwertsteuerrecht, nicht die EU-Gutscheinregeln. Lass die Behandlung von Wertgutscheinen und die Einstellung „Mehrzweckgutscheine als Zahlung“ von deiner Steuerberatung prüfen; siehe TAX.md.",
+		"sie": "Schweiz: Es gilt das Schweizer Mehrwertsteuerrecht, nicht die EU-Gutscheinregeln. Lassen Sie die Behandlung von Wertgutscheinen und die Einstellung „Mehrzweckgutscheine als Zahlung“ von Ihrer Steuerberatung prüfen; siehe TAX.md.",
+		"at": "Schweiz: Es gilt das Schweizer Mehrwertsteuerrecht, nicht die EU-Gutscheinregeln. Lassen Sie die Behandlung von Wertgutscheinen und die Einstellung „Mehrzweckgutscheine als Zahlung“ von Ihrer Steuerberatung prüfen; siehe TAX.md."
+	},
+	"EU: the EU voucher rules apply (Directive (EU) 2016/1065: single-purpose vouchers are taxed when they are sold, multi-purpose vouchers when they are redeemed). Tax rates come from WooCommerce. See TAX.md and have it confirmed by your tax adviser.": {
+		"du": "EU: Es gelten die EU-Gutscheinregeln (Richtlinie (EU) 2016/1065: Einzweckgutscheine werden beim Verkauf besteuert, Mehrzweckgutscheine bei der Einlösung). Die Steuersätze kommen aus WooCommerce. Siehe TAX.md und lass es von deiner Steuerberatung bestätigen.",
+		"sie": "EU: Es gelten die EU-Gutscheinregeln (Richtlinie (EU) 2016/1065: Einzweckgutscheine werden beim Verkauf besteuert, Mehrzweckgutscheine bei der Einlösung). Die Steuersätze kommen aus WooCommerce. Siehe TAX.md und lassen Sie es von Ihrer Steuerberatung bestätigen.",
+		"at": "EU: Es gelten die EU-Gutscheinregeln (Richtlinie (EU) 2016/1065: Einzweckgutscheine werden beim Verkauf besteuert, Mehrzweckgutscheine bei der Einlösung). Die Steuersätze kommen aus WooCommerce. Siehe TAX.md und lassen Sie es von Ihrer Steuerberatung bestätigen."
+	},
+	"Outside the EU the tax treatment of vouchers depends on the country's law. Have it checked by your tax adviser; tax rates come from WooCommerce.": {
+		"du": "Außerhalb der EU hängt die steuerliche Behandlung von Gutscheinen vom Recht des Landes ab. Lass sie von deiner Steuerberatung prüfen; die Steuersätze kommen aus WooCommerce.",
+		"sie": "Außerhalb der EU hängt die steuerliche Behandlung von Gutscheinen vom Recht des Landes ab. Lassen Sie sie von Ihrer Steuerberatung prüfen; die Steuersätze kommen aus WooCommerce.",
+		"at": "Außerhalb der EU hängt die steuerliche Behandlung von Gutscheinen vom Recht des Landes ab. Lassen Sie sie von Ihrer Steuerberatung prüfen; die Steuersätze kommen aus WooCommerce."
+	},
+	"DATEV booking batch for your tax adviser (Integrations (API) → DATEV export), plus the redemption journal as CSV.": {
+		"du": "DATEV-Buchungsstapel für deine Steuerberatung (Integrationen (API) → DATEV-Export), dazu das Einlösejournal als CSV.",
+		"sie": "DATEV-Buchungsstapel für Ihre Steuerberatung (Integrationen (API) → DATEV-Export), dazu das Einlösejournal als CSV.",
+		"at": "DATEV-Buchungsstapel für Ihre Steuerberatung (Integrationen (API) → DATEV-Export), dazu das Einlösejournal als CSV."
+	},
+	"DATEV is a German format: use the redemption journal as CSV for your accounting software or your tax adviser.": {
+		"du": "DATEV ist ein deutsches Format: Nutze das Einlösejournal als CSV für deine Buchhaltungssoftware oder deine Steuerberatung.",
+		"sie": "DATEV ist ein deutsches Format: Nutzen Sie das Einlösejournal als CSV für Ihre Buchhaltungssoftware oder Ihre Steuerberatung.",
+		"at": "DATEV ist ein deutsches Format: Nutzen Sie das Einlösejournal als CSV für Ihre Buchhaltungssoftware oder Ihre Steuerberatung."
+	},
+	"Use the redemption journal as CSV for your accounting software; the DATEV export is meant for Germany.": {
+		"du": "Nutze das Einlösejournal als CSV für deine Buchhaltungssoftware; der DATEV-Export ist für Deutschland gedacht.",
+		"sie": "Nutzen Sie das Einlösejournal als CSV für Ihre Buchhaltungssoftware; der DATEV-Export ist für Deutschland gedacht.",
+		"at": "Nutzen Sie das Einlösejournal als CSV für Ihre Buchhaltungssoftware; der DATEV-Export ist für Deutschland gedacht."
+	},
+	"Redemption journal as CSV (Vouchers → Reports) for your accounting software.": {
+		"du": "Einlösejournal als CSV (Gutscheine → Auswertung) für deine Buchhaltungssoftware.",
+		"sie": "Einlösejournal als CSV (Gutscheine → Auswertung) für Ihre Buchhaltungssoftware.",
+		"at": "Einlösejournal als CSV (Gutscheine → Auswertung) für Ihre Buchhaltungssoftware."
+	},
+	"Default tax type": {
+		"du": "Standard-Steuerart",
+		"sie": "Standard-Steuerart",
+		"at": "Standard-Steuerart"
+	},
+	"Accounting format": {
+		"du": "Buchhaltungs-Format",
+		"sie": "Buchhaltungs-Format",
+		"at": "Buchhaltungs-Format"
+	},
+	"Nothing was changed.": {
+		"du": "Es wurde nichts geändert.",
+		"sie": "Es wurde nichts geändert.",
+		"at": "Es wurde nichts geändert."
+	},
+	"Country profile": {
+		"du": "Länderprofil",
+		"sie": "Länderprofil",
+		"at": "Länderprofil"
+	},
+	"Suggested settings for the country you sell in: validity, statutory validity, receipt number, retention of recipient data, date format and link parameter, plus hints on tax and accounting. You see every change before it is made and choose which ones to take; afterwards every value can be changed as before.": {
+		"du": "Vorgeschlagene Einstellungen für das Land, in dem du verkaufst: Gültigkeit, gesetzliche Gültigkeit, Belegnummer, Aufbewahrung der Empfängerdaten, Datumsformat und Link-Parameter, dazu Hinweise zu Steuer und Buchhaltung. Du siehst jede Änderung, bevor sie gemacht wird, und wählst, welche du übernimmst; danach lässt sich jeder Wert wie bisher ändern.",
+		"sie": "Vorgeschlagene Einstellungen für das Land, in dem Sie verkaufen: Gültigkeit, gesetzliche Gültigkeit, Belegnummer, Aufbewahrung der Empfängerdaten, Datumsformat und Link-Parameter, dazu Hinweise zu Steuer und Buchhaltung. Sie sehen jede Änderung, bevor sie gemacht wird, und wählen, welche Sie übernehmen; danach lässt sich jeder Wert wie bisher ändern.",
+		"at": "Vorgeschlagene Einstellungen für das Land, in dem Sie verkaufen: Gültigkeit, gesetzliche Gültigkeit, Belegnummer, Aufbewahrung der Empfängerdaten, Datumsformat und Link-Parameter, dazu Hinweise zu Steuer und Buchhaltung. Sie sehen jede Änderung, bevor sie gemacht wird, und wählen, welche Sie übernehmen; danach lässt sich jeder Wert wie bisher ändern."
+	},
+	"Profile": {
+		"du": "Profil",
+		"sie": "Profil",
+		"at": "Profil"
+	},
+	"Show suggested changes": {
+		"du": "Vorgeschlagene Änderungen anzeigen",
+		"sie": "Vorgeschlagene Änderungen anzeigen",
+		"at": "Vorgeschlagene Änderungen anzeigen"
+	},
+	"Last applied: %1$s on %2$s.": {
+		"du": "Zuletzt angewendet: %1$s am %2$s.",
+		"sie": "Zuletzt angewendet: %1$s am %2$s.",
+		"at": "Zuletzt angewendet: %1$s am %2$s."
+	},
+	"Suggested changes: %s": {
+		"du": "Vorgeschlagene Änderungen: %s",
+		"sie": "Vorgeschlagene Änderungen: %s",
+		"at": "Vorgeschlagene Änderungen: %s"
+	},
+	"Nothing to change: every suggested value is already set.": {
+		"du": "Nichts zu ändern: Jeder vorgeschlagene Wert ist bereits eingestellt.",
+		"sie": "Nichts zu ändern: Jeder vorgeschlagene Wert ist bereits eingestellt.",
+		"at": "Nichts zu ändern: Jeder vorgeschlagene Wert ist bereits eingestellt."
+	},
+	"Only the ticked values are changed. Values you set yourself and the link parameter are not ticked: tick them to replace them.": {
+		"du": "Nur die angehakten Werte werden geändert. Werte, die du selbst eingestellt hast, und der Link-Parameter sind nicht angehakt: Hake sie an, um sie zu ersetzen.",
+		"sie": "Nur die angehakten Werte werden geändert. Werte, die Sie selbst eingestellt haben, und der Link-Parameter sind nicht angehakt: Haken Sie sie an, um sie zu ersetzen.",
+		"at": "Nur die angehakten Werte werden geändert. Werte, die Sie selbst eingestellt haben, und der Link-Parameter sind nicht angehakt: Haken Sie sie an, um sie zu ersetzen."
+	},
+	"Suggested value": {
+		"du": "Vorgeschlagener Wert",
+		"sie": "Vorgeschlagener Wert",
+		"at": "Vorgeschlagener Wert"
+	},
+	"Already set.": {
+		"du": "Bereits eingestellt.",
+		"sie": "Bereits eingestellt.",
+		"at": "Bereits eingestellt."
+	},
+	"Suggestion only: links and QR codes already sent use the current parameter and stop working after a change.": {
+		"du": "Nur ein Vorschlag: Bereits versendete Links und QR-Codes nutzen den aktuellen Parameter und funktionieren nach einer Änderung nicht mehr.",
+		"sie": "Nur ein Vorschlag: Bereits versendete Links und QR-Codes nutzen den aktuellen Parameter und funktionieren nach einer Änderung nicht mehr.",
+		"at": "Nur ein Vorschlag: Bereits versendete Links und QR-Codes nutzen den aktuellen Parameter und funktionieren nach einer Änderung nicht mehr."
+	},
+	"You set your own value: tick to replace it.": {
+		"du": "Du hast einen eigenen Wert eingestellt: Anhaken, um ihn zu ersetzen.",
+		"sie": "Sie haben einen eigenen Wert eingestellt: Anhaken, um ihn zu ersetzen.",
+		"at": "Sie haben einen eigenen Wert eingestellt: Anhaken, um ihn zu ersetzen."
+	},
+	"Apply ticked values": {
+		"du": "Angehakte Werte übernehmen",
+		"sie": "Angehakte Werte übernehmen",
+		"at": "Angehakte Werte übernehmen"
+	},
+	"Use this profile without changes": {
+		"du": "Dieses Profil ohne Änderungen verwenden",
+		"sie": "Dieses Profil ohne Änderungen verwenden",
+		"at": "Dieses Profil ohne Änderungen verwenden"
+	},
+	"Choose a country profile.": {
+		"du": "Wähle ein Länderprofil.",
+		"sie": "Wählen Sie ein Länderprofil.",
+		"at": "Wählen Sie ein Länderprofil."
+	},
+	"The preview of the country profile has expired. Nothing was changed; please choose the profile again.": {
+		"du": "Die Vorschau des Länderprofils ist abgelaufen. Es wurde nichts geändert; bitte wähle das Profil erneut.",
+		"sie": "Die Vorschau des Länderprofils ist abgelaufen. Es wurde nichts geändert; bitte wählen Sie das Profil erneut.",
+		"at": "Die Vorschau des Länderprofils ist abgelaufen. Es wurde nichts geändert; bitte wählen Sie das Profil erneut."
+	},
+	"Country profile \"%s\" chosen; no setting was changed.": {
+		"du": "Länderprofil „%s“ gewählt; keine Einstellung wurde geändert.",
+		"sie": "Länderprofil „%s“ gewählt; keine Einstellung wurde geändert.",
+		"at": "Länderprofil „%s“ gewählt; keine Einstellung wurde geändert."
+	},
+	"%1$d setting was changed from the country profile \"%2$s\" (a backup of the previous settings was saved). Every value can be changed as before.|%1$d settings were changed from the country profile \"%2$s\" (a backup of the previous settings was saved). Every value can be changed as before.": {
+		"du": [
+			"%1$d Einstellung wurde aus dem Länderprofil „%2$s“ geändert (eine Sicherung der bisherigen Einstellungen wurde gespeichert). Jeder Wert lässt sich wie bisher ändern.",
+			"%1$d Einstellungen wurden aus dem Länderprofil „%2$s“ geändert (eine Sicherung der bisherigen Einstellungen wurde gespeichert). Jeder Wert lässt sich wie bisher ändern."
+		],
+		"sie": [
+			"%1$d Einstellung wurde aus dem Länderprofil „%2$s“ geändert (eine Sicherung der bisherigen Einstellungen wurde gespeichert). Jeder Wert lässt sich wie bisher ändern.",
+			"%1$d Einstellungen wurden aus dem Länderprofil „%2$s“ geändert (eine Sicherung der bisherigen Einstellungen wurde gespeichert). Jeder Wert lässt sich wie bisher ändern."
+		],
+		"at": [
+			"%1$d Einstellung wurde aus dem Länderprofil „%2$s“ geändert (eine Sicherung der bisherigen Einstellungen wurde gespeichert). Jeder Wert lässt sich wie bisher ändern.",
+			"%1$d Einstellungen wurden aus dem Länderprofil „%2$s“ geändert (eine Sicherung der bisherigen Einstellungen wurde gespeichert). Jeder Wert lässt sich wie bisher ändern."
+		]
+	},
+	"Country profile not applied, nothing was changed.": {
+		"du": "Länderprofil nicht angewendet, es wurde nichts geändert.",
+		"sie": "Länderprofil nicht angewendet, es wurde nichts geändert.",
+		"at": "Länderprofil nicht angewendet, es wurde nichts geändert."
+	},
+	"before a country profile": {
+		"du": "vor einem Länderprofil",
+		"sie": "vor einem Länderprofil",
+		"at": "vor einem Länderprofil"
+	}
+}

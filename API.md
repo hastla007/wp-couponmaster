@@ -665,9 +665,33 @@ works on the settings register (`config/settings.php`, `VCAP\SettingsRegistry`).
 | `wp vcap settings export [--file=<path>] [--backup[=<time>]]` | The export JSON (or an automatic backup) to the output or a file. |
 | `wp vcap settings import <file> [--dry-run] [--yes]` | Lists the changes (`option: from -> to`), then applies them after a backup; `--dry-run` only lists. |
 | `wp vcap settings reset <section>\|all [--dry-run] [--yes]` | Reset to defaults after a backup (see *Reset*). |
+| `wp vcap settings profile list [--format=…]` | The country profiles with their check state ("legal check pending" for DE/AT/CH, "neutral, not checked" for EU/OTHER) and the one applied last. |
+| `wp vcap settings profile show [--country=<profile>]` | Preview of a profile (default: the profile of the shop's base country): per value `current -> suggested`, `*` = would be applied, `-` = kept (own value or link parameter), `=` = already set, `[Legal check pending]` on values with legal weight; plus the tax and accounting hints. Changes nothing. |
+| `wp vcap settings profile apply [--country=<profile>] [--dry-run] [--yes] [--all]` | Applies the values marked `*` after a confirmation and a backup; `--all` also replaces own values and the link parameter; `--dry-run` only lists. |
 
-Every change made this way is in the change log with the source "WP-CLI". A `profile` sub-command (country profiles,
-SET-VC-02) follows when country profiles exist.
+Every change made this way is in the change log with the source "WP-CLI" (profile: "WP-CLI (country profile)").
+
+### Country profiles (SET-VC-02)
+
+`VCAP\CountryProfiles` reads `config/country-profiles.php` (filter `vcap_country_profiles`). A profile only suggests
+values (owner decision E4 = a): validity rule (`vcap_default_expiry_rule`), the country's row of "Statutory validity per
+country" (`vcap_expiry_by_country`, only that row is added or replaced; DE/AT from the market data), receipt number at
+the counter (`vcap_counter_require_receipt`, DE/AT from the market flag `fiscal_receipt`), retention of recipient data
+(`vcap_retention_days`; new installations keep the data, owner rule S9), date format (`vcap_date_format`) and link
+parameter (`vcap_coupon_link_param` – suggestion only, never preselected, owner decision E10 open), plus hints on the
+default tax type and the accounting format that change no setting. Profiles: DE, AT, CH and the neutral EU and OTHER
+(nothing with legal weight). No profile is legally checked yet (owner rule S8): every value with legal weight carries the
+mark "Legal check pending" until `checked` is set for that profile.
+
+- `CountryProfiles::preview( $id )` – per value `from`, `to`, `changed`, `legal`, `review` (the mark), `opt_in`,
+  `own` (the shop set its own value) and `preselected` (changed, not opt-in, no own value). Changes nothing.
+- `CountryProfiles::apply( $id, $items )` – only the given items; each value is checked like an import
+  (`SettingsTransfer::validate()`), one invalid value refuses all; then a backup ("profile") and
+  `SettingsTransfer::apply()` with the change log source "country profile". The profile applied last is kept in the
+  internal option `vcap_country_profile` (setup checklist).
+- Admin: block "Country profile" at the top of *Settings → Vouchers → General* and the first step of the setup
+  checklist; preview with one checkbox per value, *Apply ticked values* / *Cancel*. Actions `vcap_country_profile_preview`,
+  `vcap_country_profile_apply`, `vcap_country_profile_cancel` (admin-post, `manage_woocommerce`, own nonce).
 
 ## Extension points for add-ons (public API since 1.2.0)
 
@@ -701,6 +725,7 @@ called in the code and listed in docs/HOOKS.md, the generated reference with eac
 | `vcap_command_log_days` | filter | `int $days` (setting `vcap_command_log_days`, default 90) | 1.3.0 | SET-VC-08: days the daily counters and the protocol of the voucher commands are kept (`OptionCommandStore::log_days()`, cleaned up by the daily maintenance step `protocols`); `0` keeps them. Replies (idempotency) stay 90 days. |
 | `vcap_scanner_failed_lookup_days` | filter | `int $days` (setting `vcap_scanner_failed_lookup_days`, default 92) | 1.3.0 | SET-VC-08: days the failed scanner lookups per staff member are kept (`Counter::failed_lookup_days()`, step `protocols`); `0` keeps them. |
 | `vcap_settings_validate_value` | filter | value in the stored format or `WP_Error`, `string $option`, `array $entry` | 1.3.0 | Check a value of an own option before it is imported or set with `wp vcap settings set` (see *Settings: export, import, reset, change log*); return a `WP_Error` to refuse. |
+| `vcap_country_profiles` | filter | `array $profiles` (id ⇒ `country`, `checked`, `settings`, `expiry_row`, `tax`, `accounting`, `label`) | 1.3.0 | SET-VC-02: add country profiles or change suggested values (see *Country profiles*). Only exportable settings can be suggested (never secrets or "Remove all data"); a profile is always applied after the preview. Set `checked` only after the legal and tax check for that country. |
 | `vcap_pro_hints_hidden` | filter | `bool $hidden`, `int $user_id` | 1.3.0 | Whether the hint lines are hidden for the current user (default: the user's setting "Hide hints on extensions"). |
 | `vcap_product_settings_fields` / `vcap_product_settings_save` | action | – / `WC_Product`, `array $post` | 1.1.0 | Own fields in the product's *Voucher* tab and saving them. |
 | `vcap_template_design` | filter | `array $design`, `int $template_id` | 1.0.0 | The design a PDF template prints with. |

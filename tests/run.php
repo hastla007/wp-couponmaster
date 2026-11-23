@@ -4538,9 +4538,9 @@ check(
 	json_encode( $st_rows )
 );
 check(
-	'SET-VC-17: import shows the changes (dry run changes nothing) and applies them after a backup; an invalid file is refused; reset sets a section back; there is no "profile" sub-command yet (SET-VC-02 country profiles missing); API.md documents the commands',
+	'SET-VC-17: import shows the changes (dry run changes nothing) and applies them after a backup; an invalid file is refused; reset sets a section back; "profile" needs list, show or apply (SET-VC-02); API.md documents the commands',
 	in_array( 'line: vcap_code_length: 18 -> 22', $st_r_dry, true ) && '18' === $st_after_dry && str_starts_with( (string) end( $st_r_imp ), 'success: 2 settings imported.' ) && str_contains( implode( ' ', $st_r_imbad ), 'nothing was changed' ) && in_array( 'halted', $st_r_imbad, true )
-		&& str_starts_with( $st_r_reset[0], 'success: ' ) && ! isset( $GLOBALS['vcap_test_options']['vcap_code_length'] ) && 'no' === $GLOBALS['vcap_test_options']['vcap_attach_pdf'] && str_contains( $st_r_prof[0], 'country profiles are not available yet' )
+		&& str_starts_with( $st_r_reset[0], 'success: ' ) && ! isset( $GLOBALS['vcap_test_options']['vcap_code_length'] ) && 'no' === $GLOBALS['vcap_test_options']['vcap_attach_pdf'] && str_contains( $st_r_prof[0], 'Usage: wp vcap settings profile <list|show|apply>' )
 		&& str_contains( (string) file_get_contents( VCAP_PATH . 'API.md' ), 'wp vcap settings import' ),
 	json_encode( array( $st_r_dry, $st_r_imp, $st_r_imbad, $st_r_reset, $st_r_prof ) )
 );
@@ -4970,6 +4970,219 @@ $r8_health_1 = ( new VCAP\Health() )->test_retention();
 $r8_tests    = ( new VCAP\Health() )->tests( array() );
 check( 'SET-VC-08: Site Health recommends a recipient data period while it is 0 (link to the block "Retention") and is good with a period', 'recommended' === $r8_health_0['status'] && str_contains( $r8_health_0['actions'], 'section=privacy' ) && 'good' === $r8_health_1['status'] && str_contains( $r8_health_1['description'], '1095 days' ) && isset( $r8_tests['direct']['vcap_retention'] ) );
 $GLOBALS['vcap_test_options'] = $r8_saved;
+// SET-VC-02: country profiles – a suggestion with preview "current → suggested", applied only after confirmation.
+echo "SET-VC-02 country profiles\n";
+$cp_saved      = $GLOBALS['vcap_test_options'];
+$cp_saved_tr   = $GLOBALS['vcap_test_transients'] ?? array();
+$cp_saved_wpdb = $GLOBALS['wpdb'] ?? null;
+// A shop from before the statutory validity (365 days stored, L13): the validity rule that applies is "days".
+$GLOBALS['vcap_test_options'] = array( 'woocommerce_default_country' => 'DE:BE', 'vcap_default_expiry_days' => '365' );
+VCAP\CountryProfiles::reset();
+$cp_all = VCAP\CountryProfiles::all();
+check(
+	'SET-VC-02: profiles DE, AT and CH (market country, legal check pending) plus EU and OTHER (neutral, not checked); none is marked as checked; the shop\'s base country picks its profile (member states EU, others OTHER)',
+	array( 'DE', 'AT', 'CH', 'EU', 'OTHER' ) === array_keys( $cp_all ) && array( 'DE', 'AT', 'CH', '', '' ) === array_column( $cp_all, 'country' ) && array() === array_filter( array_column( $cp_all, 'checked' ) )
+		&& 'DE' === VCAP\CountryProfiles::for_base_country() && 'Germany' === VCAP\CountryProfiles::label( 'de' ) && str_starts_with( VCAP\CountryProfiles::status( 'CH' ), 'Legal check pending' ) && str_starts_with( VCAP\CountryProfiles::status( 'EU' ), 'Not checked' )
+		&& ( static function () {
+			$out = array();
+			foreach ( array( 'FR' => 'EU', 'US:CA' => 'OTHER', 'AT' => 'AT', 'CH' => 'CH' ) as $base => $expected ) {
+				$GLOBALS['vcap_test_options']['woocommerce_default_country'] = $base;
+				$out[] = VCAP\CountryProfiles::for_base_country() === $expected;
+			}
+			$GLOBALS['vcap_test_options']['woocommerce_default_country'] = 'DE:BE';
+			return ! in_array( false, $out, true );
+		} )(),
+	json_encode( array_keys( $cp_all ) )
+);
+$cp_before = $GLOBALS['vcap_test_options'];
+$cp_de     = VCAP\CountryProfiles::preview( 'DE' );
+$cp_legal  = array_filter( $cp_de, static fn( $i ) => $i['legal'] );
+check(
+	'SET-VC-02: the preview of DE on a new shop shows current → suggested: statutory validity rule, the DE row of "Statutory validity per country" from the market data (3 years to the end of the year), retention 1,095 days, date format d.m.Y; receipt number and link parameter are already right; showing it changes nothing',
+	array( 'vcap_default_expiry_rule', 'expiry_row', 'vcap_counter_require_receipt', 'vcap_retention_days', 'vcap_date_format', 'vcap_coupon_link_param' ) === array_keys( $cp_de )
+		&& 'statutory' === $cp_de['vcap_default_expiry_rule']['value'] && $cp_de['vcap_default_expiry_rule']['preselected']
+		&& array( 'country' => 'DE', 'years' => 3, 'end_of_year' => true ) === array_slice( $cp_de['expiry_row']['value'][0], 0, 3 ) && str_contains( $cp_de['expiry_row']['value'][0]['note'], '§§ 195, 199 BGB' ) && str_ends_with( $cp_de['expiry_row']['value'][0]['note'], '– Legal check pending' ) && $cp_de['expiry_row']['preselected'] && VCAP\Markets::EXPIRY_OPTION === $cp_de['expiry_row']['key']
+		&& '1095' === $cp_de['vcap_retention_days']['value'] && '0 (keep)' === $cp_de['vcap_retention_days']['from'] && $cp_de['vcap_retention_days']['preselected']
+		&& 'd.m.Y' === $cp_de['vcap_date_format']['value'] && 'WordPress date format' === $cp_de['vcap_date_format']['from'] && ! $cp_de['vcap_date_format']['legal']
+		&& ! $cp_de['vcap_counter_require_receipt']['changed'] && ! $cp_de['vcap_coupon_link_param']['changed'] && $cp_de['vcap_coupon_link_param']['opt_in']
+		&& $cp_before === $GLOBALS['vcap_test_options'],
+	json_encode( $cp_de )
+);
+check(
+	'SET-VC-02: every value with legal weight carries the mark "Legal check pending" (Rechtsprüfung) – validity rule, validity row, receipt number, retention and the tax hint; values without legal weight do not',
+	array( 'vcap_default_expiry_rule', 'expiry_row', 'vcap_counter_require_receipt', 'vcap_retention_days' ) === array_keys( $cp_legal ) && array( 'Legal check pending' ) === array_values( array_unique( array_column( $cp_legal, 'review' ) ) )
+		&& '' === $cp_de['vcap_date_format']['review'] && '' === $cp_de['vcap_coupon_link_param']['review']
+		&& 'Legal check pending' === VCAP\CountryProfiles::hints( 'DE' )['tax']['review'] && str_contains( VCAP\CountryProfiles::hints( 'DE' )['tax']['text'], 'TAX.md' ) && str_contains( VCAP\CountryProfiles::hints( 'DE' )['accounting']['text'], 'DATEV' )
+		&& ( static function () {
+			foreach ( array( 'AT', 'CH' ) as $id ) {
+				foreach ( VCAP\CountryProfiles::preview( $id ) as $item ) {
+					if ( $item['legal'] && 'Legal check pending' !== $item['review'] ) {
+						return false;
+					}
+				}
+				if ( 'Legal check pending' !== VCAP\CountryProfiles::hints( $id )['tax']['review'] ) {
+					return false;
+				}
+			}
+			return true;
+		} )()
+);
+$cp_eu = VCAP\CountryProfiles::preview( 'EU' );
+$GLOBALS['vcap_test_options']['woocommerce_default_country'] = 'CH';
+$cp_de_from_ch = VCAP\CountryProfiles::preview( 'DE' );
+$cp_ch         = VCAP\CountryProfiles::preview( 'CH' );
+$GLOBALS['vcap_test_options']['woocommerce_default_country'] = 'DE:BE';
+check(
+	'SET-VC-02: receipt number from the market flag "fiscal_receipt": a shop based in CH choosing DE gets "yes", the CH profile suggests none (not legally checked); CH suggests 10 years (Art. 127 OR) marked for the legal check; the neutral profiles EU/OTHER suggest nothing with legal weight and the link parameter only as an unticked suggestion',
+	'yes' === $cp_de_from_ch['vcap_counter_require_receipt']['value'] && $cp_de_from_ch['vcap_counter_require_receipt']['preselected'] && ! isset( $cp_ch['vcap_counter_require_receipt'] )
+		&& 10 === $cp_ch['expiry_row']['value'][0]['years'] && 'Art. 127 OR (10 Jahre) – Legal check pending' === $cp_ch['expiry_row']['value'][0]['note']
+		&& array( 'vcap_coupon_link_param' ) === array_keys( $cp_eu ) && 'voucher' === $cp_eu['vcap_coupon_link_param']['value'] && $cp_eu['vcap_coupon_link_param']['changed'] && ! $cp_eu['vcap_coupon_link_param']['preselected'] && array() === array_filter( array_column( $cp_eu, 'legal' ) ),
+	json_encode( array( $cp_de_from_ch, $cp_ch ) )
+);
+// Nothing is overwritten silently: own values are shown but not ticked; the shop's other validity rows stay.
+$GLOBALS['vcap_test_options']['vcap_date_format'] = 'Y-m-d';
+$GLOBALS['vcap_test_options'][ VCAP\Markets::EXPIRY_OPTION ] = array(
+	array( 'country' => 'FR', 'years' => 5, 'end_of_year' => true, 'note' => 'Code civil' ),
+	array( 'country' => 'DE', 'years' => 4, 'end_of_year' => false, 'note' => 'eigene Regel' ),
+);
+$cp_own = VCAP\CountryProfiles::preview( 'DE' );
+check(
+	'SET-VC-02: a value the shop set itself (date format, its own DE validity row) is shown "current → suggested" but not ticked; the row change replaces only the DE row and keeps the FR row',
+	$cp_own['vcap_date_format']['changed'] && $cp_own['vcap_date_format']['own'] && ! $cp_own['vcap_date_format']['preselected'] && str_starts_with( $cp_own['vcap_date_format']['from'], 'Y-m-d (' )
+		&& $cp_own['expiry_row']['changed'] && $cp_own['expiry_row']['own'] && ! $cp_own['expiry_row']['preselected'] && '4 years (eigene Regel)' === $cp_own['expiry_row']['from']
+		&& array( 'FR', 'DE' ) === array_column( $cp_own['expiry_row']['value'], 'country' ) && 'Code civil' === $cp_own['expiry_row']['value'][0]['note'] && 3 === $cp_own['expiry_row']['value'][1]['years'],
+	json_encode( $cp_own )
+);
+// Apply: only the chosen rows, through the register check, with a backup and the change log source "country profile".
+$cp_pick   = array_keys( array_filter( $cp_own, static fn( $i ) => $i['preselected'] ) );
+$cp_result = VCAP\CountryProfiles::apply( 'DE', $cp_pick );
+$cp_o      = $GLOBALS['vcap_test_options'];
+$cp_after  = VCAP\CountryProfiles::preview( 'DE' );
+$cp_src    = (string) file_get_contents( VCAP_PATH . 'src/CountryProfiles.php' );
+check(
+	'SET-VC-02: applying stores only the ticked values (validity rule, retention), leaves the unticked own values (date format, DE row) unchanged, saves a backup first ("profile") and remembers the profile; the values stay freely editable (ordinary options)',
+	array( 'vcap_default_expiry_rule', 'vcap_retention_days' ) === $cp_pick && array( 'vcap_default_expiry_rule', 'vcap_retention_days' ) === $cp_result['changed'] && 'statutory' === $cp_o['vcap_default_expiry_rule'] && '1095' === $cp_o['vcap_retention_days']
+		&& 'Y-m-d' === $cp_o['vcap_date_format'] && 4 === $cp_o[ VCAP\Markets::EXPIRY_OPTION ][1]['years'] && 'profile' === VCAP\SettingsTransfer::backups()[ $cp_result['backup'] ]['reason']
+		&& 'DE' === VCAP\CountryProfiles::applied()['id'] && ! $cp_after['vcap_retention_days']['changed'] && $cp_after['vcap_date_format']['changed']
+		&& '7' === VCAP\SettingsTransfer::validate( 'vcap_retention_days', '7' ),
+	json_encode( array( $cp_result, $cp_pick ) )
+);
+$cp_row = VCAP\CountryProfiles::apply( 'DE', array( 'expiry_row', 'vcap_date_format' ) );
+check(
+	'SET-VC-02: ticking an own value replaces it – the DE row is replaced in place (FR row kept), the date format set; the change log records the source "country profile" (SettingsTransfer::apply with SettingsLog::VIA_PROFILE)',
+	array( 'vcap_expiry_by_country', 'vcap_date_format' ) === $cp_row['changed'] && array( 'FR', 'DE' ) === array_column( $GLOBALS['vcap_test_options'][ VCAP\Markets::EXPIRY_OPTION ], 'country' ) && 3 === $GLOBALS['vcap_test_options'][ VCAP\Markets::EXPIRY_OPTION ][1]['years'] && 'd.m.Y' === $GLOBALS['vcap_test_options']['vcap_date_format']
+		&& str_contains( $cp_src, 'SettingsTransfer::apply( $values, SettingsLog::VIA_PROFILE )' ) && str_contains( $cp_src, 'SettingsTransfer::validate( $key, $value )' ) && 'Admin (country profile)' === VCAP\SettingsLog::source_label( array( 'source' => 'admin', 'via' => VCAP\SettingsLog::VIA_PROFILE ) ),
+	json_encode( $cp_row )
+);
+// An invalid suggestion (from the filter) refuses everything; secrets and the data removal switch cannot be suggested.
+$GLOBALS['vcap_test_filters']['vcap_country_profiles'] = array(
+	array(
+		static function ( $profiles ) {
+			$profiles['DE']['settings']['vcap_retention_days']      = -5;
+			$profiles['DE']['settings']['vcap_secret']              = 'stolen';
+			$profiles['DE']['settings']['vcap_delete_on_uninstall'] = 'yes';
+			$profiles['XK'] = array( 'country' => 'XK', 'label' => 'Kosovo', 'settings' => array( 'vcap_date_format' => 'j.n.Y' ) );
+			return $profiles;
+		},
+		1,
+	),
+);
+VCAP\CountryProfiles::reset();
+$cp_bad_before = $GLOBALS['vcap_test_options'];
+$cp_bad        = VCAP\CountryProfiles::apply( 'DE', array( 'vcap_retention_days', 'vcap_default_expiry_rule' ) );
+$cp_filtered   = VCAP\CountryProfiles::get( 'DE' );
+check(
+	'SET-VC-02: filter vcap_country_profiles adds profiles and changes values; an invalid value is shown with its error and refuses the whole apply (nothing changed); secrets and the data removal switch are never suggested',
+	is_wp_error( $cp_bad ) && str_contains( $cp_bad->get_error_message(), 'Nothing was changed.' ) && $cp_bad_before === $GLOBALS['vcap_test_options'] && '' !== VCAP\CountryProfiles::preview( 'DE' )['vcap_retention_days']['error']
+		&& ! isset( $cp_filtered['settings']['vcap_secret'] ) && ! isset( $cp_filtered['settings']['vcap_delete_on_uninstall'] ) && 'Kosovo' === VCAP\CountryProfiles::label( 'XK' ) && 'XK' === VCAP\CountryProfiles::get( 'XK' )['country']
+		&& is_wp_error( VCAP\CountryProfiles::preview( 'NOPE' ) ) && is_wp_error( VCAP\CountryProfiles::apply( 'NOPE', array() ) ),
+	is_wp_error( $cp_bad ) ? $cp_bad->get_error_message() : json_encode( $cp_bad )
+);
+unset( $GLOBALS['vcap_test_filters']['vcap_country_profiles'] );
+VCAP\CountryProfiles::reset();
+// Admin: preview table, apply/cancel buttons (admin-post, own nonce), the block on "General"; cancel changes nothing.
+$GLOBALS['vcap_test_options'] = array( 'woocommerce_default_country' => 'AT' );
+$cp_html      = VCAP\Admin\CountryProfilesAdmin::preview_html( 'AT' );
+$cp_admin_src = (string) file_get_contents( VCAP_PATH . 'src/Admin/CountryProfilesAdmin.php' );
+preg_match_all( '/public static function (preview|apply|cancel)\(\): void \{\s*(\S+)/', $cp_admin_src, $cp_m );
+$cp_general = ( new VCAP\Settings() )->fields( '' );
+$cp_open    = VCAP\Admin\CountryProfilesAdmin::open_preview( 'ch' ) && 'CH' === VCAP\Admin\CountryProfilesAdmin::pending() && ! VCAP\Admin\CountryProfilesAdmin::open_preview( 'XX' );
+check(
+	'SET-VC-02: the preview is a table "current → suggested" with a checkbox per change (ticked = suggested to take), the mark "Legal check pending", the hints, and the buttons "Apply ticked values" and "Cancel" that post to admin-post (never "Save changes"); showing it changes nothing',
+	str_contains( $cp_html, '<table class="widefat striped">' ) && str_contains( $cp_html, 'name="vcap_profile_items[]" value="vcap_retention_days" checked="checked"' ) && str_contains( $cp_html, 'value="expiry_row" checked="checked"' ) && str_contains( $cp_html, '30 years' )
+		&& str_contains( $cp_html, '<strong>Legal check pending</strong>' ) && str_contains( $cp_html, 'formaction="https://shop.test/wp-admin/admin-post.php?action=vcap_country_profile_apply"' ) && str_contains( $cp_html, 'action=vcap_country_profile_cancel' ) && str_contains( $cp_html, 'name="vcap_profile_id" value="AT"' ) && str_contains( $cp_html, 'Default tax type:' )
+		&& array( 'woocommerce_default_country' => 'AT' ) === $GLOBALS['vcap_test_options'] && $cp_open,
+	substr( $cp_html, 0, 600 )
+);
+check(
+	'SET-VC-02: every admin action needs manage_woocommerce and the nonce (guard() first); apply refuses an expired or different preview; cancel only closes the preview; the block with the button is the first one on "General"',
+	3 === count( $cp_m[1] ) && array( 'self::guard();' ) === array_values( array_unique( $cp_m[2] ) ) && 'manage_woocommerce' === VCAP\Admin\CountryProfilesAdmin::CAP && str_contains( $cp_admin_src, 'check_admin_referer( self::NONCE, self::NONCE_FIELD );' )
+		&& str_contains( $cp_admin_src, "'' === \$pending || \$pending !== \$posted" ) && preg_match( '/function cancel\(\): void \{\s*self::guard\(\);\s*delete_transient\( self::PENDING \. get_current_user_id\(\) \);\s*self::done\(/', $cp_admin_src )
+		&& 'vcap_country_profile' === $cp_general[0]['id'] && VCAP\Admin\CountryProfilesAdmin::FIELD_TYPE === $cp_general[1]['type'] && false === $cp_general[1]['is_option']
+		&& in_array( VCAP\CountryProfiles::APPLIED_OPTION, VCAP\SettingsRegistry::internal()['names'], true ) && ! VCAP\SettingsRegistry::has( VCAP\CountryProfiles::APPLIED_OPTION ),
+	json_encode( array_slice( $cp_general, 0, 2 ) )
+);
+// WP-CLI: wp vcap settings profile list|show|apply.
+$GLOBALS['vcap_test_options'] = array( 'woocommerce_default_country' => 'DE', 'vcap_coupon_link_param' => 'gutschein' );
+$st_cli( array( 'profile', 'list' ), array( 'format' => 'json' ) );
+$cp_cli_rows = $GLOBALS['vcap_cli_rows'] ?? array();
+$cp_c_show   = $st_cli( array( 'profile', 'show' ), array( 'country' => 'EU' ) );
+$cp_c_dry    = $st_cli( array( 'profile', 'apply' ), array( 'country' => 'DE', 'dry-run' => true ) );
+$cp_c_o_dry  = $GLOBALS['vcap_test_options'];
+$cp_c_apply  = $st_cli( array( 'profile', 'apply' ), array( 'country' => 'de', 'yes' => true ) );
+$cp_c_o      = $GLOBALS['vcap_test_options'];
+$cp_c_all    = $st_cli( array( 'profile', 'apply' ), array( 'country' => 'EU', 'yes' => true, 'all' => true ) );
+$cp_c_bad    = $st_cli( array( 'profile', 'apply' ), array( 'country' => 'XX' ) );
+check(
+	'SET-VC-02: wp vcap settings profile list shows the profiles with their check state; show and --dry-run change nothing (an unsaved validity rule that already is "statutory" is no change); apply takes the suggested values (own values and the link parameter only with --all) with the source "country profile"; an unknown profile is refused',
+	array( 'DE', 'AT', 'CH', 'EU', 'OTHER' ) === array_column( $cp_cli_rows, 'profile' ) && 'no (legal check pending)' === $cp_cli_rows[0]['checked'] && 'no (neutral, not checked)' === $cp_cli_rows[3]['checked']
+		&& in_array( 'line:   - Link parameter: gutschein -> voucher (suggestion only, kept – use --all)', $cp_c_show, true )
+		&& in_array( 'line: Dry run: 3 settings would change.', $cp_c_dry, true ) && in_array( 'line:   * Anonymise recipient data after (days): 0 (keep) -> 1095 [Legal check pending]', $cp_c_dry, true ) && ! isset( $cp_c_o_dry['vcap_retention_days'] )
+		&& str_starts_with( (string) end( $cp_c_apply ), 'success: 3 settings changed from the country profile DE.' ) && '1095' === $cp_c_o['vcap_retention_days'] && 'gutschein' === $cp_c_o['vcap_coupon_link_param']
+		&& str_starts_with( (string) end( $cp_c_all ), 'success: 1 settings changed' ) && 'voucher' === $GLOBALS['vcap_test_options']['vcap_coupon_link_param'] && 'EU' === VCAP\CountryProfiles::applied()['id']
+		&& str_contains( implode( ' ', $cp_c_bad ), 'There is no country profile "XX"' ) && in_array( 'halted', $cp_c_bad, true )
+		&& str_contains( (string) file_get_contents( VCAP_PATH . 'API.md' ), 'wp vcap settings profile' ),
+	json_encode( array( $cp_c_show, $cp_c_dry, $cp_c_apply, $cp_c_all ) )
+);
+
+// SET-VC-25: the setup checklist asks for the country profile, the tax type, retention and the mandatory texts.
+$GLOBALS['vcap_test_options']    = array( 'woocommerce_default_country' => 'AT' );
+$GLOBALS['vcap_test_transients'] = array( 'vcap_redeem_page_guess' => -1 );
+$GLOBALS['wpdb']                 = new VCAP_Test_Wpdb();
+$c25_open                        = VCAP\Admin\Onboarding::steps();
+$GLOBALS['vcap_test_options']['vcap_retention_days'] = '730';
+$GLOBALS['vcap_test_options'][ VCAP\CountryProfiles::APPLIED_OPTION ] = array( 'id' => 'AT', 'time' => time(), 'user' => 1 );
+$GLOBALS['vcap_test_options']['vcap_default_terms'] = 'Allgemeine Bedingungen';
+VCAP\Admin\Onboarding::mark_done( 'vat' );
+$c25_done = VCAP\Admin\Onboarding::steps();
+check(
+	'SET-VC-25: the checklist has the steps country profile (first; button with the profile of the shop\'s country), mandatory texts per country, tax type (link to the tax setting, TAX.md) and retention; each is open on a new shop and done once set (profile applied, conditions, confirmed tax type, retention period)',
+	'country_profile' === array_key_first( $c25_open ) && array() === array_diff( array( 'country_profile', 'legal_texts', 'vat', 'retention' ), array_keys( $c25_open ) )
+		&& ! $c25_open['country_profile']['done'] && ! $c25_open['legal_texts']['done'] && ! $c25_open['vat']['done'] && ! $c25_open['retention']['done']
+		&& 'profile_preview' === $c25_open['country_profile']['action'] && 'Show suggestions for Austria' === $c25_open['country_profile']['button'] && str_contains( $c25_open['vat']['label'], 'TAX.md' ) && str_contains( $c25_open['vat']['url'], '#vcap_mpv_after_tax' ) && str_contains( $c25_open['retention']['url'], '#vcap_retention_days' )
+		&& $c25_done['country_profile']['done'] && $c25_done['legal_texts']['done'] && $c25_done['vat']['done'] && $c25_done['retention']['done'],
+	json_encode( array( $c25_open, $c25_done ) )
+);
+$GLOBALS['vcap_test_options'] = array( 'vcap_default_terms' => 'Allgemein', VCAP\Markets::TERMS_OPTION => array( array( 'country' => 'AT', 'language' => '', 'text' => 'Gültig 30 Jahre.' ) ) );
+$c25_missing = array(
+	'one'     => VCAP\Admin\Onboarding::missing_texts( array( 'DE' ) ),
+	'several' => VCAP\Admin\Onboarding::missing_texts( array( 'DE', 'AT', 'CH', 'US' ) ),
+	'outside' => VCAP\Admin\Onboarding::missing_texts( array( 'US' ) ),
+);
+unset( $GLOBALS['vcap_test_options']['vcap_default_terms'] );
+$c25_missing['none'] = VCAP\Admin\Onboarding::missing_texts( array( 'US', 'CA' ) );
+$c25_missing['at']   = VCAP\Admin\Onboarding::missing_texts( array( 'at' ) );
+$c25_onb_src         = (string) file_get_contents( VCAP_PATH . 'src/Admin/Onboarding.php' );
+check(
+	'SET-VC-25: mandatory texts – general conditions cover one market country; several market countries each need their own conditions (the missing ones are named, countries outside the market data are not); a shop outside the market data needs the general conditions; the button opens the profile preview (nonce, manage_woocommerce)',
+	array() === $c25_missing['one'] && array( 'DE', 'CH' ) === $c25_missing['several'] && array() === $c25_missing['outside'] && array( '' ) === $c25_missing['none'] && array() === $c25_missing['at']
+		&& str_contains( $c25_onb_src, 'CountryProfilesAdmin::open_preview( \VCAP\CountryProfiles::for_base_country() );' ) && str_contains( $c25_onb_src, "check_admin_referer( 'vcap_onboarding_' . \$do );" ),
+	json_encode( $c25_missing )
+);
+$GLOBALS['wpdb']                 = $cp_saved_wpdb;
+$GLOBALS['vcap_test_transients'] = $cp_saved_tr;
+$GLOBALS['vcap_test_options']    = $cp_saved;
+VCAP\CountryProfiles::reset();
 
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );

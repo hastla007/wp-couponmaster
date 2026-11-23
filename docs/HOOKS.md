@@ -107,6 +107,7 @@ with a public API contract, the contract starts with 1.1.0). Add-ons check the c
 | `vcap_counter_locations` | 1.2.0 | `src/Counter.php` | The managed tills/branches offered on the scanner. Args: string[] list. |
 | `vcap_counter_require_receipt` | 1.2.0 | `src/Counter.php` | Whether a counter redemption needs a receipt number. Args: bool. |
 | `vcap_counter_reversal_minutes` | 1.2.0 | `src/Tickets.php` | – |
+| `vcap_country_profiles` | 1.3.0 | `src/CountryProfiles.php` | Country profiles (arg: id => array{country, checked, settings, expiry_row, tax, accounting, label?} – see config/country-profiles.php). Add profiles for further countries or change suggested values; a profile is always shown as a preview and applied only after the admin confirms it. Set "checked" to true only after the legal and tax check of the values for that country. |
 | `vcap_coupon_allowed_on_voucher_products` | 1.1.0 | `src/VoucherPurchaseRules.php` | – |
 | `vcap_coupon_before_save` | 1.0.0 | `src/Coupons/CouponFactory.php` | – |
 | `vcap_create_coupon` | 1.0.0 | `src/Issuer.php` | – |

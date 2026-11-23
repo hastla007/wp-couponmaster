@@ -38,6 +38,8 @@ final class Settings {
 		}
 		// SET-VC-04: validity and conditions per country are tables, checked row by row on save.
 		( new Admin\CountryTableField() )->register();
+		// SET-VC-02: country profiles (preview, apply, cancel) in "General".
+		( new Admin\CountryProfilesAdmin() )->register();
 		// M12-84: "30, 7, 1" is stored normalised (largest first), anything else as 0 (no reminders).
 		add_filter(
 			'woocommerce_admin_settings_sanitize_option_vcap_expiry_reminder_days',
@@ -1335,7 +1337,8 @@ final class Settings {
 			),
 			array( 'type' => 'sectionend', 'id' => 'vcap_referral' ),
 		);
-		return array_merge( $fields, PaymentMethods::settings_fields() ); // SET-VC-19: block on "General".
+		// SET-VC-02: the country profile comes first – it suggests values for the blocks below.
+		return array_merge( Admin\CountryProfilesAdmin::fields(), $fields, PaymentMethods::settings_fields() ); // SET-VC-19: block on "General".
 	}
 
 	/**
