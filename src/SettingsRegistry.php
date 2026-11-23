@@ -312,4 +312,22 @@ final class SettingsRegistry {
 		$key = is_array( $option ) ? (string) ( $option['id'] ?? '' ) : '';
 		return '' !== $key ? self::sanitize( $value, $key ) : $value;
 	}
+
+	/**
+	 * A whole-number setting as the code uses it (SET-VC-18, SET-VC-31): Settings::value() kept within the register's
+	 * min and max, so a value written past the settings page (update_option(), import) cannot switch a protection off.
+	 * Callers pass the result to their filter as before; the filter decides.
+	 */
+	public static function bounded_int( string $key ): int {
+		$entry = self::get( $key );
+		$value = Settings::value( $key );
+		$value = is_numeric( $value ) ? (int) round( (float) $value ) : (int) ( $entry['default'] ?? 0 );
+		if ( null !== $entry && null !== $entry['min'] ) {
+			$value = max( (int) $entry['min'], $value );
+		}
+		if ( null !== $entry && null !== $entry['max'] ) {
+			$value = min( (int) $entry['max'], $value );
+		}
+		return $value;
+	}
 }

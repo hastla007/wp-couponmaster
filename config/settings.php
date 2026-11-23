@@ -70,6 +70,17 @@ $vcap_settings = array(
 	// M12-95: storefront conveniences, off by default (existing shops keep their storefront).
 	'vcap_giftcard_field'            => array( 'type' => 'bool', 'default' => 'no', 'section' => 'redemption' ),
 	'vcap_minicart_balance'          => array( 'type' => 'bool', 'default' => 'no', 'section' => 'redemption' ),
+	// SET-VC-18 (1.12 no. 19–21): top-up and counter time windows; defaults = the fixed values of 1.2.0, the filters
+	// of the same name get the setting and win.
+	'vcap_topup_min_remaining_days'  => array( 'type' => 'int', 'default' => 30, 'min' => 0, 'max' => 3650, 'section' => 'redemption' ),
+	'vcap_checkin_undo_minutes'      => array( 'type' => 'int', 'default' => 10, 'min' => 0, 'max' => 1440, 'section' => 'redemption' ),
+	'vcap_counter_reversal_minutes'  => array( 'type' => 'int', 'default' => 15, 'min' => 0, 'max' => 1440, 'section' => 'redemption' ),
+	// SET-VC-31 (1.12 no. 22, 24): limits against code guessing. The floor (min) keeps every protection on – 0 would
+	// switch a limit off (Plugin::rate_limited()); the ceiling keeps it meaningful. Windows stay constants.
+	'vcap_code_attempts_per_visitor' => array( 'type' => 'int', 'default' => 15, 'min' => 3, 'max' => 100, 'section' => 'redemption' ),
+	'vcap_code_attempts_site_wide'   => array( 'type' => 'int', 'default' => 300, 'min' => 50, 'max' => 10000, 'section' => 'redemption' ),
+	'vcap_email_confirm_per_hour'    => array( 'type' => 'int', 'default' => 3, 'min' => 1, 'max' => 10, 'section' => 'redemption' ),
+	'vcap_email_confirm_link_hours'  => array( 'type' => 'int', 'default' => 48, 'min' => 1, 'max' => 168, 'section' => 'redemption' ),
 
 	/* ---- Promotions & refer a friend ---- */
 	'vcap_campaigns_enabled'         => array( 'type' => 'bool', 'default' => 'no', 'section' => 'promotions' ),
@@ -108,6 +119,13 @@ $vcap_settings = array(
 	// Z6: bundled delivery of large quantities (0 switches each one off); M12-48: new installations attach up to 20.
 	'vcap_bundle_threshold'          => array( 'type' => 'int', 'default' => 5, 'min' => 0, 'section' => 'delivery' ),
 	'vcap_bundle_pdf_limit'          => array( 'type' => 'int', 'default' => 50, 'fresh' => 20, 'min' => 0, 'section' => 'delivery' ),
+	// SET-VC-18 (1.12 no. 16–18): customer self-service; defaults = the fixed values of 1.2.0, the filters of the same
+	// name get the setting and win. At most Downloads::FIX_MAX (2) corrections, as before.
+	'vcap_customer_can_resend'       => array( 'type' => 'bool', 'default' => 'yes', 'section' => 'delivery' ),
+	'vcap_customer_can_change'       => array( 'type' => 'bool', 'default' => 'yes', 'section' => 'delivery' ),
+	'vcap_recipient_fix_days'        => array( 'type' => 'int', 'default' => 30, 'min' => 1, 'max' => 365, 'section' => 'delivery' ),
+	'vcap_recipient_fix_max'         => array( 'type' => 'int', 'default' => 2, 'min' => 0, 'max' => 2, 'section' => 'delivery' ),
+	'vcap_printed_link_grace_days'   => array( 'type' => 'int', 'default' => 30, 'min' => 0, 'max' => 3650, 'section' => 'delivery' ),
 
 	/* ---- Privacy & advanced ---- */
 	'vcap_retention_days'            => array( 'type' => 'int', 'default' => 0, 'min' => 0, 'section' => 'privacy', 'legal' => true ),
@@ -131,6 +149,8 @@ $vcap_settings = array(
 	/* ---- Integrations (API) ---- */
 	'vcap_redemption_ttl'            => array( 'type' => 'int', 'default' => 15, 'min' => 1, 'max' => 1440, 'section' => 'api' ),
 	'vcap_redemption_max_failures'   => array( 'type' => 'int', 'default' => 10, 'min' => 0, 'section' => 'api' ),
+	// SET-VC-31 (1.12 no. 23): invalid codes per 15 minutes across all API callers (brake); floor as above.
+	'vcap_redemption_site_wide_failures' => array( 'type' => 'int', 'default' => 300, 'min' => 50, 'max' => 10000, 'section' => 'api' ),
 	// M12-69: DATEV export (digits only; DatevExport::config() strips anything else).
 	'vcap_datev_consultant'          => array( 'section' => 'api' ),
 	'vcap_datev_client'              => array( 'section' => 'api' ),

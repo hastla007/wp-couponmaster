@@ -20,13 +20,25 @@ defined( 'ABSPATH' ) || exit;
  */
 final class CodeLookup {
 	public const BUCKET      = 'code';
+	/** Default attempts per visitor and window (setting "vcap_code_attempts_per_visitor", at least 3; SET-VC-31). */
 	public const PER_VISITOR = 15;
+	/** Default failed codes site-wide per window before the brake (setting "vcap_code_attempts_site_wide", at least 50). */
 	public const SITE_WIDE   = 300;
 	public const WINDOW      = 900;
 
+	/** SET-VC-31: attempts per visitor and window – the setting, never below its floor (filter "vcap_rate_limit_code" wins). */
+	public static function per_visitor(): int {
+		return SettingsRegistry::bounded_int( 'vcap_code_attempts_per_visitor' );
+	}
+
+	/** SET-VC-31: failed codes site-wide per window before every quota shrinks – the setting, never below its floor. */
+	public static function site_wide(): int {
+		return SettingsRegistry::bounded_int( 'vcap_code_attempts_site_wide' );
+	}
+
 	/** Counts a lookup of the current visitor before the code is looked up; true = refused, too many attempts. */
 	public static function begin(): bool {
-		return Plugin::rate_limited( self::BUCKET, self::PER_VISITOR, self::SITE_WIDE, self::WINDOW, false );
+		return Plugin::rate_limited( self::BUCKET, self::per_visitor(), self::site_wide(), self::WINDOW, false );
 	}
 
 	/** The code exists (and may be shown to this visitor): the attempt is given back. */

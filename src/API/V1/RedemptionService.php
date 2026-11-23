@@ -1117,9 +1117,9 @@ final class RedemptionService {
 			 * Invalid codes per 15 minutes across all callers; above it every caller's quota shrinks (brake).
 			 *
 			 * @since 1.2.0
-			 * @param int $site_wide Default 300.
+			 * @param int $site_wide Setting "vcap_redemption_site_wide_failures" (default 300, at least 50; SET-VC-31).
 			 */
-			$site_wide = (int) apply_filters( 'vcap_redemption_site_wide_failures', 300 );
+			$site_wide = (int) apply_filters( 'vcap_redemption_site_wide_failures', \VCAP\SettingsRegistry::bounded_int( 'vcap_redemption_site_wide_failures' ) );
 			if ( \VCAP\Plugin::rate_limited( self::RATE_BUCKET, $max, $site_wide, self::RATE_WINDOW, false, $this->rate_visitor( $user_id ) ) ) {
 				return true;
 			}

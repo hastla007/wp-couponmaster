@@ -34,10 +34,20 @@ final class PersonalVoucher {
 	public const META_CHANGED = '_vcap_email_changed';
 	/** Option: when the proof of mailbox was introduced on this site (accounts registered before are grandfathered). */
 	public const OPTION_SINCE = 'vcap_email_proof_since';
-	/** Lifetime of a confirmation link in seconds (48 hours). */
+	/** Default lifetime of a confirmation link in seconds (48 hours; setting "vcap_email_confirm_link_hours", SET-VC-31). */
 	public const LINK_LIFETIME = 172800;
-	/** Confirmation emails per account and hour (rate limit bucket "email_confirm"). */
+	/** Default confirmation emails per account and hour (rate limit bucket "email_confirm"; setting "vcap_email_confirm_per_hour", at least 1). */
 	public const SEND_PER_HOUR = 3;
+
+	/** SET-VC-31: lifetime of a confirmation link in seconds – the setting in hours, within 1 and 168. */
+	public static function link_lifetime(): int {
+		return SettingsRegistry::bounded_int( 'vcap_email_confirm_link_hours' ) * HOUR_IN_SECONDS;
+	}
+
+	/** SET-VC-31: confirmation emails per account and hour – the setting, never below 1 (filter "vcap_rate_limit_email_confirm" wins). */
+	public static function send_per_hour(): int {
+		return SettingsRegistry::bounded_int( 'vcap_email_confirm_per_hour' );
+	}
 
 	public static function register(): void {
 		self::since();
@@ -220,7 +230,7 @@ final class PersonalVoucher {
 
 	/** Signed link that proves the mailbox of the account's current address (bound to user id, address, expiry). */
 	public static function confirmation_url( \WP_User $user ): string {
-		$exp  = time() + self::LINK_LIFETIME;
+		$exp  = time() + self::link_lifetime();
 		$base = function_exists( 'wc_get_page_permalink' ) ? (string) wc_get_page_permalink( 'myaccount' ) : '';
 		return add_query_arg(
 			array(
@@ -248,8 +258,18 @@ final class PersonalVoucher {
 		return true;
 	}
 
+	/** SET-VC-31: last sentence of the confirmation email with the link lifetime of the setting. */
+	public static function validity_sentence(): string {
+		$hours = (int) ( self::link_lifetime() / HOUR_IN_SECONDS );
+		if ( 48 === $hours ) {
+			return __( 'The link is valid for 48 hours. If you did not ask for it, you can ignore this email.', 'voucher-captain' );
+		}
+		/* translators: %d: hours */
+		return sprintf( _n( 'The link is valid for %d hour. If you did not ask for it, you can ignore this email.', 'The link is valid for %d hours. If you did not ask for it, you can ignore this email.', $hours, 'voucher-captain' ), $hours );
+	}
+
 	/**
-	 * Sends the confirmation link to the account's address (at most SEND_PER_HOUR per account and hour).
+	 * Sends the confirmation link to the account's address (at most send_per_hour() per account and hour).
 	 *
 	 * @return string sent|limited|verified|failed
 	 */
@@ -260,7 +280,7 @@ final class PersonalVoucher {
 		if ( self::has_proof( $user ) ) {
 			return 'verified';
 		}
-		if ( Plugin::rate_limited( 'email_confirm', self::SEND_PER_HOUR, 500, HOUR_IN_SECONDS, true, 'u' . $user->ID ) ) {
+		if ( Plugin::rate_limited( 'email_confirm', self::send_per_hour(), 500, HOUR_IN_SECONDS, true, 'u' . $user->ID ) ) {
 			return 'limited';
 		}
 		$subject = sprintf(
@@ -282,7 +302,7 @@ final class PersonalVoucher {
 			) . '</p>'
 			. '<p><strong>' . esc_html__( 'Do not click the link if you did not create this account yourself.', 'voucher-captain' ) . '</strong></p>'
 			. '<p><a href="' . esc_url( $url ) . '">' . esc_html__( 'Confirm email address', 'voucher-captain' ) . '</a></p>'
-			. '<p>' . esc_html__( 'The link is valid for 48 hours. If you did not ask for it, you can ignore this email.', 'voucher-captain' ) . '</p>';
+			. '<p>' . esc_html( self::validity_sentence() ) . '</p>';
 		$mailer = function_exists( 'WC' ) ? WC()->mailer() : null;
 		$sent   = $mailer
 			? $mailer->send( (string) $user->user_email, $subject, $mailer->wrap_message( __( 'Confirm your email address', 'voucher-captain' ), $body ), array( 'Content-Type: text/html; charset=UTF-8' ) )

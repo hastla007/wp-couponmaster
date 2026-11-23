@@ -374,6 +374,56 @@ final class Settings {
 				)
 			),
 			array( 'type' => 'sectionend', 'id' => 'vcap_bundle' ),
+			// SET-VC-18 (1.12 no. 16–18): what customers may change themselves.
+			array(
+				'type'  => 'title',
+				'title' => __( 'Customer self-service', 'voucher-captain' ),
+				'id'    => 'vcap_self_service',
+			),
+			SettingsRegistry::field(
+				'vcap_customer_can_resend',
+				array(
+					'title' => __( 'Resend from My Account', 'voucher-captain' ),
+					'type'  => 'checkbox',
+					'desc'  => __( 'Buyers may send their delivered vouchers again from My Account (scheduled gifts are never sent early).', 'voucher-captain' ),
+				)
+			),
+			SettingsRegistry::field(
+				'vcap_customer_can_change',
+				array(
+					'title' => __( 'Change gifts before delivery', 'voucher-captain' ),
+					'type'  => 'checkbox',
+					'desc'  => __( 'Buyers may correct the recipient email (and, where the product lets them choose it, the delivery date) of a scheduled gift in My Account until it is sent.', 'voucher-captain' ),
+				)
+			),
+			SettingsRegistry::field(
+				'vcap_recipient_fix_days',
+				array(
+					'title'             => __( '"Correct recipient" link valid for (days)', 'voucher-captain' ),
+					'type'              => 'number',
+					'custom_attributes' => array( 'step' => 1 ),
+					'desc_tip'          => __( 'The order confirmation and the buyer email carry a link with which the buyer – also a guest – corrects a mistyped recipient address of an unused gift. It expires after this many days (default 30, 1–365).', 'voucher-captain' ),
+				)
+			),
+			SettingsRegistry::field(
+				'vcap_recipient_fix_max',
+				array(
+					'title'             => __( 'Recipient corrections per voucher', 'voucher-captain' ),
+					'type'              => 'number',
+					'custom_attributes' => array( 'step' => 1 ),
+					'desc_tip'          => __( 'How often the recipient of one voucher can be corrected through that link (default 2, at most 2). 0 = the link is not offered.', 'voucher-captain' ),
+				)
+			),
+			SettingsRegistry::field(
+				'vcap_printed_link_grace_days',
+				array(
+					'title'             => __( 'Printed link valid after expiry (days)', 'voucher-captain' ),
+					'type'              => 'number',
+					'custom_attributes' => array( 'step' => 1 ),
+					'desc_tip'          => __( 'The download link printed on the voucher PDF (QR code) stays valid this many days after the voucher expired (default 30). Vouchers without an expiry date keep the link.', 'voucher-captain' ),
+				)
+			),
+			array( 'type' => 'sectionend', 'id' => 'vcap_self_service' ),
 		);
 		return $fields;
 	}
@@ -403,6 +453,15 @@ final class Settings {
 					'type'              => 'number',
 					'custom_attributes' => array( 'step' => 1 ),
 					'desc_tip'          => __( 'Number of invalid codes a user may enter within 15 minutes before further attempts are blocked. 0 = no limit.', 'voucher-captain' ),
+				)
+			),
+			SettingsRegistry::field(
+				'vcap_redemption_site_wide_failures',
+				array(
+					'title'             => __( 'Invalid code attempts of all callers', 'voucher-captain' ),
+					'type'              => 'number',
+					'custom_attributes' => array( 'step' => 1 ),
+					'desc_tip'          => __( 'Invalid codes within 15 minutes across all users of the redemption API (default 300, at least 50). Above it every user\'s quota shrinks to a fifth, which slows down guessing from many accounts.', 'voucher-captain' ),
 				)
 			),
 			array( 'type' => 'sectionend', 'id' => 'vcap_api' ),
@@ -482,7 +541,9 @@ final class Settings {
 	/** Blocks of general_fields() shown on their own section (other blocks stay on "General"). */
 	private const GENERAL_BLOCKS = array(
 		'vcap_codes'    => 'codes',
-		'vcap_redeem'   => 'redemption',
+		'vcap_redeem'         => 'redemption',
+		'vcap_redeem_windows' => 'redemption',
+		'vcap_guessing'       => 'redemption',
 		'vcap_referral' => 'promotions',
 	);
 
@@ -884,6 +945,86 @@ final class Settings {
 				)
 			),
 			array( 'type' => 'sectionend', 'id' => 'vcap_redeem' ),
+
+			// SET-VC-18 (1.12 no. 19–21): time windows of top-ups and the counter.
+			array(
+				'type'  => 'title',
+				'title' => __( 'Top-ups and counter', 'voucher-captain' ),
+				'id'    => 'vcap_redeem_windows',
+			),
+			SettingsRegistry::field(
+				'vcap_topup_min_remaining_days',
+				array(
+					'title'             => __( 'Top-up needs remaining validity (days)', 'voucher-captain' ),
+					'type'              => 'number',
+					'custom_attributes' => array( 'step' => 1 ),
+					'desc_tip'          => __( 'A gift card is only topped up while it is valid for at least this many more days, so the new value does not expire with it soon (default 30). 0 = any valid card.', 'voucher-captain' ),
+				)
+			),
+			SettingsRegistry::field(
+				'vcap_checkin_undo_minutes',
+				array(
+					'title'             => __( 'Undo own check-in within (minutes)', 'voucher-captain' ),
+					'type'              => 'number',
+					'custom_attributes' => array( 'step' => 1 ),
+					'desc_tip'          => __( 'Scanner staff may revert their own last check-in of a ticket within this time (default 10). Managers can always revert, with a reason. 0 = only managers.', 'voucher-captain' ),
+				)
+			),
+			SettingsRegistry::field(
+				'vcap_counter_reversal_minutes',
+				array(
+					'title'             => __( 'Cancel own counter redemption within (minutes)', 'voucher-captain' ),
+					'type'              => 'number',
+					'custom_attributes' => array( 'step' => 1 ),
+					'desc_tip'          => __( 'Scanner staff may cancel a redemption they booked at the counter within this time (default 15). Managers can always cancel. 0 = only managers.', 'voucher-captain' ),
+				)
+			),
+			array( 'type' => 'sectionend', 'id' => 'vcap_redeem_windows' ),
+
+			// SET-VC-31 (1.12 no. 22, 24): limits against guessing codes; the register's floor keeps them switched on.
+			array(
+				'type'  => 'title',
+				'title' => __( 'Protection against code guessing', 'voucher-captain' ),
+				'id'    => 'vcap_guessing',
+				'desc'  => __( 'Every form where a code can be entered (redeem form, cart, gift card field, balance check, top-up, links) counts in one quota per visitor and 15 minutes. These limits cannot be switched off.', 'voucher-captain' ),
+			),
+			SettingsRegistry::field(
+				'vcap_code_attempts_per_visitor',
+				array(
+					'title'             => __( 'Code attempts per visitor', 'voucher-captain' ),
+					'type'              => 'number',
+					'custom_attributes' => array( 'step' => 1 ),
+					'desc_tip'          => __( 'Unknown codes one visitor may enter within 15 minutes before further attempts are refused (default 15, 3–100). Existing codes do not count.', 'voucher-captain' ),
+				)
+			),
+			SettingsRegistry::field(
+				'vcap_code_attempts_site_wide',
+				array(
+					'title'             => __( 'Unknown codes of all visitors', 'voucher-captain' ),
+					'type'              => 'number',
+					'custom_attributes' => array( 'step' => 1 ),
+					'desc_tip'          => __( 'Unknown codes within 15 minutes across all visitors (default 300, at least 50). Above it every visitor\'s quota shrinks to a fifth, which slows down guessing from many addresses.', 'voucher-captain' ),
+				)
+			),
+			SettingsRegistry::field(
+				'vcap_email_confirm_per_hour',
+				array(
+					'title'             => __( 'Confirmation emails per account and hour', 'voucher-captain' ),
+					'type'              => 'number',
+					'custom_attributes' => array( 'step' => 1 ),
+					'desc_tip'          => __( 'How often a customer can request the link that confirms their email address for personal vouchers (default 3, 1–10).', 'voucher-captain' ),
+				)
+			),
+			SettingsRegistry::field(
+				'vcap_email_confirm_link_hours',
+				array(
+					'title'             => __( 'Confirmation link valid for (hours)', 'voucher-captain' ),
+					'type'              => 'number',
+					'custom_attributes' => array( 'step' => 1 ),
+					'desc_tip'          => __( 'Lifetime of the link that confirms a customer\'s email address for personal vouchers (default 48, 1–168).', 'voucher-captain' ),
+				)
+			),
+			array( 'type' => 'sectionend', 'id' => 'vcap_guessing' ),
 
 			array(
 				'type'  => 'title',

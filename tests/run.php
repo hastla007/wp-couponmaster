@@ -3722,7 +3722,7 @@ check( 'SET-VC-01: every vcap_ option the code reads is in the settings register
 $sr_probe = $sr_unknown( "get_option( 'vcap_not_registered', '' ); get_option( 'vcap_unknown_prefix_' . \$id ); get_option( 'vcap_attach_pdf' ); Settings::value( 'vcap_code_length' ); get_option( 'vcap_reversal_' . \$id ); get_option( Install::OPTION_DB_VERSION ); get_option( \\VCAP\\PaymentVouchers::OPTION ); get_option( 'woocommerce_currency' ); get_option( 'vcap_mpv_after_tax_x' );", '' );
 check( 'SET-VC-01: the check fails for an unregistered option (literal, prefix, constant) and passes for settings and internal state', array( 'vcap_not_registered', 'vcap_unknown_prefix_…', 'vcap_mpv_after_tax_x' ) === $sr_probe && array( 'vcap_counter_till_x' ) === $sr_unknown( "get_option( self::TILL_AMOUNT ); get_option( 'vcap_counter_till_x' );", 'Counter' ) && array() === $sr_unknown( 'get_option( self::FAILED_LOOKUPS );', 'Counter' ),implode( ', ', $sr_probe ) );
 $sr_fielded = array_filter( $sr_all, static fn( $e ) => VCAP\SettingsRegistry::HIDDEN !== $e['section'] );
-check( 'SET-VC-01: 91 options are registered (89 with a field, 2 secrets) plus 4 user settings; settings and internal state do not overlap', 91 === count( $sr_all ) && 89 === count( $sr_fielded ) && array( 'vcap_secret', 'vcap_customer_key_secret' ) === VCAP\SettingsRegistry::with( 'secret' ) && array() === array_filter( array_keys( $sr_all ), static fn( $k ) => VCAP\SettingsRegistry::is_internal( $k ) ) && array( VCAP\Counter::META_AMOUNT, VCAP\Counter::META_COUNT, VCAP\Counter::META_LOCATION, VCAP\Admin\ProHints::USER_META ) === array_keys( VCAP\SettingsRegistry::user_meta() ), (string) count( $sr_all ) );
+check( 'SET-VC-01: 104 options are registered (102 with a field, 2 secrets) plus 4 user settings; settings and internal state do not overlap', 104 === count( $sr_all ) && 102 === count( $sr_fielded ) && array( 'vcap_secret', 'vcap_customer_key_secret' ) === VCAP\SettingsRegistry::with( 'secret' ) && array() === array_filter( array_keys( $sr_all ), static fn( $k ) => VCAP\SettingsRegistry::is_internal( $k ) ) && array( VCAP\Counter::META_AMOUNT, VCAP\Counter::META_COUNT, VCAP\Counter::META_LOCATION, VCAP\Admin\ProHints::USER_META ) === array_keys( VCAP\SettingsRegistry::user_meta() ), (string) count( $sr_all ) );
 check( 'SET-VC-01: secrets are never exported; the data removal switch and the support log are not exported either; selects list their choices', array() === array_intersect( VCAP\SettingsRegistry::with( 'secret' ), VCAP\SettingsRegistry::with( 'export' ) ) && ! in_array( 'vcap_delete_on_uninstall', VCAP\SettingsRegistry::with( 'export' ), true ) && ! in_array( VCAP\Logger::VERBOSE_OPTION, VCAP\SettingsRegistry::with( 'export' ), true ) && array() === array_filter( $sr_all, static fn( $e ) => 'select' === $e['type'] && ( empty( $e['choices'] ) || ( '' !== $e['default'] && ! in_array( (string) $e['default'], $e['choices'], true ) ) ) ) );
 // Defaults are those of 1.2.0 (formerly Settings::DEFAULTS) – a shop that never saved a setting behaves as before.
 $sr_def = VCAP\Settings::defaults();
@@ -3796,6 +3796,187 @@ check( 'SET-VC-01: filter vcap_settings_registry adds settings of add-ons (secre
 unset( $GLOBALS['vcap_test_filters']['vcap_settings_registry'] );
 VCAP\SettingsRegistry::reset();
 check( 'SET-VC-01: config/settings.php holds data only (no translated text, no option access) and the hook is documented; Settings::DEFAULTS is replaced by Settings::defaults()', ! preg_match( '/__\(|_e\(|esc_html|get_option|update_option/', (string) file_get_contents( VCAP_PATH . 'config/settings.php' ) ) && str_contains( (string) file_get_contents( VCAP_PATH . 'docs/HOOKS.md' ), '| `vcap_settings_registry` | 1.3.0 |' ) && ! defined( 'VCAP\\Settings::DEFAULTS' ) );
+
+// SET-VC-18: customer self-service and deadlines as settings (1.12 no. 16–21); defaults = the fixed values of 1.2.0,
+// the filters of the same name get the setting and win.
+echo "SET-VC-18 customer self-service and deadlines\n";
+VCAP\SettingsRegistry::reset();
+$s18_def = VCAP\Settings::defaults();
+$s18_opt = static function ( array $values ): void {
+	foreach ( $values as $k => $v ) {
+		if ( null === $v ) {
+			unset( $GLOBALS['vcap_test_options'][ $k ] );
+		} else {
+			$GLOBALS['vcap_test_options'][ $k ] = $v;
+		}
+	}
+};
+check(
+	'SET-VC-18: defaults are today\'s values (correction link 30 days, 2 corrections, resend and change allowed, printed link 30 days, top-up 30 days, undo 10 min, counter cancellation 15 min); delivery and redemption sections',
+	30 === $s18_def['vcap_recipient_fix_days'] && VCAP\Downloads::FIX_MAX === $s18_def['vcap_recipient_fix_max'] && 'yes' === $s18_def['vcap_customer_can_resend'] && 'yes' === $s18_def['vcap_customer_can_change']
+		&& VCAP\Downloads::PRINTED_LINK_GRACE_DAYS === $s18_def['vcap_printed_link_grace_days'] && VCAP\TopUp::MIN_REMAINING_DAYS === $s18_def['vcap_topup_min_remaining_days'] && 10 === $s18_def['vcap_checkin_undo_minutes'] && 15 === $s18_def['vcap_counter_reversal_minutes']
+		&& 'delivery' === VCAP\SettingsRegistry::get( 'vcap_recipient_fix_days' )['section'] && 'delivery' === VCAP\SettingsRegistry::get( 'vcap_printed_link_grace_days' )['section'] && 'redemption' === VCAP\SettingsRegistry::get( 'vcap_topup_min_remaining_days' )['section'] && 'redemption' === VCAP\SettingsRegistry::get( 'vcap_counter_reversal_minutes' )['section']
+);
+$s18_v        = new Voucher();
+$s18_v->id    = 18;
+$s18_v->token = 'tok18';
+$s18_seen     = array();
+check( 'SET-VC-18: "Correct recipient" link lifetime follows the setting (default 30, never below 1)', 30 === VCAP\Downloads::fix_days( $s18_v ) && ( $s18_opt( array( 'vcap_recipient_fix_days' => '7' ) ) || 7 === VCAP\Downloads::fix_days( $s18_v ) ) && ( $s18_opt( array( 'vcap_recipient_fix_days' => '0' ) ) || 1 === VCAP\Downloads::fix_days( $s18_v ) ) );
+$s18_opt( array( 'vcap_recipient_fix_days' => '7' ) );
+add_filter( 'vcap_recipient_fix_days', static function ( $days ) use ( &$s18_seen ) { $s18_seen[] = $days; return 3; } );
+check( 'SET-VC-18: filter vcap_recipient_fix_days gets the setting and wins', 3 === VCAP\Downloads::fix_days( $s18_v ) && array( 7 ) === $s18_seen );
+unset( $GLOBALS['vcap_test_filters']['vcap_recipient_fix_days'] );
+$s18_opt( array( 'vcap_recipient_fix_days' => null, 'vcap_recipient_fix_max' => '1' ) );
+$s18_fm1 = VCAP\Downloads::fix_max( $s18_v );
+$s18_opt( array( 'vcap_recipient_fix_max' => '0' ) );
+$s18_fm0 = VCAP\Downloads::fix_max( $s18_v );
+$s18_opt( array( 'vcap_recipient_fix_max' => '9' ) );
+$s18_fm9 = VCAP\Downloads::fix_max( $s18_v );
+$s18_opt( array( 'vcap_recipient_fix_max' => null ) );
+check( 'SET-VC-18: corrections per voucher follow the setting (1, 0 = no link), a stored value above 2 still allows only 2; default 2', 1 === $s18_fm1 && 0 === $s18_fm0 && 2 === $s18_fm9 && 2 === VCAP\Downloads::fix_max( $s18_v ) );
+$s18_opt( array( 'vcap_recipient_fix_max' => '0' ) );
+add_filter( 'vcap_recipient_fix_max', static fn() => 1 );
+$s18_ff1 = VCAP\Downloads::fix_max( $s18_v );
+unset( $GLOBALS['vcap_test_filters']['vcap_recipient_fix_max'] );
+add_filter( 'vcap_recipient_fix_max', static fn() => 5 );
+$s18_ff5 = VCAP\Downloads::fix_max( $s18_v );
+unset( $GLOBALS['vcap_test_filters']['vcap_recipient_fix_max'] );
+$s18_opt( array( 'vcap_recipient_fix_max' => null ) );
+check( 'SET-VC-18: filter vcap_recipient_fix_max wins over the setting, capped at 2 as before', 1 === $s18_ff1 && 2 === $s18_ff5 );
+$s18_r = array( VCAP\Downloads::resend_allowed( $s18_v ) );
+$s18_opt( array( 'vcap_customer_can_resend' => 'no' ) );
+$s18_r[] = VCAP\Downloads::resend_allowed( $s18_v );
+add_filter( 'vcap_customer_can_resend', static fn() => true );
+$s18_r[] = VCAP\Downloads::resend_allowed( $s18_v );
+unset( $GLOBALS['vcap_test_filters']['vcap_customer_can_resend'] );
+$s18_opt( array( 'vcap_customer_can_resend' => null ) );
+check( 'SET-VC-18: resend from My Account – allowed by default, off with the setting, the filter wins', array( true, false, true ) === $s18_r && str_contains( (string) file_get_contents( VCAP_PATH . 'src/Downloads.php' ), '&& self::resend_allowed( $voucher );' ) );
+$s18_c = array( VCAP\Downloads::change_allowed( $s18_v ) );
+$s18_opt( array( 'vcap_customer_can_change' => 'no' ) );
+$s18_c[] = VCAP\Downloads::change_allowed( $s18_v );
+add_filter( 'vcap_customer_can_change', static fn() => true );
+$s18_c[] = VCAP\Downloads::change_allowed( $s18_v );
+unset( $GLOBALS['vcap_test_filters']['vcap_customer_can_change'] );
+$s18_opt( array( 'vcap_customer_can_change' => null ) );
+check( 'SET-VC-18: change a gift before delivery – allowed by default, off with the setting, the filter wins', array( true, false, true ) === $s18_c && str_contains( (string) file_get_contents( VCAP_PATH . 'src/Downloads.php' ), '&& self::change_allowed( $voucher );' ) );
+$s18_g = array( VCAP\Downloads::printed_link_grace_days( $s18_v ) );
+$s18_opt( array( 'vcap_printed_link_grace_days' => '0' ) );
+$s18_g[] = VCAP\Downloads::printed_link_grace_days( $s18_v );
+$s18_opt( array( 'vcap_printed_link_grace_days' => '365' ) );
+$s18_g[] = VCAP\Downloads::printed_link_grace_days( $s18_v );
+add_filter( 'vcap_printed_link_grace_days', static fn() => 5 );
+$s18_g[] = VCAP\Downloads::printed_link_grace_days( $s18_v );
+unset( $GLOBALS['vcap_test_filters']['vcap_printed_link_grace_days'] );
+$s18_opt( array( 'vcap_printed_link_grace_days' => null ) );
+check( 'SET-VC-18: printed link stays valid after expiry for the set days (30 by default, 0, 365), the new filter vcap_printed_link_grace_days wins', array( 30, 0, 365, 5 ) === $s18_g && str_contains( (string) file_get_contents( VCAP_PATH . 'src/Downloads.php' ), 'self::printed_link_grace_days( $voucher ) * DAY_IN_SECONDS' ) );
+$s18_card             = new Voucher();
+$s18_card->code       = 'GIFT-S18';
+$s18_card->expires_at = gmdate( 'Y-m-d H:i:s', time() + 5 * DAY_IN_SECONDS );
+$s18_t                = array( '' !== VCAP\TopUp::remaining_validity_error( $s18_card ) );
+$s18_opt( array( 'vcap_topup_min_remaining_days' => '3' ) );
+$s18_t[] = '' !== VCAP\TopUp::remaining_validity_error( $s18_card );
+$s18_opt( array( 'vcap_topup_min_remaining_days' => '0' ) );
+add_filter( 'vcap_topup_min_remaining_days', static fn() => 30 );
+$s18_t[] = '' !== VCAP\TopUp::remaining_validity_error( $s18_card );
+unset( $GLOBALS['vcap_test_filters']['vcap_topup_min_remaining_days'] );
+$s18_opt( array( 'vcap_topup_min_remaining_days' => null ) );
+check( 'SET-VC-18: top-up only with remaining validity – 30 days by default refuse a card valid 5 more days, setting 3 allows it, the filter wins', array( true, false, true ) === $s18_t );
+$s18_ev  = static fn( string $event, ?float $amount ) => array( 'id' => 5, 'voucher_id' => 7, 'event' => $event, 'amount' => $amount, 'balance_after' => null, 'order_id' => 0, 'user_id' => 3, 'note' => '', 'created_at' => '2026-01-01 10:00:00' );
+$ticket               = new Voucher();
+$ticket->id           = 7;
+$ticket->type         = 'ticket';
+$ticket->status       = Voucher::STATUS_ACTIVE;
+$ticket->max_checkins = 2;
+$ticket->checkins     = 1;
+$card                 = new Voucher();
+$card->id             = 7;
+$card->usage_mode     = 'balance';
+$card->status         = Voucher::STATUS_ACTIVE;
+$now                  = strtotime( '2026-01-01 10:05:00 UTC' );
+$mine                 = $s18_ev( 'checkin', null );
+$booking              = $s18_ev( 'redeemed', 20.0 );
+$s18_u = array( Tickets::undo_mode( $ticket, $mine, 3, false, $now ) );
+$s18_opt( array( 'vcap_checkin_undo_minutes' => '2' ) );
+$s18_u[] = Tickets::undo_mode( $ticket, $mine, 3, false, $now );
+$s18_opt( array( 'vcap_checkin_undo_minutes' => '0' ) );
+$s18_u[] = Tickets::undo_mode( $ticket, $mine, 3, true, $now );
+add_filter( 'vcap_checkin_undo_minutes', static fn() => 10 );
+$s18_u[] = Tickets::undo_mode( $ticket, $mine, 3, false, $now );
+unset( $GLOBALS['vcap_test_filters']['vcap_checkin_undo_minutes'] );
+$s18_opt( array( 'vcap_checkin_undo_minutes' => null ) );
+check( 'SET-VC-18: undo own check-in within the set minutes (10 by default; 2 is over after 5 minutes; 0 = managers only), the filter wins', array( 'own', '', 'reason', 'own' ) === $s18_u );
+$s18_x = array( Tickets::reversal_refusal( $booking, $card, 3, false, $now, false ) );
+$s18_opt( array( 'vcap_counter_reversal_minutes' => '0' ) );
+$s18_x[] = Tickets::reversal_refusal( $booking, $card, 3, false, $now, false );
+$s18_x[] = Tickets::reversal_refusal( $booking, $card, 3, true, $now, false );
+add_filter( 'vcap_counter_reversal_minutes', static fn() => 15 );
+$s18_x[] = Tickets::reversal_refusal( $booking, $card, 3, false, $now, false );
+unset( $GLOBALS['vcap_test_filters']['vcap_counter_reversal_minutes'] );
+$s18_opt( array( 'vcap_counter_reversal_minutes' => '120' ) );
+$s18_x[] = Tickets::reversal_refusal( $booking, $card, 3, false, $now + 3600, false );
+$s18_opt( array( 'vcap_counter_reversal_minutes' => null ) );
+check( 'SET-VC-18: cancel own counter redemption within the set minutes (15 by default; 0 = managers only; 120 still after an hour), the filter wins', array( '', 'forbidden', '', '', '' ) === $s18_x );
+
+// SET-VC-31: limits against code guessing as settings with a floor (1.12 no. 22–24).
+echo "SET-VC-31 limits against code guessing\n";
+$s31_floor = static fn( string $k ) => VCAP\SettingsRegistry::get( $k )['min'];
+$s31_san   = static fn( $v, $k ) => VCAP\SettingsRegistry::sanitize_option( $v, array( 'id' => $k ) );
+check(
+	'SET-VC-31: defaults are today\'s values and every limit has a floor above 0 (no setting switches a protection off); saving 0 stores the floor',
+	VCAP\CodeLookup::PER_VISITOR === VCAP\Settings::value( 'vcap_code_attempts_per_visitor' ) && VCAP\CodeLookup::SITE_WIDE === VCAP\Settings::value( 'vcap_code_attempts_site_wide' ) && 300 === VCAP\Settings::value( 'vcap_redemption_site_wide_failures' )
+		&& VCAP\PersonalVoucher::SEND_PER_HOUR === VCAP\Settings::value( 'vcap_email_confirm_per_hour' ) && VCAP\PersonalVoucher::LINK_LIFETIME === VCAP\Settings::value( 'vcap_email_confirm_link_hours' ) * HOUR_IN_SECONDS
+		&& 3 === $s31_floor( 'vcap_code_attempts_per_visitor' ) && 50 === $s31_floor( 'vcap_code_attempts_site_wide' ) && 50 === $s31_floor( 'vcap_redemption_site_wide_failures' ) && 1 === $s31_floor( 'vcap_email_confirm_per_hour' ) && 1 === $s31_floor( 'vcap_email_confirm_link_hours' )
+		&& '3' === $s31_san( '0', 'vcap_code_attempts_per_visitor' ) && '50' === $s31_san( '0', 'vcap_code_attempts_site_wide' ) && '1' === $s31_san( '0', 'vcap_email_confirm_per_hour' ) && '100' === $s31_san( '100000', 'vcap_code_attempts_per_visitor' ) && '168' === $s31_san( '9999', 'vcap_email_confirm_link_hours' )
+);
+$s31_limits = array();
+add_filter(
+	'vcap_rate_limit_code',
+	static function ( $limits ) use ( &$s31_limits ) {
+		$s31_limits[] = $limits;
+		return array( 'per_visitor' => 0 ) + $limits; // Stop here (no counter in the unit tests).
+	}
+);
+VCAP\CodeLookup::begin();
+$GLOBALS['vcap_test_options']['vcap_code_attempts_per_visitor'] = '8';
+$GLOBALS['vcap_test_options']['vcap_code_attempts_site_wide']   = '1000';
+VCAP\CodeLookup::begin();
+// Written past the settings page (update_option(), import): the floor still holds.
+$GLOBALS['vcap_test_options']['vcap_code_attempts_per_visitor'] = '0';
+$GLOBALS['vcap_test_options']['vcap_code_attempts_site_wide']   = '-5';
+VCAP\CodeLookup::begin();
+unset( $GLOBALS['vcap_test_options']['vcap_code_attempts_per_visitor'], $GLOBALS['vcap_test_options']['vcap_code_attempts_site_wide'] );
+check(
+	'SET-VC-31: every code form counts with the set limits (15/300 by default, 8/1000 set); a stored 0 reads as the floor 3/50; filter vcap_rate_limit_code still gets them and wins',
+	array( array( 'per_visitor' => 15, 'site_wide' => 300 ), array( 'per_visitor' => 8, 'site_wide' => 1000 ), array( 'per_visitor' => 3, 'site_wide' => 50 ) ) === $s31_limits && false === VCAP\CodeLookup::begin()
+);
+unset( $GLOBALS['vcap_test_filters']['vcap_rate_limit_code'] );
+$s31_seen = array();
+add_filter( 'vcap_redemption_site_wide_failures', static function ( $n ) use ( &$s31_seen ) { $s31_seen[] = $n; return $n; } );
+add_filter( 'vcap_rate_limit_redemption', static fn( $limits ) => array( 'per_visitor' => 0 ) + $limits );
+add_filter( 'vcap_rate_limit_code', static fn( $limits ) => array( 'per_visitor' => 0 ) + $limits );
+$s31_rs  = ( new ReflectionClass( VCAP\API\V1\RedemptionService::class ) )->newInstanceWithoutConstructor();
+$s31_tmf = new ReflectionMethod( VCAP\API\V1\RedemptionService::class, 'too_many_failures' );
+$s31_r1 = $s31_tmf->invoke( $s31_rs, 5 );
+$GLOBALS['vcap_test_options']['vcap_redemption_site_wide_failures'] = '20';
+$s31_tmf->invoke( $s31_rs, 5 );
+$GLOBALS['vcap_test_options']['vcap_redemption_site_wide_failures'] = '600';
+$s31_tmf->invoke( $s31_rs, 5 );
+unset( $GLOBALS['vcap_test_options']['vcap_redemption_site_wide_failures'], $GLOBALS['vcap_test_filters']['vcap_redemption_site_wide_failures'], $GLOBALS['vcap_test_filters']['vcap_rate_limit_redemption'], $GLOBALS['vcap_test_filters']['vcap_rate_limit_code'] );
+check( 'SET-VC-31: redemption API – the site-wide brake follows the setting (300 by default, 20 stored reads as the floor 50, 600) and filter vcap_redemption_site_wide_failures gets it', false === $s31_r1 && array( 300, 50, 600 ) === $s31_seen );
+$s31_p = array( VCAP\PersonalVoucher::link_lifetime(), VCAP\PersonalVoucher::send_per_hour(), VCAP\PersonalVoucher::validity_sentence() );
+$GLOBALS['vcap_test_options']['vcap_email_confirm_link_hours'] = '24';
+$GLOBALS['vcap_test_options']['vcap_email_confirm_per_hour']   = '0';
+$s31_p = array_merge( $s31_p, array( VCAP\PersonalVoucher::link_lifetime(), VCAP\PersonalVoucher::send_per_hour(), VCAP\PersonalVoucher::validity_sentence() ) );
+$GLOBALS['vcap_test_options']['vcap_email_confirm_link_hours'] = '1000';
+$s31_p[] = VCAP\PersonalVoucher::link_lifetime();
+unset( $GLOBALS['vcap_test_options']['vcap_email_confirm_link_hours'], $GLOBALS['vcap_test_options']['vcap_email_confirm_per_hour'] );
+$s31_pv = (string) file_get_contents( VCAP_PATH . 'src/PersonalVoucher.php' );
+check(
+	'SET-VC-31: personal vouchers – confirmation link 48 h and 3 mails per hour by default; 24 h set (the email names it), a stored 0 mails reads as 1, at most 168 h',
+	array( 172800, 3, 'The link is valid for 48 hours. If you did not ask for it, you can ignore this email.', 86400, 1, 'The link is valid for 24 hours. If you did not ask for it, you can ignore this email.', 168 * HOUR_IN_SECONDS ) === $s31_p
+		&& str_contains( $s31_pv, "rate_limited( 'email_confirm', self::send_per_hour()," ) && str_contains( $s31_pv, 'time() + self::link_lifetime();' ),
+	wp_json_encode( $s31_p )
+);
 
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );

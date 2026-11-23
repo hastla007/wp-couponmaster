@@ -26,7 +26,7 @@ final class TopUp {
 	public const PENDING_META  = '_vcap_topup_pending';
 	/** M12-09: Action Scheduler hook that books a held top-up line once its order's hold is over. */
 	public const AFTER_HOLD_HOOK = 'vcap_topup_after_hold';
-	/** Default minimum remaining validity (days) of a card to be topped up (filter "vcap_topup_min_remaining_days"). */
+	/** Default minimum remaining validity (days) of a card to be topped up (setting and filter "vcap_topup_min_remaining_days"). */
 	public const MIN_REMAINING_DAYS = 30;
 	private const FIELD        = 'vcap_topup_code';
 
@@ -183,7 +183,7 @@ final class TopUp {
 		if ( ! $card->expires_at ) {
 			return '';
 		}
-		$days = max( 0, (int) apply_filters( 'vcap_topup_min_remaining_days', self::MIN_REMAINING_DAYS, $card ) );
+		$days = max( 0, (int) apply_filters( 'vcap_topup_min_remaining_days', SettingsRegistry::bounded_int( 'vcap_topup_min_remaining_days' ), $card ) );
 		$ends = strtotime( $card->expires_at . ' UTC' );
 		if ( $ends - ( $now ?? time() ) >= $days * DAY_IN_SECONDS ) {
 			return '';

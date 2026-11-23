@@ -160,6 +160,8 @@ Kompiliert die `.po`-Dateien zu `.mo`.
 
 Einstellungen: Standardwert, Typ, Grenzen, Abschnitt, rechtliches Gewicht, Export und Geheimnis jeder Option stehen an einer Stelle in `config/settings.php` (Klasse `VCAP\SettingsRegistry`, Filter `vcap_settings_registry`); Optionen, die keine Einstellungen sind (Zähler, Sperren, Versionen), stehen dort in der Liste `internal`. Ein Test in `tests/run.php` schlägt fehl, sobald der Code eine `vcap_`-Option liest, die in keiner der beiden Listen steht.
 
+Selbstbedienung und Fristen (SET-VC-18) sind Einstellungen statt fester Werte: erneut senden und Geschenke vor der Zustellung ändern, Link „Empfänger korrigieren“ (30 Tage, höchstens 2 Korrekturen), gedruckter Link nach Ablauf (30 Tage), Aufladung nur mit Restlaufzeit (30 Tage), eigenen Einlass rückgängig (10 Minuten), eigene Schalter-Einlösung stornieren (15 Minuten). Die Grenzen gegen Durchprobieren (SET-VC-31: Code-Versuche je Besucher 15, alle Besucher 300, Einlöse-API 300, Bestätigungs-E-Mails 3 je Stunde, Bestätigungslink 48 Stunden) haben im Register eine Untergrenze, damit niemand den Schutz abschaltet. Die bisherigen Filter bekommen die Einstellung und gewinnen.
+
 Templates lassen sich im Theme unter `woocommerce/voucher-captain/` überschreiben.
 
 ## Lizenz

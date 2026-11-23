@@ -188,6 +188,7 @@ with a public API contract, the contract starts with 1.1.0). Add-ons check the c
 | `vcap_physical_activation_statuses` | 1.2.0 | `src/PhysicalCards.php` | Order statuses at which physical gift cards are activated (default: completed). |
 | `vcap_placeholder_definitions` | 1.0.0 | `src/Placeholders.php` | Placeholders offered in the PDF designer and the email texts (arg: array of token => label); fill them in vcap_placeholders. |
 | `vcap_placeholders` | 1.0.0 | `src/Placeholders.php` | Values of the placeholders for a voucher (args: array of token => text, Voucher); texts are escaped when printed. |
+| `vcap_printed_link_grace_days` | 1.3.0 | `src/Downloads.php` | Days the download link printed on a voucher (QR code) stays valid after the voucher expired. |
 | `vcap_pro_hints_hidden` | 1.3.0 | `src/Admin/ProHints.php` | Whether the hint lines on add-on functions are hidden for the current user (default: the user's own setting "Hide hints on extensions"). |
 | `vcap_product_config` | 1.0.0 | `src/ProductConfig.php` | – |
 | `vcap_protect_voucher_coupons` | 1.2.0 | `src/Coupons/CouponSync.php` | Whether trashing/deleting a voucher's WooCommerce coupon is refused (default: in wp-admin and REST requests). |
