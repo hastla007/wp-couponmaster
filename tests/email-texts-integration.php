@@ -292,10 +292,19 @@ $z6_preview         = $z6_email->get_content_html();
 ob_end_clean();
 vcap_mail_assert( str_contains( $z6_preview, '<table' ) && substr_count( $z6_preview, VCAP\Preview::sample_voucher()->code . '-' ) >= 3, 'Z6: the WooCommerce email preview of the bundled email shows a code table with sample vouchers' );
 
-// German: the same texts are translated (formal "Sie").
+// German (S4): de_DE says "du", de_DE_formal "Sie".
 add_filter( 'woocommerce_email_setup_locale', '__return_false' );
 unload_textdomain( 'voucher-captain' );
-vcap_mail_assert( load_textdomain( 'voucher-captain', WP_PLUGIN_DIR . '/voucher-captain/languages/voucher-captain-de_DE.mo' ), 'the German translation loads' );
+vcap_mail_assert( load_textdomain( 'voucher-captain', WP_PLUGIN_DIR . '/voucher-captain/languages/voucher-captain-de_DE.mo' ), 'the German translation (du) loads' );
+$emails = ( new VCAP\Emails() )->classes( array() );
+$email  = $emails['VCAP_Email_Voucher_Recipient'];
+$email->settings['email_type'] = 'plain';
+$email->settings['enabled']    = 'yes';
+$email->trigger( vcap_mail_voucher( array( 'buyer_name' => 'Max', 'recipient_name' => 'Lea', 'discount_type' => 'percent', 'amount' => 15 ) ) );
+$last = end( $captured );
+vcap_mail_assert( str_contains( wp_strip_all_tags( (string) $last['message'] ), 'Hallo Lea, Max hat dir einen Gutschein über' ), 'S4: the de_DE recipient email says "du"', $last['message'] ?? '' );
+unload_textdomain( 'voucher-captain' );
+vcap_mail_assert( load_textdomain( 'voucher-captain', WP_PLUGIN_DIR . '/voucher-captain/languages/voucher-captain-de_DE_formal.mo' ), 'the formal German translation (Sie) loads' );
 $emails = ( new VCAP\Emails() )->classes( array() );
 $email  = $emails['VCAP_Email_Voucher_Recipient'];
 $email->settings['email_type'] = 'plain';

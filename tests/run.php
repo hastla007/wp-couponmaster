@@ -1084,7 +1084,7 @@ $placeholders = static function ( string $text ): array {
 };
 $pot = vcap_test_po( dirname( __DIR__ ) . '/languages/voucher-captain.pot' );
 check( 'the POT file lists the plugin texts', count( $pot ) > 1000, (string) count( $pot ) );
-foreach ( array( 'de_DE', 'de_AT' ) as $locale ) {
+foreach ( array( 'de_DE', 'de_DE_formal', 'de_AT' ) as $locale ) {
 	$po        = vcap_test_po( dirname( __DIR__ ) . "/languages/voucher-captain-{$locale}.po" );
 	$missing   = array();
 	$broken    = array();
@@ -1129,14 +1129,48 @@ foreach ( array( 'de_DE', 'de_AT' ) as $locale ) {
 	check( "U11: {$locale} translates every \"store credit\" as \"Kundenguthaben\"", ! $u11_credit, implode( ' | ', array_slice( array_unique( $u11_credit ), 0, 5 ) ) );
 }
 
+// S4 (owner decision 23.11.2026): de_DE addresses with "du", de_DE_formal and de_AT with "Sie"; no mix in one file. A
+// text without an address is the same in de_DE and de_DE_formal. ("Sie" as 3rd person plural, e.g. "Sie laufen nicht
+// ab" = the vouchers, stays allowed: only the unambiguous formal forms are refused in de_DE.)
+$s4_informal = '/\b([Dd]u|[Dd]ir|[Dd]ich|[Dd]ein(e|er|en|em|es)?|[Ee]uch|[Ee]uer|[Ee]ure[rnms]?)\b/u';
+$s4_formal   = '/\b[a-zäöüß]+en Sie\b|\bIhnen\b/u';
+$s4_du       = vcap_test_po( dirname( __DIR__ ) . '/languages/voucher-captain-de_DE.po' );
+$s4_sie      = vcap_test_po( dirname( __DIR__ ) . '/languages/voucher-captain-de_DE_formal.po' );
+$s4_at       = vcap_test_po( dirname( __DIR__ ) . '/languages/voucher-captain-de_AT.po' );
+$s4_bad      = array();
+$s4_address  = 0;
+foreach ( $s4_du as $key => $entry ) {
+	foreach ( $entry[0] as $i => $du ) {
+		$sie = (string) ( $s4_sie[ $key ][0][ $i ] ?? '' );
+		if ( preg_match( $s4_formal, $du ) ) {
+			$s4_bad[] = 'de_DE uses "Sie": ' . $du;
+		}
+		if ( preg_match( $s4_informal, $sie ) ) {
+			$s4_bad[] = 'de_DE_formal uses "du": ' . $sie;
+		}
+		foreach ( (array) ( $s4_at[ $key ][0] ?? array() ) as $at ) {
+			if ( preg_match( $s4_informal, (string) $at ) ) {
+				$s4_bad[] = 'de_AT uses "du": ' . $at;
+			}
+		}
+		if ( preg_match( $s4_informal, $du ) ) {
+			++$s4_address;
+			if ( $du === $sie ) {
+				$s4_bad[] = 'a text that says "du" needs its own formal text: ' . $du;
+			}
+		}
+	}
+}
+check( 'S4: de_DE says "du", de_DE_formal and de_AT say "Sie" – no mix in one file, both German catalogs hold the same texts', array() === $s4_bad && array_keys( $s4_du ) === array_keys( $s4_sie ) && $s4_address > 100, implode( ' | ', array_slice( $s4_bad, 0, 5 ) ) . ' (addressed: ' . $s4_address . ')' );
+
 // Locale fallback (VCAP\I18n): German variants without their own file load the German translation.
 $lang = dirname( __DIR__ ) . '/languages/';
 $wp_lang = $out . '/wp-languages/plugins/';
 @mkdir( $wp_lang, 0777, true );
-check( 'de_DE_formal without its own file loads the German translation', $lang . 'voucher-captain-de_DE.mo' === \VCAP\I18n::mofile( $lang . 'voucher-captain-de_DE_formal.mo', 'voucher-captain' ) );
-check( 'de_CH and de_CH_informal load the German translation', $lang . 'voucher-captain-de_DE.mo' === \VCAP\I18n::mofile( $lang . 'voucher-captain-de_CH.mo', 'voucher-captain' ) && $lang . 'voucher-captain-de_DE.mo' === \VCAP\I18n::mofile( $lang . 'voucher-captain-de_CH_informal.mo', 'voucher-captain' ) );
+check( 'S4: de_DE (du) and de_DE_formal (Sie) are both shipped and keep their own files', $lang . 'voucher-captain-de_DE_formal.mo' === \VCAP\I18n::mofile( $lang . 'voucher-captain-de_DE_formal.mo', 'voucher-captain' ) && $lang . 'voucher-captain-de_DE.mo' === \VCAP\I18n::mofile( $lang . 'voucher-captain-de_DE.mo', 'voucher-captain' ) );
+check( 'S4: de_CH loads the formal translation (Sie), de_CH_informal the informal one (du)', $lang . 'voucher-captain-de_DE_formal.mo' === \VCAP\I18n::mofile( $lang . 'voucher-captain-de_CH.mo', 'voucher-captain' ) && $lang . 'voucher-captain-de_DE.mo' === \VCAP\I18n::mofile( $lang . 'voucher-captain-de_CH_informal.mo', 'voucher-captain' ) );
 check( 'a locale with its own file keeps it (de_AT)', $lang . 'voucher-captain-de_AT.mo' === \VCAP\I18n::mofile( $lang . 'voucher-captain-de_AT.mo', 'voucher-captain' ) );
-check( 'the global languages folder falls back to the plugin file when it has no German file', $lang . 'voucher-captain-de_DE.mo' === \VCAP\I18n::mofile( $wp_lang . 'voucher-captain-de_DE_formal.mo', 'voucher-captain' ) );
+check( 'the global languages folder falls back to the plugin file of the same locale first (de_AT, de_DE_formal), then along the chain (de_CH → de_DE_formal)', $lang . 'voucher-captain-de_AT.mo' === \VCAP\I18n::mofile( $wp_lang . 'voucher-captain-de_AT.mo', 'voucher-captain' ) && $lang . 'voucher-captain-de_DE_formal.mo' === \VCAP\I18n::mofile( $wp_lang . 'voucher-captain-de_DE_formal.mo', 'voucher-captain' ) && $lang . 'voucher-captain-de_DE_formal.mo' === \VCAP\I18n::mofile( $wp_lang . 'voucher-captain-de_CH.mo', 'voucher-captain' ) );
 check( 'other locales and other text domains are left alone', $lang . 'voucher-captain-fr_FR.mo' === \VCAP\I18n::mofile( $lang . 'voucher-captain-fr_FR.mo', 'voucher-captain' ) && $wp_lang . 'woocommerce-de_DE_formal.mo' === \VCAP\I18n::mofile( $wp_lang . 'woocommerce-de_DE_formal.mo', 'woocommerce' ) );
 check( 'just-in-time loading finds the plugin folder for de_DE_formal', $lang === \VCAP\I18n::lang_dir( false, 'voucher-captain', 'de_DE_formal' ) && false === \VCAP\I18n::lang_dir( false, 'voucher-captain', 'fr_FR' ) );
 // bin/make-pot.php: version from the plugin header, header fields translatable (like wp i18n make-pot).

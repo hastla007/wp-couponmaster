@@ -59,7 +59,7 @@ Checked one by one before the WordPress.org submission (A9). None is a security 
 | 15 + 2 | `PrefixAllGlobals.NonPrefixedHooknameFound` / `DynamicHooknameFound` | WooCommerce and WordPress hooks the plugin fires on purpose for compatibility (e.g. `woocommerce_*` in templates); own hooks all start with `vcap_`. |
 | 6 + 2 | `PreparedSQLPlaceholders.ReplacementsWrongNumber` / `UnfinishedPrepare` | Placeholder lists built at run time (`IN (%s, %s …)`), checked by the integration tests. |
 | 6 | `DirectDatabaseQuery.*` | Own tables without a WordPress API; caching is done in the repository classes where it matters. |
-| 1 | `load_plugin_textdomainFound` | The plugin ships its own de_DE/de_AT translations; harmless once translate.wordpress.org serves them. |
+| 1 | `load_plugin_textdomainFound` | The plugin ships its own de_DE/de_DE_formal/de_AT translations; harmless once translate.wordpress.org serves them. |
 | 1 each | `PostNotIn_exclude`, `DiscouragedFunctions`, `NonPrefixedConstantFound` | Admin-only lists with a small exclusion set; reviewed, no change needed. |
 
 ## Release probe (16.11.2026, release ZIP of the PR state)

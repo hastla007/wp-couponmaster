@@ -10,7 +10,7 @@ Voucher Captain talks to other plugins only through documented hooks and their p
 | Settings texts | Default and per-country redemption conditions and the texts of the voucher emails (subject, heading, body, additional content): WPML string translation through `<admin-texts>` in `wpml-config.xml`; with Polylang they are registered as strings (Languages → Translations, group "Voucher Captain"). |
 | PDF in the order language | `vcap_render_template_id` (template id, voucher) – WPML (`wpml_object_id`) and Polylang (`pll_get_post`) return the template translation for the order language. |
 | Emails in the customer language | `Compat\Multilingual`: every voucher email (also scheduled deliveries, reminders, resends and bonus mails, which WCML does not handle) switches to the order language – WPML order meta `wpml_language`, Polylang `pll_get_post_language()`, filter `vcap_order_language` – and to its locale (filter `vcap_email_locale`, default: site language), so texts, dates in the PDF and links follow it. Staff PDF downloads use the same language. |
-| UI texts | Text domain `voucher-captain`; German (de_DE, de_AT) included. Site Health asks for a translation only for languages the shop offers (site language, WPML/Polylang languages). |
+| UI texts | Text domain `voucher-captain`; German included: de_DE ("du"), de_DE_formal and de_AT ("Sie"). Site Health asks for a translation only for languages the shop offers (site language, WPML/Polylang languages). |
 | Other plugins | Return the order's language code with `vcap_order_language` and its locale with `vcap_email_locale`, and implement `vcap_render_template_id` with the plugin's "translated post" function. |
 
 ## 2. Multi-currency
