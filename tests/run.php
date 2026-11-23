@@ -4406,7 +4406,7 @@ check(
 	'yes' === $st_v( 'vcap_attach_pdf', 'on' ) && 'no' === $st_v( 'vcap_attach_pdf', false ) && is_wp_error( $st_v( 'vcap_attach_pdf', 'vielleicht' ) )
 		&& '16' === $st_v( 'vcap_code_length', 16 ) && is_wp_error( $st_v( 'vcap_code_length', '7' ) ) && is_wp_error( $st_v( 'vcap_code_length', '12.5' ) ) && is_wp_error( $st_v( 'vcap_code_length', '' ) ) && is_wp_error( $st_v( 'vcap_code_length', array( 1 ) ) )
 		&& '' === $st_v( 'vcap_referral_min_spend', '' ) && '10.50' === $st_v( 'vcap_customer_daily_limit', '10.50' ) && is_wp_error( $st_v( 'vcap_customer_daily_limit', '-1' ) )
-		&& 'numeric' === $st_v( 'vcap_code_charset', 'numeric' ) && is_wp_error( $st_v( 'vcap_code_charset', 'emoji' ) ) && '' === $st_v( 'vcap_default_expiry_rule', '' )
+		&& 'numeric' === $st_v( 'vcap_code_charset', 'numeric' ) && is_wp_error( $st_v( 'vcap_code_charset', 'emoji' ) ) && is_wp_error( $st_v( 'vcap_default_expiry_rule', '' ) )
 		&& is_wp_error( $st_v( 'vcap_code_prefix', 'B&B' ) ) && 'GS-1' === $st_v( 'vcap_code_prefix', 'GS-1' ) && '30, 7, 1' === $st_v( 'vcap_expiry_reminder_days', '1,30;7' ) && '0' === $st_v( 'vcap_expiry_reminder_days', '0' ) && is_wp_error( $st_v( 'vcap_expiry_reminder_days', 'bald' ) )
 		&& array( 'processing', 'completed' ) === $st_v( 'vcap_issue_statuses', 'processing, completed' ) && is_wp_error( $st_v( 'vcap_secret', 'x' ) ) && is_wp_error( $st_v( 'vcap_no_such_option', 'x' ) )
 );
@@ -4439,9 +4439,9 @@ for ( $st_i = 0; $st_i < 6; $st_i++ ) {
 	VCAP\SettingsTransfer::backup( 'import' );
 }
 check(
-	'SET-VC-15: reset of all sections stores what a new installation stores ("fresh" values, autoloaded request settings) and deletes the rest; the data removal switch, the template, secrets and state stay; 5 backups are kept',
-	'20' === (string) $st_o['vcap_bundle_pdf_limit'] && 'no' === $st_o['vcap_coupon_link'] && 'yes' === $st_o['vcap_mpv_after_tax'] && '1000' === (string) $st_o['vcap_customer_daily_limit'] && ! in_array( 'vcap_customer_daily_limit', $st_all['changed'], true ) && ! isset( $st_o['vcap_attach_pdf'] ) && ! isset( $st_o['vcap_default_expiry_days'] ) && 'yes' === $st_o['vcap_delete_on_uninstall'] && 7 === $st_o['vcap_default_template'] && 's' === $st_o['vcap_secret'] && '9' === $st_o['vcap_db_version']
-		&& in_array( 'vcap_attach_pdf', $st_all['changed'], true ) && ! in_array( 'vcap_secret', VCAP\SettingsTransfer::resettable(), true ) && ! in_array( 'vcap_delete_on_uninstall', VCAP\SettingsTransfer::resettable(), true ) && 5 === count( VCAP\SettingsTransfer::backups() ),
+	'SET-VC-15/PV-P1-3: reset of all sections restores the register default an existing shop runs on (option deleted; autoloaded request settings stored with their default) – never the "fresh" value of a new installation; the data removal switch, the template, secrets and state stay; identical backups are stored once, 10 are kept',
+	! isset( $st_o['vcap_bundle_pdf_limit'] ) && 50 === VCAP\SettingsTransfer::stored( 'vcap_bundle_pdf_limit' ) && 'no' === $st_o['vcap_coupon_link'] && ! isset( $st_o['vcap_mpv_after_tax'] ) && ! isset( $st_o['vcap_new_product_delivery'] ) && '1000' === (string) $st_o['vcap_customer_daily_limit'] && ! in_array( 'vcap_customer_daily_limit', $st_all['changed'], true ) && ! isset( $st_o['vcap_attach_pdf'] ) && ! isset( $st_o['vcap_default_expiry_days'] ) && 'yes' === $st_o['vcap_delete_on_uninstall'] && 7 === $st_o['vcap_default_template'] && 's' === $st_o['vcap_secret'] && '9' === $st_o['vcap_db_version']
+		&& in_array( 'vcap_attach_pdf', $st_all['changed'], true ) && ! in_array( 'vcap_mpv_after_tax', $st_all['changed'], true ) && ! in_array( 'vcap_secret', VCAP\SettingsTransfer::resettable(), true ) && ! in_array( 'vcap_delete_on_uninstall', VCAP\SettingsTransfer::resettable(), true ) && 3 === count( VCAP\SettingsTransfer::backups() ) && 10 === VCAP\SettingsTransfer::BACKUPS_KEPT,
 	json_encode( array( $st_all['changed'], $st_o ) )
 );
 check( 'SET-VC-15: reset targets – "all" = every section, "general" = General, unknown targets are refused; the page needs the confirmation', null === VCAP\Admin\SettingsTools::reset_section( 'all' ) && '' === VCAP\Admin\SettingsTools::reset_section( 'general' ) && 'codes' === VCAP\Admin\SettingsTools::reset_section( 'codes' ) && false === VCAP\Admin\SettingsTools::reset_section( 'bogus' ) && str_contains( $st_tools_src, "empty( \$_POST['vcap_settings_reset_confirm'] )" ) );
@@ -4548,9 +4548,174 @@ check(
 check(
 	'SET-VC-17: import shows the changes (dry run changes nothing) and applies them after a backup; an invalid file is refused; reset sets a section back; "profile" needs list, show or apply (SET-VC-02); API.md documents the commands',
 	in_array( 'line: vcap_code_length: 18 -> 22', $st_r_dry, true ) && '18' === $st_after_dry && str_starts_with( (string) end( $st_r_imp ), 'success: 2 settings imported.' ) && str_contains( implode( ' ', $st_r_imbad ), 'nothing was changed' ) && in_array( 'halted', $st_r_imbad, true )
-		&& str_starts_with( $st_r_reset[0], 'success: ' ) && ! isset( $GLOBALS['vcap_test_options']['vcap_code_length'] ) && 'no' === $GLOBALS['vcap_test_options']['vcap_attach_pdf'] && str_contains( $st_r_prof[0], 'Usage: wp vcap settings profile <list|show|apply>' )
+		&& 'line: vcap_code_length: 22 -> 12' === $st_r_reset[0] && str_starts_with( (string) end( $st_r_reset ), 'success: 1 settings reset.' ) && ! isset( $GLOBALS['vcap_test_options']['vcap_code_length'] ) && 'no' === $GLOBALS['vcap_test_options']['vcap_attach_pdf'] && str_contains( $st_r_prof[0], 'Usage: wp vcap settings profile <list|show|apply>' )
 		&& str_contains( (string) file_get_contents( VCAP_PATH . 'API.md' ), 'wp vcap settings import' ),
 	json_encode( array( $st_r_dry, $st_r_imp, $st_r_imbad, $st_r_reset, $st_r_prof ) )
+);
+// Test phase fixes of group A (settings transfer, reset, change log, WP-CLI, SettingsTools).
+echo "PV group A: settings transfer, reset, change log\n";
+// PV-P1-1: a never-saved validity rule is exported as the rule that applies; importing it keeps the target's rule.
+$GLOBALS['vcap_test_options'] = array();
+$pv_src_never                 = VCAP\SettingsTransfer::export();
+$GLOBALS['vcap_test_options'] = array( 'vcap_default_expiry_days' => '30' );
+$pv_src_days                  = VCAP\SettingsTransfer::export();
+$GLOBALS['vcap_test_options'] = array( 'vcap_default_expiry_rule' => 'statutory', 'vcap_default_expiry_days' => '365' );
+$pv_p11                       = VCAP\SettingsTransfer::parse( (string) json_encode( $pv_src_never ) );
+$pv_p11_diff                  = is_array( $pv_p11 ) ? VCAP\SettingsTransfer::diff( $pv_p11['settings'] ) : array( 'refused' );
+if ( is_array( $pv_p11 ) ) {
+	VCAP\SettingsTransfer::apply( $pv_p11['settings'], VCAP\SettingsLog::VIA_IMPORT );
+}
+$pv_p11_legacy = VCAP\SettingsTransfer::parse( $st_doc( array( 'vcap_default_expiry_rule' => '', 'vcap_code_length' => '14' ) ) );
+check(
+	'PV-P1-1: the export of a shop that never saved the validity rule carries the rule that applies (statutory, or days when days are saved); importing it into a shop with "statutory" + 365 days keeps statutory; \'\' is refused as a value, and an older file with \'\' skips the rule with a note',
+	'statutory' === $pv_src_never['settings']['vcap_default_expiry_rule'] && 'days' === $pv_src_days['settings']['vcap_default_expiry_rule'] && is_array( $pv_p11 ) && ! isset( $pv_p11_diff['vcap_default_expiry_rule'] )
+		&& 'statutory' === VCAP\ProductConfig::default_expiry_rule() && 'statutory' === get_option( 'vcap_default_expiry_rule' ) && is_wp_error( VCAP\SettingsTransfer::validate( 'vcap_default_expiry_rule', '' ) )
+		&& is_array( $pv_p11_legacy ) && array( 'vcap_code_length' => '14' ) === $pv_p11_legacy['settings'] && 1 === count( $pv_p11_legacy['warnings'] ),
+	json_encode( array( $pv_p11_diff, $pv_p11_legacy ) )
+);
+// PV-P1-2: a shop with tables as text from before 1.3.0 (with unreadable lines) and an empty number field: its own
+// export and the automatic backup of a reset can be imported again and restore the values the shop ran on.
+$pv_legacy = array(
+	'vcap_terms_by_country'  => "Bedingungen je Land:\nDE: Gültig 3 Jahre.\nAT: Gültig 30 Jahre.",
+	'vcap_expiry_by_country' => "# Quelle: Anwalt 2024\nDE: 3 Jahre Jahresende\nAT: 30",
+	'vcap_hold_hours'        => '',
+	'vcap_code_length'       => '16',
+);
+$GLOBALS['vcap_test_options'] = $pv_legacy;
+$pv_effective                 = array(
+	'terms'  => VCAP\ProductConfig::terms_by_country( $pv_legacy['vcap_terms_by_country'] ),
+	'expiry' => VCAP\Markets::expiry_rules( $pv_legacy['vcap_expiry_by_country'] ),
+);
+$pv_own   = VCAP\SettingsTransfer::parse( VCAP\SettingsTransfer::export_json() );
+$pv_reset = VCAP\SettingsTransfer::reset( null );
+$pv_back  = VCAP\SettingsTransfer::parse( VCAP\SettingsTransfer::backup_json( $pv_reset['backup'] ) );
+if ( is_array( $pv_back ) ) {
+	VCAP\SettingsTransfer::apply( $pv_back['settings'], VCAP\SettingsLog::VIA_IMPORT );
+}
+$pv_old = VCAP\SettingsTransfer::parse( $st_doc( $pv_legacy ) ); // A backup written by an earlier build (raw text, '').
+check(
+	'PV-P1-2: own export and the backup of a reset of a shop with old table texts and an empty number field are accepted; restoring the backup gives the values the shop ran on; an older file with raw texts and \'\' is converted with notes (unreadable lines left out, empty number = default)',
+	is_array( $pv_own ) && is_array( $pv_back ) && 0 < $pv_reset['backup'] && $pv_effective['terms'] === VCAP\ProductConfig::terms_by_country( get_option( 'vcap_terms_by_country' ) ) && $pv_effective['expiry'] === VCAP\Markets::expiry_rules( get_option( 'vcap_expiry_by_country' ) )
+		&& '16' === (string) get_option( 'vcap_code_length' ) && 24 === VCAP\SettingsTransfer::stored( 'vcap_hold_hours' ) && is_array( get_option( 'vcap_expiry_by_country' ) )
+		&& is_array( $pv_old ) && 3 === count( $pv_old['warnings'] ) && '24' === $pv_old['settings']['vcap_hold_hours'] && array( 'AT' ) === array_column( $pv_old['settings']['vcap_expiry_by_country'], 'country' ),
+	json_encode( array( is_wp_error( $pv_back ) ? $pv_back->get_error_message() : 'ok', is_wp_error( $pv_old ) ? $pv_old->get_error_message() : $pv_old['warnings'] ) )
+);
+// PV-P1-3: a reset restores what an existing shop runs on (register default), never the "fresh" values; preview first.
+$GLOBALS['vcap_test_options'] = array( 'vcap_code_length' => '20', 'vcap_bundle_pdf_limit' => '50', 'vcap_issue_statuses' => array( 'completed' ), 'vcap_coupon_link' => 'yes' );
+$pv_before                    = $GLOBALS['vcap_test_options'];
+$pv_preview                   = VCAP\SettingsTransfer::reset_preview( null );
+$pv_dry                       = $st_cli( array( 'reset', 'all' ), array( 'dry-run' => true ) );
+$pv_dry_opts                  = $GLOBALS['vcap_test_options'];
+$pv_res                       = VCAP\SettingsTransfer::reset( null );
+check(
+	'PV-P1-3: reset preview and reset of an existing shop leave vcap_mpv_after_tax, the PDF limit and the delivery of new products at the values the shop runs on (register default, not "fresh"); the preview lists only the changing settings from → to with legal ones marked; --dry-run prints them and changes nothing',
+	array( 'vcap_issue_statuses', 'vcap_code_length', 'vcap_coupon_link' ) === array_keys( $pv_preview ) && true === $pv_preview['vcap_issue_statuses']['legal'] && false === $pv_preview['vcap_code_length']['legal'] && '20' === $pv_preview['vcap_code_length']['from'] && 12 === $pv_preview['vcap_code_length']['to']
+		&& $pv_before === $pv_dry_opts && in_array( 'line: vcap_issue_statuses: completed -> processing, completed [legal/tax weight – check]', $pv_dry, true ) && in_array( 'line: vcap_code_length: 20 -> 12', $pv_dry, true ) && 'line: Dry run: 3 settings would be reset.' === end( $pv_dry ) && ! str_contains( implode( ' ', $pv_dry ), 'vcap_mpv_after_tax' )
+		&& array_keys( $pv_preview ) === $pv_res['changed'] && 'no' === VCAP\SettingsTransfer::stored( 'vcap_mpv_after_tax' ) && ! isset( $GLOBALS['vcap_test_options']['vcap_mpv_after_tax'] ) && 50 === VCAP\SettingsTransfer::stored( 'vcap_bundle_pdf_limit' ) && 'no' === VCAP\SettingsTransfer::stored( 'vcap_new_product_delivery' )
+		&& 'no' === $GLOBALS['vcap_test_options']['vcap_coupon_link'] && ! str_contains( (string) file_get_contents( VCAP_PATH . 'src/SettingsTransfer.php' ), 'fresh_default(' ),
+	json_encode( array( $pv_preview, $pv_dry, $pv_res ) )
+);
+$GLOBALS['vcap_test_options'] = array( 'vcap_mpv_after_tax' => 'yes' ); // A shop installed with 1.3.0 ("fresh" yes).
+$pv_mpv                       = VCAP\SettingsTransfer::reset_preview( 'redemption' );
+$st_tools_src                 = (string) file_get_contents( VCAP_PATH . 'src/Admin/SettingsTools.php' );
+check(
+	'PV-P1-3: a value that differs from the register default (e.g. vcap_mpv_after_tax yes) is shown as a legal change before the reset; the page shows the preview (current value → after the reset, note) before the confirmation and the reset uses the previewed section',
+	array( 'vcap_mpv_after_tax' ) === array_keys( $pv_mpv ) && 'yes' === $pv_mpv['vcap_mpv_after_tax']['from'] && 'no' === $pv_mpv['vcap_mpv_after_tax']['to'] && $pv_mpv['vcap_mpv_after_tax']['legal']
+		&& str_contains( $st_tools_src, "add_action( 'admin_post_vcap_settings_reset_preview'" ) && str_contains( $st_tools_src, 'SettingsTransfer::reset_preview( $section )' ) && str_contains( $st_tools_src, '$target  = get_transient( self::RESET . $user );' )
+		&& strpos( $st_tools_src, "esc_html__( 'After the reset', 'voucher-captain' )" ) < strpos( $st_tools_src, 'name="vcap_settings_reset_confirm"' )
+);
+// PV-P1-4: WP-CLI get prints tables row by row, set takes JSON for tables and lists.
+$GLOBALS['vcap_test_options'] = array();
+$pv_set_t                     = $st_cli( array( 'set', 'vcap_expiry_by_country', '[{"country":"AT","years":30,"end_of_year":false,"note":"ABGB"}]' ) );
+$pv_get_t                     = $st_cli( array( 'get', 'vcap_expiry_by_country' ) );
+$pv_set_l                     = $st_cli( array( 'set', 'vcap_issue_statuses', '["completed"]' ) );
+$pv_set_bad                   = $st_cli( array( 'set', 'vcap_issue_statuses', '["completed"' ) );
+check(
+	'PV-P1-4: wp vcap settings get prints a table as its rows (not "Array"); set accepts a JSON array for tables and lists; invalid JSON is refused and nothing changes',
+	str_starts_with( $pv_set_t[0], 'success: vcap_expiry_by_country = AT 30 ABGB' ) && array( 'line: AT 30 ABGB' ) === $pv_get_t && array( 'completed' ) === get_option( 'vcap_issue_statuses' ) && str_starts_with( $pv_set_l[0], 'success:' )
+		&& str_contains( $pv_set_bad[0], 'no valid JSON array' ) && 'halted' === end( $pv_set_bad ),
+	json_encode( array( $pv_set_t, $pv_get_t, $pv_set_l, $pv_set_bad ) )
+);
+// PV-P1-5/P6-3: changes inside an import/reset/WP-CLI batch are written to the log with one update.
+$GLOBALS['vcap_test_options'] = array();
+$pv_during                    = null;
+$pv_reads                     = 0;
+VCAP\SettingsLog::with(
+	VCAP\SettingsLog::VIA_IMPORT,
+	static function () use ( &$pv_during, &$pv_reads ): void {
+		$reads = $GLOBALS['vcap_test_option_reads'][ VCAP\SettingsLog::OPTION ] ?? 0;
+		for ( $i = 0; $i < 10; $i++ ) {
+			VCAP\SettingsLog::updated( 'vcap_code_length', (string) ( 12 + $i ), (string) ( 13 + $i ) );
+		}
+		$pv_reads  = ( $GLOBALS['vcap_test_option_reads'][ VCAP\SettingsLog::OPTION ] ?? 0 ) - $reads;
+		$pv_during = $GLOBALS['vcap_test_options'][ VCAP\SettingsLog::OPTION ] ?? null;
+	}
+);
+$pv_log = (array) ( $GLOBALS['vcap_test_options'][ VCAP\SettingsLog::OPTION ] ?? array() );
+VCAP\SettingsLog::begin_page();
+VCAP\SettingsLog::updated( 'vcap_attach_pdf', 'yes', 'no' );
+$pv_page_during = count( (array) ( $GLOBALS['vcap_test_options'][ VCAP\SettingsLog::OPTION ] ?? array() ) );
+VCAP\SettingsLog::end_page();
+check(
+	'PV-P1-5/P6-3: 10 changes in one batch read and write the log once (nothing written during the batch, all 10 entries after it); the save of the settings tab is one batch too',
+	null === $pv_during && 0 === $pv_reads && 10 === count( $pv_log ) && '22' === end( $pv_log )['to'] && 'import' === end( $pv_log )['via'] && 10 === $pv_page_during && 11 === count( VCAP\SettingsLog::entries() ) && 11 === count( (array) $GLOBALS['vcap_test_options'][ VCAP\SettingsLog::OPTION ] ),
+	json_encode( array( $pv_reads, count( $pv_log ) ) )
+);
+// PV-P1-6: the export text no longer promises "every setting of this tab".
+$pv_desc = (string) ( VCAP\Admin\SettingsTools::fields()[0]['desc'] ?? '' );
+check( 'PV-P1-6: the export text says that the rights per role are not part of the file', str_contains( $pv_desc, 'no rights per role' ) && ! str_contains( $pv_desc, 'every global setting' ) );
+// PV-P4-2: role rights changed on the settings page are in the change log.
+$GLOBALS['vcap_test_options'] = array();
+VCAP\Source::with( VCAP\Source::ADMIN, static fn() => VCAP\SettingsLog::record_role( 'editor', 'vcap_scan_tickets', true ) );
+VCAP\SettingsLog::record_role( 'support', 'vcap_increase_balance', false );
+$pv_roles = VCAP\SettingsLog::entries();
+$rc_src   = (string) file_get_contents( VCAP_PATH . 'src/Admin/RoleCaps.php' );
+check(
+	'PV-P4-2: saving the rights per role writes each granted or removed right to the change log as role:<role>:<right> (no → yes / yes → no)',
+	2 === count( $pv_roles ) && 'role:editor:vcap_scan_tickets' === $pv_roles[0]['key'] && 'no' === $pv_roles[0]['from'] && 'yes' === $pv_roles[0]['to'] && 'admin' === $pv_roles[0]['source'] && 'role:support:vcap_increase_balance' === $pv_roles[1]['key'] && 'no' === $pv_roles[1]['to']
+		&& str_contains( $rc_src, 'foreach ( self::apply( (array) $posted, self::role_objects() ) as $change => $granted )' ) && str_contains( $rc_src, 'SettingsLog::record_role(' ),
+	json_encode( $pv_roles )
+);
+// PV-P4-5/P2-3: import, WP-CLI and restore clean text settings with the sanitiser of their field.
+$GLOBALS['vcap_test_options'] = array(
+	'vcap_default_terms' => "Nicht <strong>bar</strong> auszahlbar.\n<a href=\"https://shop.test/agb\">AGB</a>",
+	'vcap_custom_css'    => ".vcap-x{background:url(\"data:image/svg+xml,%3Csvg%3E\")}\n.a > .b{width:100%}",
+	'vcap_email_logo'    => 'https://shop.test/wp-content/uploads/logo%20neu.png',
+);
+$pv_text_before               = $GLOBALS['vcap_test_options'];
+$pv_text                      = VCAP\SettingsTransfer::parse( VCAP\SettingsTransfer::export_json() );
+$pv_text_diff                 = is_array( $pv_text ) ? VCAP\SettingsTransfer::diff( $pv_text['settings'] ) : array( 'refused' );
+check(
+	'PV-P4-5/P2-3: export → parse → apply keeps the HTML of the default conditions (<strong>, link), the custom CSS (%3C, ">") and %20 of the logo URL; CSS is cleaned like on the page (@import removed)',
+	is_array( $pv_text ) && array() === $pv_text_diff && $pv_text_before['vcap_default_terms'] === $pv_text['settings']['vcap_default_terms'] && $pv_text_before['vcap_custom_css'] === $pv_text['settings']['vcap_custom_css'] && $pv_text_before['vcap_email_logo'] === $pv_text['settings']['vcap_email_logo']
+		&& '.a{}' === trim( (string) VCAP\SettingsTransfer::validate( 'vcap_custom_css', '@import url(https://evil.example/x.css); .a{}' ) ) && '' === VCAP\SettingsTransfer::validate( 'vcap_email_logo', 'javascript:alert(1)' ),
+	json_encode( $pv_text_diff )
+);
+// PV-P2-6: no backup when a reset changes nothing, none identical to the newest; 10 kept.
+$GLOBALS['vcap_test_options'] = array();
+$pv_none                      = VCAP\SettingsTransfer::reset( null );
+$pv_b1                        = VCAP\SettingsTransfer::backup( 'import' );
+$pv_b2                        = VCAP\SettingsTransfer::backup( 'import' );
+for ( $pv_i = 0; $pv_i < 12; $pv_i++ ) {
+	update_option( 'vcap_code_length', (string) ( 14 + $pv_i ) );
+	VCAP\SettingsTransfer::backup( 'import' );
+}
+check(
+	'PV-P2-6: a reset that changes nothing takes no backup; a backup identical to the newest one is not stored again; the newest 10 backups are kept',
+	array() === $pv_none['changed'] && 0 === $pv_none['backup'] && ! isset( $GLOBALS['vcap_test_options'][ VCAP\SettingsTransfer::BACKUP_OPTION ][0] ) && $pv_b1 === $pv_b2 && 10 === count( VCAP\SettingsTransfer::backups() )
+		&& '25' === json_decode( VCAP\SettingsTransfer::backup_json(), true )['settings']['vcap_code_length'],
+	json_encode( array_keys( VCAP\SettingsTransfer::backups() ) )
+);
+// PV-P2-7: a double click on "Apply" / "Reset" keeps the message of the first click.
+check(
+	'PV-P2-7: the buttons ignore a second click; an import or reset whose preview was used in the last 30 seconds returns to the page with the first message instead of "expired"',
+	str_contains( $st_tools_src, 'onclick="if(this.dataset.vcapSent){return false;}' ) && 2 === substr_count( $st_tools_src, 'self::repeated_click();' ) && 2 === substr_count( $st_tools_src, 'self::mark_used();' )
+		&& strpos( $st_tools_src, 'self::repeated_click();' ) < strpos( $st_tools_src, "'The import preview has expired. Please upload the file again.'" )
+);
+// PV-P2-4 (SettingsTransfer part): a whole number from a file or WP-CLI is stored as one.
+check(
+	'PV-P2-4: import / WP-CLI store whole-number settings as whole numbers ("5.0" → "5", "1e1" → "10"); decimals keep their text; non-numbers stay refused',
+	'5' === VCAP\SettingsTransfer::validate( 'vcap_delivery_hour', '5.0' ) && '10' === VCAP\SettingsTransfer::validate( 'vcap_delivery_hour', '1e1' ) && '10.50' === VCAP\SettingsTransfer::validate( 'vcap_customer_daily_limit', '10.50' ) && is_wp_error( VCAP\SettingsTransfer::validate( 'vcap_delivery_hour', 'abc' ) )
 );
 $GLOBALS['vcap_test_options'] = $st_saved;
 

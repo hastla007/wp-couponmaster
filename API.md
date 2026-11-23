@@ -635,42 +635,55 @@ works on the settings register (`config/settings.php`, `VCAP\SettingsRegistry`).
   `vcap_customer_key_secret`, entries with `secret`), never "Remove all data", the support log or the default template
   ID, no product settings and no voucher data. File format:
   `{"format": "voucher-captain-settings", "version": 1, "plugin_version": "1.3.0", "exported_at": "…Z", "settings": {option: value}}`.
-  Values are the stored values (the default where nothing is saved), not what a `vcap_setting_{key}` filter makes of them.
+  Values are the stored values (the default where nothing is saved), not what a `vcap_setting_{key}` filter makes of them,
+  normalised to what the shop runs on: `vcap_default_expiry_rule` while never saved is the rule that applies
+  (`ProductConfig::default_expiry_rule()`), the country tables are rows (also a text value from before 1.3.0), an empty
+  number field that may not be empty is its default (PV-P1-1, PV-P1-2). Rights per role are not part of the file.
 - **Import**: the whole file is checked first – no JSON object of this format, no or a newer `version`, a secret or a
   never-exported setting, or one invalid value refuses the whole file and nothing changes. Options this site does not
   know (e.g. of an add-on that is not installed) are skipped and listed. The admin page shows a preview
   (setting, current value, new value) and applies it after a second click; an automatic backup is taken before.
-  Settings missing in the file are left unchanged.
+  Settings missing in the file are left unchanged. A file of an earlier build is read like the settings page reads the
+  stored values, with a note in the preview: a country table as old text becomes its readable rows (unreadable lines
+  are left out), an empty number becomes its default, a never-saved validity rule (`''`) is skipped (PV-P1-2).
 - **Checks** (`SettingsTransfer::validate( $option, $value )`, also `wp vcap settings set`): `bool` takes yes/no
   (also on/off, 1/0, true/false), `int`/`decimal` a number within min/max (a value outside is refused, not moved to the
   bound as on the settings page), `select` one of its choices, `list` an array or comma-separated text, code prefix,
-  suffix and separator the code characters, reminder days are stored normalised; the filter
+  suffix and separator the code characters, reminder days are stored normalised, whole numbers as whole numbers
+  (`"5.0"` → `"5"`), text with the cleaning of its field (HTML of the default conditions, custom CSS, logo URL; PV-P4-5),
+  `vcap_default_expiry_rule` only `statutory` or `days`; the filter
   `vcap_settings_validate_value` (value or `WP_Error`, option, register entry) lets add-ons check their own options.
-- **Reset** (SET-VC-15): per section or for all sections, after a confirmation and an automatic backup (the last five
-  are kept, downloadable on the page or with `wp vcap settings export --backup`). A setting returns to what a new
-  installation has: options with a `fresh` value and the autoloaded request settings are stored with that value, all
-  others are deleted (so the register default applies). Secrets, "Remove all data", the default template, internal
-  state and the database (vouchers, history) are never touched.
+- **Reset** (SET-VC-15, PV-P1-3): per section or for all sections. A setting returns to its register `default` – what
+  an existing shop runs on while it never saved it –, never to the `fresh` value of a new installation: the option is
+  deleted (the autoloaded request settings are stored with their default). `SettingsTransfer::reset_preview( $section )`
+  lists every changing setting with `from`, `to` and `legal`; the page shows it before the confirmation, WP-CLI before
+  asking (`--dry-run` only lists). An automatic backup is taken when anything changes (the last ten are kept, a backup
+  identical to the newest is not stored again; downloadable on the page or with `wp vcap settings export --backup`).
+  Secrets, "Remove all data", the rights per role, the default template, internal state and the database (vouchers,
+  history) are never touched.
 - **Change log** (SET-VC-16, `VCAP\SettingsLog`): every change of a registered option – from the settings page, an
   import, a reset, WP-CLI or code (`added_option`, `updated_option`, `delete_option`) – with time, user, option,
   value from → to and source (`VCAP\Source` plus import/reset/settings command); secrets are recorded as `********`.
   Shown on *Privacy & advanced* (latest 50), part of the personal data export of the user who made the change, kept
   `vcap_settings_log_days` days (default 365, 0 = keep; at most 2,000 entries) and cleaned up by the daily maintenance
-  step `settings_log`. Stored in the option `vcap_settings_log` (never autoloaded).
+  step `settings_log`. Stored in the option `vcap_settings_log` (never autoloaded); the changes of one import, reset,
+  WP-CLI command or save of the tab are written with one update (PV-P1-5). Rights per role changed on the page are
+  logged as `role:<role>:<right>` (PV-P4-2).
 - **Rights**: every action of the page needs `manage_woocommerce` and its nonce; the buttons post to `admin-post.php`
   (actions `vcap_settings_export`, `vcap_settings_backup`, `vcap_settings_import`, `vcap_settings_import_apply`,
-  `vcap_settings_import_cancel`, `vcap_settings_reset`), so *Save changes* never imports or resets.
+  `vcap_settings_import_cancel`, `vcap_settings_reset_preview`, `vcap_settings_reset_cancel`, `vcap_settings_reset`), so
+  *Save changes* never imports or resets; a second click on *Apply* / *Reset settings* keeps the message of the first.
 
 ### WP-CLI (SET-VC-17)
 
 | Command | Does |
 |---|---|
 | `wp vcap settings list [--section=<section>] [--format=table\|json\|csv\|yaml]` | Every setting with section, type, value, default and export flag (secrets masked). Sections: `general`, `redemption`, `promotions`, `codes`, `delivery`, `privacy`, `api` and those of add-ons. |
-| `wp vcap settings get <option> [--format=plain\|json]` | Stored value (default where nothing is saved). Secrets are refused. |
-| `wp vcap settings set <option> <value>` | Checked like the page (see *Checks*); refused values change nothing (exit code 1). "Remove all data" stays with `wp vcap data-removal`. |
+| `wp vcap settings get <option> [--format=plain\|json]` | Stored value (default where nothing is saved); a table row by row (`AT 30 note; …`). Secrets are refused. |
+| `wp vcap settings set <option> <value>` | Checked like the page (see *Checks*); tables and lists take a JSON array (lists also comma-separated values); refused values change nothing (exit code 1). "Remove all data" stays with `wp vcap data-removal`. |
 | `wp vcap settings export [--file=<path>] [--backup[=<time>]]` | The export JSON (or an automatic backup) to the output or a file. |
 | `wp vcap settings import <file> [--dry-run] [--yes]` | Lists the changes (`option: from -> to`), then applies them after a backup; `--dry-run` only lists. |
-| `wp vcap settings reset <section>\|all [--dry-run] [--yes]` | Reset to defaults after a backup (see *Reset*). |
+| `wp vcap settings reset <section>\|all [--dry-run] [--yes]` | Lists the changing settings (`option: from -> default`, `[legal/tax weight – check]` on legal ones), then resets them after a confirmation and a backup (see *Reset*); `--dry-run` only lists. |
 | `wp vcap settings profile list [--format=…]` | The country profiles with their check state ("legal check pending" for DE/AT/CH, "neutral, not checked" for EU/OTHER) and the one applied last. |
 | `wp vcap settings profile show [--country=<profile>]` | Preview of a profile (default: the profile of the shop's base country): per value `current -> suggested`, `*` = would be applied, `-` = kept (own value or link parameter), `=` = already set, `[Legal check pending]` on values with legal weight; plus the tax and accounting hints. Changes nothing. |
 | `wp vcap settings profile apply [--country=<profile>] [--dry-run] [--yes] [--all]` | Applies the values marked `*` after a confirmation and a backup; `--all` also replaces own values and the link parameter; `--dry-run` only lists. |

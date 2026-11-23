@@ -19,8 +19,9 @@ defined( 'ABSPATH' ) || exit;
  * - validate(): checks one value against the register like the settings page does (type, bounds, choices, code
  *   affixes, reminder days, command amounts) – also used by "wp vcap settings set";
  * - diff() / apply(): preview and the change itself (written to the change log with its source, SettingsLog);
- * - reset(): back to the defaults per section or for all sections, after an automatic backup; secrets, settings
- *   that are not exported and database state stay untouched.
+ * - reset_preview() / reset(): back to the register default – what an existing shop runs on while it never saved
+ *   the setting – per section or for all sections, shown as "current → after the reset" first and applied after an
+ *   automatic backup; secrets, settings that are not exported and database state stay untouched.
  *
  * @since 1.3.0
  */
@@ -34,8 +35,11 @@ final class SettingsTransfer {
 	/** Internal option with the automatic backups taken before a reset or import (newest first). */
 	public const BACKUP_OPTION = 'vcap_settings_backups';
 
-	/** Backups kept (technical limit). */
-	public const BACKUPS_KEPT = 5;
+	/** Backups kept (technical limit; PV-P2-6: 10, and a backup identical to the newest one is not stored again). */
+	public const BACKUPS_KEPT = 10;
+
+	/** Default validity rule: unsaved, ProductConfig::default_expiry_rule() decides (PV-P1-1). */
+	private const EXPIRY_RULE = 'vcap_default_expiry_rule';
 
 	/** Largest file accepted for an import, in bytes (technical limit). */
 	public const MAX_BYTES = 1048576;
@@ -58,12 +62,49 @@ final class SettingsTransfer {
 
 	/**
 	 * Stored value of a setting (the default while it was never saved), without the filter "vcap_setting_{key}": an
-	 * export carries what the shop saved, not what a filter of this site makes of it.
+	 * export carries what the shop saved, not what a filter of this site makes of it. Normalised to what the shop
+	 * runs on (PV-P1-1, PV-P1-2): the default validity rule while it was never saved is the rule that applies
+	 * (ProductConfig::default_expiry_rule()), the country tables of a value from before 1.3.0 are their readable rows,
+	 * and an empty number field that may not be empty is its default.
 	 *
 	 * @return mixed
 	 */
 	public static function stored( string $key ) {
-		return get_option( $key, SettingsRegistry::default( $key ) );
+		return self::normalise( $key, get_option( $key, SettingsRegistry::default( $key ) ) );
+	}
+
+	/**
+	 * A stored value as stored() returns it.
+	 *
+	 * @param string    $key        Option name.
+	 * @param mixed     $value      Raw stored value (or the default).
+	 * @param bool|null $days_saved Default validity rule only: whether a number of days is saved (null = as now).
+	 * @return mixed
+	 */
+	private static function normalise( string $key, $value, ?bool $days_saved = null ) {
+		$entry = SettingsRegistry::get( $key );
+		if ( null === $entry ) {
+			return $value;
+		}
+		if ( self::EXPIRY_RULE === $key ) {
+			if ( in_array( $value, array( 'statutory', 'days' ), true ) ) {
+				return $value;
+			}
+			if ( null === $days_saved ) {
+				return ProductConfig::default_expiry_rule();
+			}
+			return $days_saved ? 'days' : 'statutory';
+		}
+		if ( Markets::EXPIRY_OPTION === $key ) {
+			return Markets::expiry_rows( $value );
+		}
+		if ( Markets::TERMS_OPTION === $key ) {
+			return Markets::terms_rows( $value );
+		}
+		if ( in_array( $entry['type'], array( 'int', 'decimal' ), true ) && ! $entry['empty'] && ( null === $value || ( is_string( $value ) && '' === trim( $value ) ) ) ) {
+			return $entry['default'];
+		}
+		return $value;
 	}
 
 	/**
@@ -102,8 +143,13 @@ final class SettingsTransfer {
 	 * format, its version is missing or newer, it holds a secret or a setting that is never exported, or any value
 	 * is invalid. Keys this site does not know are skipped and listed in "unknown".
 	 *
+	 * PV-P1-2: values an export from before this version may hold are read like the settings page reads them (with a
+	 * note in "warnings"): a country table as text from before 1.3.0 becomes its readable rows (lines that cannot be
+	 * read are left out), an empty number field that may not be empty becomes its default, and a default validity
+	 * rule that was never saved ('') is skipped – the rule of this site stays.
+	 *
 	 * @param string $json File content.
-	 * @return array{settings: array<string, mixed>, unknown: string[], version: int, plugin_version: string}|\WP_Error
+	 * @return array{settings: array<string, mixed>, unknown: string[], warnings: string[], version: int, plugin_version: string}|\WP_Error
 	 */
 	public static function parse( string $json ) {
 		if ( strlen( $json ) > self::MAX_BYTES ) {
@@ -130,6 +176,7 @@ final class SettingsTransfer {
 		$errors   = array();
 		$settings = array();
 		$unknown  = array();
+		$warnings = array();
 		foreach ( $data['settings'] as $key => $value ) {
 			$key   = (string) $key;
 			$entry = SettingsRegistry::get( $key );
@@ -140,6 +187,10 @@ final class SettingsTransfer {
 			if ( $entry['secret'] || ! $entry['export'] ) {
 				/* translators: %s: option name */
 				$errors[] = sprintf( __( '%s is never part of a settings export.', 'voucher-captain' ), $key );
+				continue;
+			}
+			$value = self::legacy( $key, $entry, $value, $warnings );
+			if ( null === $value ) {
 				continue;
 			}
 			$valid = self::validate( $key, $value );
@@ -155,9 +206,41 @@ final class SettingsTransfer {
 		return array(
 			'settings'       => $settings,
 			'unknown'        => $unknown,
+			'warnings'       => $warnings,
 			'version'        => $version,
 			'plugin_version' => is_scalar( $data['plugin_version'] ?? null ) ? sanitize_text_field( (string) $data['plugin_version'] ) : '',
 		);
+	}
+
+	/**
+	 * PV-P1-2: a value of an older export as this version stores it (see parse()); null = skip the setting.
+	 *
+	 * @param string               $key      Option name.
+	 * @param array<string, mixed> $entry    Register entry.
+	 * @param mixed                $value    Value of the file.
+	 * @param string[]             $warnings Notes for the preview (appended).
+	 * @return mixed
+	 */
+	private static function legacy( string $key, array $entry, $value, array &$warnings ) {
+		if ( is_string( $value ) && in_array( $key, array( Markets::EXPIRY_OPTION, Markets::TERMS_OPTION ), true ) ) {
+			$lines = Markets::EXPIRY_OPTION === $key ? Markets::unparsed_expiry_lines( $value ) : ProductConfig::unassigned_terms_lines( $value );
+			if ( $lines ) {
+				/* translators: 1: option name, 2: lines that cannot be read */
+				$warnings[] = sprintf( __( '%1$s: these lines of the old text format cannot be read and are left out: %2$s', 'voucher-captain' ), $key, implode( ' | ', array_slice( $lines, 0, 5 ) ) );
+			}
+			return Markets::EXPIRY_OPTION === $key ? Markets::expiry_rows( $value ) : Markets::terms_rows( $value );
+		}
+		if ( self::EXPIRY_RULE === $key && '' === $value ) {
+			/* translators: %s: option name */
+			$warnings[] = sprintf( __( '%s was never saved in the exported shop and is skipped; the rule of this site stays.', 'voucher-captain' ), $key );
+			return null;
+		}
+		if ( in_array( $entry['type'], array( 'int', 'decimal' ), true ) && ! $entry['empty'] && ( null === $value || ( is_string( $value ) && '' === trim( $value ) ) ) ) {
+			/* translators: 1: option name, 2: default value */
+			$warnings[] = sprintf( __( '%1$s is empty in the file and is read as its default %2$s.', 'voucher-captain' ), $key, self::display( $entry['default'] ) );
+			return $entry['default'];
+		}
+		return $value;
 	}
 
 	/**
@@ -217,7 +300,8 @@ final class SettingsTransfer {
 				return self::check_number( $key, $entry, $value, $invalid );
 			case 'select':
 				$text = is_scalar( $value ) ? trim( (string) $value ) : null;
-				if ( null !== $text && ( in_array( $text, (array) $entry['choices'], true ) || ( '' === $text && '' === $entry['default'] ) ) ) {
+				// PV-P1-1: '' (never saved) of the default validity rule is no value one can set or import.
+				if ( null !== $text && ( in_array( $text, (array) $entry['choices'], true ) || ( '' === $text && '' === $entry['default'] && self::EXPIRY_RULE !== $key ) ) ) {
 					return $text;
 				}
 				return $invalid( implode( ', ', (array) $entry['choices'] ) );
@@ -235,12 +319,15 @@ final class SettingsTransfer {
 				}
 				return (int) $value;
 			case 'text':
-				return is_scalar( $value ) ? sanitize_textarea_field( (string) $value ) : $invalid( __( 'text', 'voucher-captain' ) );
+				return is_scalar( $value ) ? self::clean_text( $key, (string) $value ) : $invalid( __( 'text', 'voucher-captain' ) );
 			case 'table':
 				return Admin\CountryTableField::validate( $key, $value ); // SET-VC-04.
 		}
 		if ( ! is_scalar( $value ) ) {
 			return $invalid( __( 'text', 'voucher-captain' ) );
+		}
+		if ( Emails\Branding::LOGO_OPTION === $key ) {
+			return Emails\Branding::sanitize_logo( (string) $value ); // PV-P4-5: like the page (keeps %20 of a URL).
 		}
 		$text = sanitize_text_field( (string) $value );
 		if ( in_array( $key, array( 'vcap_code_prefix', 'vcap_code_suffix', 'vcap_code_separator' ), true ) && '' !== $text && ! CodeGenerator::valid_affix( $text, 'vcap_code_separator' === $key ) ) {
@@ -255,6 +342,23 @@ final class SettingsTransfer {
 			return $days ? implode( ', ', $days ) : '0';
 		}
 		return $text;
+	}
+
+	/**
+	 * PV-P4-5: a text setting cleaned by the sanitiser of its field on the settings page – HTML of the default
+	 * conditions (wp_kses_post() like a WooCommerce textarea), the custom CSS (CustomCss::sanitize(), keeps ">" and
+	 * "%3C"), the tills table (CounterLocations); any other text like a textarea.
+	 */
+	private static function clean_text( string $key, string $value ): string {
+		switch ( $key ) {
+			case 'vcap_default_terms':
+				return wp_kses_post( trim( $value ) );
+			case CustomCss::OPTION:
+				return CustomCss::sanitize( $value );
+			case Counter::LOCATIONS:
+				return (string) CounterLocations::sanitize_option( $value, array(), $value );
+		}
+		return sanitize_textarea_field( $value );
 	}
 
 	/**
@@ -296,7 +400,8 @@ final class SettingsTransfer {
 				return $invalid( sprintf( __( 'an amount up to %s', 'voucher-captain' ), $amount ) );
 			}
 		}
-		return $text;
+		// PV-P2-4: a whole number is stored as one ("5.0" and "1e1" become "5" and "10").
+		return 'int' === $entry['type'] ? (string) (int) round( (float) $text ) : $text;
 	}
 
 	/** Whether two stored values are the same setting (WooCommerce stores numbers as text: 365 equals "365"). */
@@ -369,37 +474,81 @@ final class SettingsTransfer {
 	}
 
 	/**
-	 * Resets settings to what a new installation has, after an automatic backup of all settings. Settings a new
-	 * installation stores (attribute "fresh", Settings::REQUEST_SETTINGS) are stored with that value; all others are
-	 * deleted, so Settings::get() returns the register default and code that tells "never saved" apart (e.g. the
-	 * default validity rule) behaves like in a new shop.
+	 * What a reset does per setting (PV-P1-3): every setting goes back to its register default – what an existing
+	 * shop runs on while it never saved it – never to the value a new installation stores ("fresh"). The option is
+	 * deleted, so Settings::get() returns the default and code that tells "never saved" apart (the default validity
+	 * rule) behaves like in a shop that never saved it; settings read on every request (Settings::REQUEST_SETTINGS)
+	 * are stored with their default instead, so they stay autoloaded.
 	 *
 	 * @param string|null $section Section id ('' = General), null = all.
-	 * @return array{changed: string[], backup: int} Option names that changed, time of the backup.
+	 * @return array<string, array{action: string, from: mixed, to: mixed, changed: bool, legal: bool}>
+	 */
+	private static function reset_plan( ?string $section ): array {
+		$keys       = self::resettable( $section );
+		$days_saved = ! in_array( 'vcap_default_expiry_days', $keys, true ) && false !== get_option( 'vcap_default_expiry_days', false );
+		$plan       = array();
+		foreach ( $keys as $key ) {
+			$entry   = (array) SettingsRegistry::get( $key );
+			$default = SettingsRegistry::default( $key );
+			$saved   = get_option( $key, null );
+			if ( in_array( $key, Settings::REQUEST_SETTINGS, true ) ) {
+				$action = null === $saved || ! self::same( $saved, $default ) ? 'store' : '';
+			} else {
+				$action = null !== $saved ? 'delete' : '';
+			}
+			$from         = self::stored( $key );
+			$to           = self::normalise( $key, $default, $days_saved );
+			$plan[ $key ] = array(
+				'action'  => $action,
+				'from'    => $from,
+				'to'      => $to,
+				'changed' => ! self::same( $from, $to ),
+				'legal'   => ! empty( $entry['legal'] ),
+			);
+		}
+		return $plan;
+	}
+
+	/**
+	 * Preview of a reset (PV-P1-3): the settings whose value changes, current → after the reset, and whether the
+	 * value has legal or tax weight. Changes nothing.
+	 *
+	 * @param string|null $section Section id ('' = General), null = all.
+	 * @return array<string, array{from: mixed, to: mixed, legal: bool}>
+	 */
+	public static function reset_preview( ?string $section = null ): array {
+		$out = array();
+		foreach ( self::reset_plan( $section ) as $key => $row ) {
+			if ( $row['changed'] ) {
+				$out[ $key ] = array(
+					'from'  => $row['from'],
+					'to'    => $row['to'],
+					'legal' => $row['legal'],
+				);
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * Resets settings to their register default (see reset_plan(); PV-P1-3: never the "fresh" value of a new
+	 * installation), after an automatic backup of all settings when anything changes (PV-P2-6).
+	 *
+	 * @param string|null $section Section id ('' = General), null = all.
+	 * @return array{changed: string[], backup: int} Option names whose value changed, time of the backup (0 = none, nothing changed).
 	 */
 	public static function reset( ?string $section = null ): array {
-		$backup  = self::backup( SettingsLog::VIA_RESET );
-		$changed = array();
+		$plan    = self::reset_plan( $section );
+		$changed = array_keys( array_filter( $plan, static fn( array $row ) => $row['changed'] ) );
+		$backup  = $changed ? self::backup( SettingsLog::VIA_RESET ) : 0;
 		SettingsLog::with(
 			SettingsLog::VIA_RESET,
-			static function () use ( $section, &$changed ): void {
-				foreach ( self::resettable( $section ) as $key ) {
-					$entry = (array) SettingsRegistry::get( $key );
-					$store = array_key_exists( 'fresh', $entry ) || in_array( $key, Settings::REQUEST_SETTINGS, true );
-					$value = SettingsRegistry::fresh_default( $key );
-					$saved = get_option( $key, null );
-					if ( $store ) {
-						if ( null === $saved || ! self::same( $saved, $value ) ) {
-							update_option( $key, $value );
-							if ( ! self::same( null === $saved ? SettingsRegistry::default( $key ) : $saved, $value ) ) {
-								$changed[] = $key;
-							}
-						}
-					} elseif ( null !== $saved ) {
+			static function () use ( $plan ): void {
+				foreach ( $plan as $key => $row ) {
+					if ( 'store' === $row['action'] ) {
+						update_option( $key, SettingsRegistry::default( $key ) );
+					} elseif ( 'delete' === $row['action'] ) {
 						delete_option( $key );
-						if ( ! self::same( $saved, SettingsRegistry::default( $key ) ) ) {
-							$changed[] = $key;
-						}
 					}
 				}
 			}
@@ -418,19 +567,29 @@ final class SettingsTransfer {
 	 */
 	public static function backup( string $reason ): int {
 		$backups = self::backups();
-		$time    = time();
-		while ( isset( $backups[ $time ] ) ) {
-			++$time;
+		$json    = self::export_json();
+		$newest  = reset( $backups );
+		if ( false !== $newest && self::same_settings( $newest['json'], $json ) ) {
+			return (int) key( $backups ); // PV-P2-6: the newest backup holds these settings already.
 		}
+		// Newest first by time: a backup within the same second as the newest one gets the next second.
+		$time = false === $newest ? time() : max( time(), (int) key( $backups ) + 1 );
 		$backups = array(
 			$time => array(
 				'reason' => sanitize_key( $reason ),
 				'user'   => get_current_user_id(),
-				'json'   => self::export_json(),
+				'json'   => $json,
 			),
 		) + $backups;
 		update_option( self::BACKUP_OPTION, array_slice( $backups, 0, self::BACKUPS_KEPT, true ), false );
 		return $time;
+	}
+
+	/** Whether two export documents hold the same settings (time and plugin version aside). */
+	private static function same_settings( string $a, string $b ): bool {
+		$a = json_decode( $a, true );
+		$b = json_decode( $b, true );
+		return is_array( $a ) && is_array( $b ) && isset( $a['settings'], $b['settings'] ) && $a['settings'] == $b['settings']; // phpcs:ignore Universal.Operators.StrictComparisons -- 365 equals "365" in an older backup.
 	}
 
 	/**

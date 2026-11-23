@@ -491,7 +491,7 @@ final class Command {
 	 * : export: print an automatic backup instead (newest, or the one with this timestamp).
 	 *
 	 * [--dry-run]
-	 * : import, reset, profile apply: only show what would change.
+	 * : import, reset, profile apply: only show what would change (reset: current -> default of each changing setting).
 	 *
 	 * [--yes]
 	 * : import, reset, profile apply: do not ask for confirmation.
@@ -587,16 +587,29 @@ final class Command {
 			return;
 		}
 		$value = SettingsTransfer::stored( $key );
-		self::line( 'json' === $format ? (string) wp_json_encode( $value ) : ( is_array( $value ) ? implode( ',', array_map( 'strval', $value ) ) : (string) $value ) );
+		// PV-P1-4: tables are shown row by row ("DE 3 ✓; AT 30"), not as "Array"; --format=json gives the data.
+		self::line( 'json' === $format ? (string) wp_json_encode( $value ) : SettingsTransfer::display( $value, PHP_INT_MAX ) );
 	}
 
-	/** "wp vcap settings set <key> <value>": checked like the settings page, recorded in the change log. */
+	/**
+	 * "wp vcap settings set <key> <value>": checked like the settings page, recorded in the change log. PV-P1-4: a
+	 * table or list takes a JSON array (a list also values separated by commas).
+	 */
 	private function settings_set( string $key, string $value ): void {
 		if ( \VCAP\Admin\DataRemoval::OPTION === $key ) {
 			self::error( 'Use "wp vcap data-removal on|off" for this setting.' );
 			return;
 		}
-		$valid = SettingsTransfer::validate( $key, $value );
+		$entry = SettingsRegistry::get( $key );
+		$input = $value;
+		if ( null !== $entry && in_array( $entry['type'], array( 'table', 'list' ), true ) && str_starts_with( ltrim( $value ), '[' ) ) {
+			$input = json_decode( $value, true );
+			if ( ! is_array( $input ) ) {
+				self::error( sprintf( '%s: the value is no valid JSON array. Nothing was changed.', $key ) );
+				return;
+			}
+		}
+		$valid = SettingsTransfer::validate( $key, $input );
 		if ( is_wp_error( $valid ) ) {
 			self::error( wp_strip_all_tags( $valid->get_error_message() ) . ' Nothing was changed.' );
 			return;
@@ -642,6 +655,9 @@ final class Command {
 		if ( $parsed['unknown'] ) {
 			self::warning( 'Not known on this site and skipped: ' . implode( ', ', $parsed['unknown'] ) );
 		}
+		foreach ( $parsed['warnings'] as $warning ) {
+			self::warning( wp_strip_all_tags( $warning ) ); // PV-P1-2: values of an older export that were converted.
+		}
 		$diff = SettingsTransfer::diff( $parsed['settings'] );
 		if ( ! $diff ) {
 			self::success( 'Nothing to change: every setting already has this value.' );
@@ -667,13 +683,21 @@ final class Command {
 			self::error( 'Usage: wp vcap settings reset <section>|all [--dry-run] [--yes]' );
 			return;
 		}
-		$keys = SettingsTransfer::resettable( $section );
+		// PV-P1-3: back to the register default (what an existing shop runs on), shown as current -> default first.
+		$diff = SettingsTransfer::reset_preview( $section );
+		if ( ! $diff ) {
+			self::success( 'Nothing to reset: every setting already has its default.' );
+			return;
+		}
+		foreach ( $diff as $key => $change ) {
+			self::line( sprintf( '%s: %s -> %s%s', $key, SettingsTransfer::display( $change['from'] ), SettingsTransfer::display( $change['to'] ), $change['legal'] ? ' [legal/tax weight – check]' : '' ) );
+		}
 		if ( isset( $assoc_args['dry-run'] ) ) {
-			self::line( sprintf( 'Dry run: %d settings would be reset: %s', count( $keys ), implode( ', ', $keys ) ) );
+			self::line( sprintf( 'Dry run: %d settings would be reset.', count( $diff ) ) );
 			return;
 		}
 		if ( ! isset( $assoc_args['yes'] ) ) {
-			\WP_CLI::confirm( sprintf( 'Reset %d settings to their defaults?', count( $keys ) ) );
+			\WP_CLI::confirm( sprintf( 'Reset %d settings to their defaults?', count( $diff ) ) );
 		}
 		$result = SettingsTransfer::reset( $section );
 		self::success( sprintf( '%d settings reset. Previous settings: wp vcap settings export --backup=%d', count( $result['changed'] ), $result['backup'] ) );

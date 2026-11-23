@@ -35,7 +35,10 @@ Shops und Erweiterungen können die Zuordnung je Gutschein mit dem Filter `vcap_
 starten mit „an“** (M12-03, `Install::activate_site()` legt die Option nur an, wenn noch keine Schema-Version
 gespeichert ist); bestehende Shops behalten ihre Einstellung (fehlende Option = aus). Nachweis:
 `tests/tax-accounting-integration.php` „M12-03: a new installation starts with …“, „M12-03: an existing shop …“.
-Die Umstellung bestehender Shops ist Frage F17.
+Die Umstellung bestehender Shops ist Frage F17. Das Zurücksetzen der Einstellungen (*Datenschutz & Erweitert*,
+`wp vcap settings reset`) setzt die Option auf den Standard bestehender Shops zurück (Option gelöscht = aus), nie auf den
+Wert einer Neuinstallation, und zeigt die Änderung vorher als „bisher → neu“ mit Hinweis auf die steuerliche Bedeutung
+(PV-P1-3; ob ein Zurücksetzen stattdessen den Wert einer Neuinstallation setzen soll, entscheidet der Inhaber).
 
 **Zurücksetzen, Import und Länderprofil wirken auf diese Einstellung** (PV-P3-8): Sie hat den Wert für
 Neuinstallationen „an“ (Register `config/settings.php`: Standard `no`, `fresh` `yes`, `legal`).

@@ -31,7 +31,7 @@ final class SettingsUi {
 	public const PREVENT_CHANGE = 'wc-settings-prevent-change-event';
 
 	/** Clears WooCommerce's unsaved-changes prompt (assets/js/admin/settings.js sets window.onbeforeunload). */
-	private const CLEAR_PROMPT = 'window.onbeforeunload=null;';
+	private const CLEAR_PROMPT = "window.onbeforeunload=null;if(this.dataset.vcapSent){return false;}this.dataset.vcapSent='1';this.setAttribute('aria-disabled','true');"; // PV-P5-2 + PV-P2-7: no leave prompt, a second click is ignored.
 
 	/**
 	 * The field that prints the default button.

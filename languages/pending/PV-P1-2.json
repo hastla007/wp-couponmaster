@@ -1,0 +1,12 @@
+{
+ "%1$s: these lines of the old text format cannot be read and are left out: %2$s": {
+  "du": "%1$s: Diese Zeilen des alten Textformats sind nicht lesbar und werden weggelassen: %2$s",
+  "sie": "%1$s: Diese Zeilen des alten Textformats sind nicht lesbar und werden weggelassen: %2$s",
+  "at": "%1$s: Diese Zeilen des alten Textformats sind nicht lesbar und werden weggelassen: %2$s"
+ },
+ "%1$s is empty in the file and is read as its default %2$s.": {
+  "du": "%1$s ist in der Datei leer und wird als Standardwert %2$s gelesen.",
+  "sie": "%1$s ist in der Datei leer und wird als Standardwert %2$s gelesen.",
+  "at": "%1$s ist in der Datei leer und wird als Standardwert %2$s gelesen."
+ }
+}

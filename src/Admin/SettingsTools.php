@@ -19,7 +19,8 @@ defined( 'ABSPATH' ) || exit;
  * Admin side of VCAP\SettingsTransfer and VCAP\SettingsLog. The controls sit inside the WooCommerce settings form;
  * their buttons post to admin-post.php (formaction) with an own nonce, so "Save changes" never imports or resets.
  * Every action needs "manage_woocommerce" and the nonce. An import is checked as a whole, then shown as a preview
- * (current → new) and applied only after a second click; a reset takes an automatic backup first.
+ * (current → new) and applied only after a second click; a reset is shown the same way first (PV-P1-3: current →
+ * register default, legal values marked), needs the confirmation and takes an automatic backup.
  *
  * @since 1.3.0
  */
@@ -35,9 +36,17 @@ final class SettingsTools {
 	public const TOOLS_TYPE = 'vcap_settings_tools';
 	public const LOG_TYPE   = 'vcap_settings_log';
 
-	/** User transients: pending import (preview) and the message after an action. */
+	/** User transients: pending import (preview), pending reset (target), the message after an action and when a preview was used. */
 	private const PENDING = 'vcap_settings_import_';
+	private const RESET   = 'vcap_settings_reset_';
 	private const NOTICE  = 'vcap_settings_notice_';
+
+	/** @var mixed The notice shown on this page view (read once from its transient, PV-P5-4). */
+	private static $shown_notice = null;
+	private const USED    = 'vcap_settings_used_';
+
+	/** PV-P2-7: seconds after an import or reset in which a second click keeps the message of the first. */
+	private const DOUBLE_CLICK = 30;
 
 	/** Entries of the change log shown on the page. */
 	private const LOG_ROWS = 50;
@@ -51,6 +60,8 @@ final class SettingsTools {
 		add_action( 'admin_post_vcap_settings_import', array( self::class, 'import' ) );
 		add_action( 'admin_post_vcap_settings_import_apply', array( self::class, 'import_apply' ) );
 		add_action( 'admin_post_vcap_settings_import_cancel', array( self::class, 'import_cancel' ) );
+		add_action( 'admin_post_vcap_settings_reset_preview', array( self::class, 'reset_preview' ) );
+		add_action( 'admin_post_vcap_settings_reset_cancel', array( self::class, 'reset_cancel' ) );
 		add_action( 'admin_post_vcap_settings_reset', array( self::class, 'reset' ) );
 	}
 
@@ -65,7 +76,8 @@ final class SettingsTools {
 				'type'  => 'title',
 				'title' => __( 'Export, import and reset settings', 'voucher-captain' ),
 				'id'    => 'vcap_settings_tools',
-				'desc'  => __( 'The export contains every global setting of this tab as a JSON file, never keys, passwords or other secrets, and no product settings or voucher data. An import is checked completely and shown as a preview before anything is changed.', 'voucher-captain' ),
+				// PV-P1-6: the rights per role are no setting of the register and are not part of the file.
+				'desc'  => __( 'The export contains the global settings of this tab as a JSON file – never keys, passwords or other secrets, no rights per role, product settings or voucher data. An import is checked completely and shown as a preview before anything is changed.', 'voucher-captain' ),
 			),
 			array(
 				'title'     => __( 'Settings file', 'voucher-captain' ),
@@ -109,7 +121,10 @@ final class SettingsTools {
 		return wp_nonce_url( add_query_arg( array( 'action' => $action ) + $args, admin_url( 'admin-post.php' ) ), self::NONCE, self::NONCE_FIELD );
 	}
 
-	/** A submit button of the settings form that posts to an admin-post action instead of saving. */
+	/**
+	 * A submit button of the settings form that posts to an admin-post action instead of saving. PV-P2-7: a second
+	 * click while the first request runs is ignored.
+	 */
 	private static function button( string $action, string $label, string $class = 'button' ): string {
 		return SettingsUi::action_button( $action, $label, $class ); // PV-P5-2: clears the unsaved-changes prompt.
 	}
@@ -196,6 +211,7 @@ final class SettingsTools {
 			delete_transient( self::NOTICE . $user );
 		}
 		$pending = get_transient( self::PENDING . $user );
+		$reset   = get_transient( self::RESET . $user );
 		// PV-P5-2: changes in these controls are no unsaved changes of the settings form.
 		echo '<tr valign="top"><th scope="row" class="titledesc">' . esc_html( (string) ( $field['title'] ?? '' ) ) . '</th><td class="forminp ' . esc_attr( SettingsUi::PREVENT_CHANGE ) . '">';
 		wp_nonce_field( self::NONCE, self::NONCE_FIELD, false );
@@ -203,7 +219,8 @@ final class SettingsTools {
 			echo SettingsUi::notice( $notice, 'vcap_settings_notice' ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in notice().
 		}
 		// PV-P5-4: an error about the confirmation marks the checkbox and points at the message.
-		$confirm_error = is_array( $notice ) && 'error' === ( $notice['type'] ?? '' ) && 'vcap_settings_reset_confirm' === ( $notice['field'] ?? '' );
+		self::$shown_notice = $notice;
+		$confirm_error      = self::confirm_error( $notice );
 		if ( is_array( $pending ) && isset( $pending['settings'] ) && is_array( $pending['settings'] ) ) {
 			self::render_preview( $pending );
 		}
@@ -217,14 +234,16 @@ final class SettingsTools {
 		echo self::button( 'vcap_settings_import', __( 'Check file and show changes', 'voucher-captain' ) ) . '</p>'; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in button().
 
 		echo '<h4>' . esc_html__( 'Reset to defaults', 'voucher-captain' ) . '</h4>';
-		echo '<p class="description" id="vcap_settings_reset_desc">' . esc_html__( 'Sets the chosen settings back to what a new installation has. A backup of all settings is saved first. Secrets, the data removal switch, product settings and vouchers are not changed.', 'voucher-captain' ) . '</p>';
-		echo '<p><label for="vcap_settings_reset_target">' . esc_html__( 'Section', 'voucher-captain' ) . '</label> <select id="vcap_settings_reset_target" name="vcap_settings_reset_target" aria-describedby="vcap_settings_reset_desc">';
-		foreach ( self::reset_targets() as $value => $label ) {
-			echo '<option value="' . esc_attr( $value ) . '">' . esc_html( $label ) . '</option>';
+		echo '<p class="description" id="vcap_settings_reset_desc">' . esc_html__( 'Sets the chosen settings back to their defaults – the values a shop uses while it never saved them. You see every change (current value → default) before anything is reset, and a backup of all settings is saved first. Secrets, the data removal switch, the rights per role, product settings and vouchers are not changed.', 'voucher-captain' ) . '</p>';
+		if ( is_string( $reset ) && false !== self::reset_section( $reset ) ) {
+			self::render_reset_preview( $reset );
+		} else {
+			echo '<p><label for="vcap_settings_reset_target">' . esc_html__( 'Section', 'voucher-captain' ) . '</label> <select id="vcap_settings_reset_target" name="vcap_settings_reset_target" aria-describedby="vcap_settings_reset_desc">';
+			foreach ( self::reset_targets() as $value => $label ) {
+				echo '<option value="' . esc_attr( $value ) . '">' . esc_html( $label ) . '</option>';
+			}
+			echo '</select> ' . self::button( 'vcap_settings_reset_preview', __( 'Show what a reset changes', 'voucher-captain' ) ) . '</p>'; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in button().
 		}
-		echo '</select></p>';
-		echo '<p><label><input type="checkbox" name="vcap_settings_reset_confirm" value="1"' . ( $confirm_error ? ' aria-invalid="true" aria-describedby="vcap_settings_notice"' : '' ) . '> ' . esc_html__( 'Yes, reset these settings to their defaults.', 'voucher-captain' ) . '</label></p>';
-		echo '<p>' . self::button( 'vcap_settings_reset', __( 'Reset settings', 'voucher-captain' ) ) . '</p>'; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in button().
 
 		$backups = SettingsTransfer::backups();
 		if ( $backups ) {
@@ -259,6 +278,9 @@ final class SettingsTools {
 			}
 			echo SettingsUi::scroll( $table . '</tbody></table>' ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped above.
 		}
+		foreach ( array_map( 'strval', (array) ( $pending['warnings'] ?? array() ) ) as $warning ) {
+			echo '<p class="description">' . esc_html( $warning ) . '</p>'; // PV-P1-2: values of an older export that were converted.
+		}
 		$unknown = array_map( 'strval', (array) ( $pending['unknown'] ?? array() ) );
 		if ( $unknown ) {
 			/* translators: %s: option names */
@@ -269,6 +291,49 @@ final class SettingsTools {
 			echo self::button( 'vcap_settings_import_apply', __( 'Apply these changes', 'voucher-captain' ), 'button button-primary' ) . ' '; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in button().
 		}
 		echo self::button( 'vcap_settings_import_cancel', __( 'Cancel import', 'voucher-captain' ) ) . '</p></div>'; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in button().
+	}
+
+	/**
+	 * PV-P1-3: preview of a reset – current value → default of every setting that changes, legal values marked – with
+	 * the confirmation and the reset button.
+	 *
+	 * @param string $target Reset target (reset_targets()).
+	 */
+	/**
+	 * PV-P5-4: whether the last notice is the "tick the confirmation" error of the reset.
+	 *
+	 * @param mixed $notice Notice (default: the one stored for the current user).
+	 */
+	private static function confirm_error( $notice = null ): bool {
+		$notice = $notice ?? self::$shown_notice;
+		return is_array( $notice ) && 'error' === ( $notice['type'] ?? '' ) && 'vcap_settings_reset_confirm' === ( $notice['field'] ?? '' );
+	}
+
+	private static function render_reset_preview( string $target ): void {
+		$section = self::reset_section( $target );
+		$diff    = false === $section ? array() : SettingsTransfer::reset_preview( $section );
+		$label   = self::reset_targets()[ $target ] ?? $target;
+		echo '<div class="vcap-settings-preview" role="region" aria-labelledby="vcap_settings_reset_title">';
+		/* translators: %s: section */
+		echo '<h4 id="vcap_settings_reset_title">' . esc_html( sprintf( __( 'Preview of the reset: %s', 'voucher-captain' ), $label ) ) . '</h4>';
+		if ( ! $diff ) {
+			echo '<p>' . esc_html__( 'Nothing to reset: every setting already has its default.', 'voucher-captain' ) . '</p>';
+		} else {
+			/* translators: %d: number of settings */
+			echo '<p>' . esc_html( sprintf( _n( '%d setting will change:', '%d settings will change:', count( $diff ), 'voucher-captain' ), count( $diff ) ) ) . '</p>';
+			echo '<div style="overflow-x:auto"><table class="widefat striped"><thead><tr><th scope="col">' . esc_html__( 'Setting', 'voucher-captain' ) . '</th><th scope="col">' . esc_html__( 'Current value', 'voucher-captain' ) . '</th><th scope="col">' . esc_html__( 'After the reset', 'voucher-captain' ) . '</th><th scope="col">' . esc_html__( 'Note', 'voucher-captain' ) . '</th></tr></thead><tbody>';
+			foreach ( $diff as $key => $change ) {
+				$note = $change['legal'] ? __( 'Legal or tax weight – check before resetting', 'voucher-captain' ) : '';
+				echo '<tr><td><code>' . esc_html( $key ) . '</code></td><td>' . esc_html( SettingsTransfer::display( $change['from'] ) ) . '</td><td>' . esc_html( SettingsTransfer::display( $change['to'] ) ) . '</td><td>' . esc_html( $note ) . '</td></tr>';
+			}
+			echo '</tbody></table></div>';
+			echo '<p><label><input type="checkbox" name="vcap_settings_reset_confirm" value="1"' . ( self::confirm_error() ? ' aria-invalid="true" aria-describedby="vcap_settings_notice"' : '' ) . '> ' . esc_html__( 'Yes, reset these settings to their defaults.', 'voucher-captain' ) . '</label></p>';
+		}
+		echo '<p>';
+		if ( $diff ) {
+			echo self::button( 'vcap_settings_reset', __( 'Reset settings', 'voucher-captain' ), 'button button-primary' ) . ' '; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in button().
+		}
+		echo self::button( 'vcap_settings_reset_cancel', __( 'Cancel reset', 'voucher-captain' ) ) . '</p></div>'; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in button().
 	}
 
 	/**
@@ -321,6 +386,23 @@ final class SettingsTools {
 		);
 		wp_safe_redirect( self::page_url() );
 		exit;
+	}
+
+	/**
+	 * PV-P2-7: a second click on "Apply" / "Reset" whose preview the first click used a moment ago: back to the page
+	 * with the message of the first click instead of "expired".
+	 */
+	private static function repeated_click(): void {
+		$used = get_transient( self::USED . get_current_user_id() );
+		if ( is_int( $used ) && time() - $used <= self::DOUBLE_CLICK ) {
+			wp_safe_redirect( self::page_url() );
+			exit;
+		}
+	}
+
+	/** PV-P2-7: remembers that a preview was used now. */
+	private static function mark_used(): void {
+		set_transient( self::USED . get_current_user_id(), time(), self::DOUBLE_CLICK );
 	}
 
 	/** Sends a JSON file. */
@@ -379,8 +461,10 @@ final class SettingsTools {
 		$pending = get_transient( self::PENDING . $user );
 		delete_transient( self::PENDING . $user );
 		if ( ! is_array( $pending ) || ! isset( $pending['settings'] ) || ! is_array( $pending['settings'] ) ) {
+			self::repeated_click();
 			self::done( 'error', __( 'The import preview has expired. Please upload the file again.', 'voucher-captain' ) );
 		}
+		self::mark_used();
 		$changed = self::apply_import( $pending['settings'] );
 		if ( is_wp_error( $changed ) ) {
 			/* translators: %s: reasons */
@@ -419,18 +503,44 @@ final class SettingsTools {
 		self::done( 'success', __( 'Import cancelled, nothing was changed.', 'voucher-captain' ) );
 	}
 
-	/** admin-post: reset of a section or of all sections, after the confirmation and a backup. */
+	/** admin-post: shows what a reset of the chosen section changes (PV-P1-3); nothing is changed yet. */
+	public static function reset_preview(): void {
+		self::guard();
+		$target = isset( $_POST['vcap_settings_reset_target'] ) ? sanitize_key( wp_unslash( $_POST['vcap_settings_reset_target'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- guard() checked the nonce.
+		if ( false === self::reset_section( $target ) ) {
+			self::done( 'error', __( 'Please choose what to reset.', 'voucher-captain' ) );
+		}
+		set_transient( self::RESET . get_current_user_id(), $target, 15 * MINUTE_IN_SECONDS );
+		wp_safe_redirect( self::page_url() );
+		exit;
+	}
+
+	/** admin-post: forgets the pending reset. */
+	public static function reset_cancel(): void {
+		self::guard();
+		delete_transient( self::RESET . get_current_user_id() );
+		self::done( 'success', __( 'Reset cancelled, nothing was changed.', 'voucher-captain' ) );
+	}
+
+	/** admin-post: reset of the section of the preview, after the confirmation and a backup. */
 	public static function reset(): void {
 		self::guard();
-		$target  = isset( $_POST['vcap_settings_reset_target'] ) ? sanitize_key( wp_unslash( $_POST['vcap_settings_reset_target'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- guard() checked the nonce.
-		$section = self::reset_section( $target );
+		$user    = get_current_user_id();
+		$target  = get_transient( self::RESET . $user );
+		$section = is_string( $target ) ? self::reset_section( $target ) : false;
 		if ( false === $section ) {
-			self::done( 'error', __( 'Please choose what to reset.', 'voucher-captain' ) );
+			self::repeated_click();
+			self::done( 'error', __( 'The reset preview has expired. Please choose the section and show the changes again.', 'voucher-captain' ) );
 		}
 		if ( empty( $_POST['vcap_settings_reset_confirm'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing -- guard() checked the nonce.
 			self::done( 'error', __( 'Nothing was reset: please tick the confirmation first.', 'voucher-captain' ), 'vcap_settings_reset_confirm' );
 		}
+		delete_transient( self::RESET . $user );
+		self::mark_used();
 		$result = Source::with( Source::ADMIN, static fn() => SettingsTransfer::reset( $section ) );
+		if ( ! $result['changed'] ) {
+			self::done( 'success', __( 'Nothing was reset: every setting already has its default.', 'voucher-captain' ) );
+		}
 		/* translators: %d: number of settings */
 		self::done( 'success', sprintf( _n( '%d setting reset to its default. A backup of the previous settings was saved (see "Automatic backups").', '%d settings reset to their defaults. A backup of the previous settings was saved (see "Automatic backups").', count( $result['changed'] ), 'voucher-captain' ), count( $result['changed'] ) ) );
 	}

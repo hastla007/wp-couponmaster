@@ -149,7 +149,10 @@ final class RoleCaps {
 			return false;
 		}
 		$posted = isset( $_POST[ self::FIELD_TYPE ] ) && is_array( $_POST[ self::FIELD_TYPE ] ) ? wp_unslash( $_POST[ self::FIELD_TYPE ] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- only keys of known roles and rights are read (apply()).
-		self::apply( (array) $posted, self::role_objects() );
+		foreach ( self::apply( (array) $posted, self::role_objects() ) as $change => $granted ) {
+			$parts = explode( ':', (string) $change, 2 );
+			\VCAP\SettingsLog::record_role( $parts[0], $parts[1] ?? '', $granted ); // PV-P4-2: in the change log.
+		}
 		update_option( self::CUSTOMISED_OPTION, 'yes', false );
 		return true;
 	}
