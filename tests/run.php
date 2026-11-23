@@ -2396,13 +2396,13 @@ add_filter( 'vcap_report_tabs', static fn( $t ) => array( 'wallet' => 'Wallet pa
 $a4_tabs = VCAP\Admin\ReportsAdmin::tab_list();
 unset( $GLOBALS['vcap_test_filters']['vcap_report_tabs'] );
 $a4_reports_src = (string) file_get_contents( dirname( __DIR__ ) . '/src/Admin/ReportsAdmin.php' );
-check( 'A4: vcap_report_tabs adds an add-on report tab; core views cannot be renamed and "reconcile" only appears with WP Pass Captain', 'Wallet passes' === ( $a4_tabs['wallet'] ?? '' ) && 'Redemption journal' === $a4_tabs['journal'] && ( VCAP\Compat\PassCaptainReconcile::available() || ! isset( $a4_tabs['reconcile'] ) ) && ! isset( $a4_tabs[''] ) && 'overview' === array_key_first( $a4_tabs ), var_export( $a4_tabs, true ) );
+check( 'A4: vcap_report_tabs adds an add-on report tab; core views cannot be renamed and "reconcile" only appears with Pass Captain', 'Wallet passes' === ( $a4_tabs['wallet'] ?? '' ) && 'Redemption journal' === $a4_tabs['journal'] && ( VCAP\Compat\PassCaptainReconcile::available() || ! isset( $a4_tabs['reconcile'] ) ) && ! isset( $a4_tabs[''] ) && 'overview' === array_key_first( $a4_tabs ), var_export( $a4_tabs, true ) );
 check( 'A4: the page of an add-on report view is printed by vcap_report_page after the capability check', str_contains( $a4_reports_src, "do_action( 'vcap_report_page', \$view );" ) && strpos( $a4_reports_src, 'current_user_can( Menu::cap() )' ) < strpos( $a4_reports_src, "do_action( 'vcap_report_page'" ) );
 
 // A4: every hook of API.md → "Extension points for add-ons" is called in the code and listed in docs/HOOKS.md with
 // a description; issue_standalone() is public and fires its action.
 $a4_api   = (string) file_get_contents( dirname( __DIR__ ) . '/API.md' );
-$a4_part  = (string) strstr( (string) strstr( $a4_api, '## Extension points for add-ons' ), '## WP Pass Captain', true );
+$a4_part  = (string) strstr( (string) strstr( $a4_api, '## Extension points for add-ons' ), '## Pass Captain', true );
 $a4_hooks = (string) file_get_contents( dirname( __DIR__ ) . '/docs/HOOKS.md' );
 $a4_code  = '';
 foreach ( new RecursiveIteratorIterator( new RecursiveDirectoryIterator( dirname( __DIR__ ) . '/src', FilesystemIterator::SKIP_DOTS ) ) as $a4_file ) {
@@ -2945,7 +2945,7 @@ foreach ( $r16_rows as $r16_row ) {
 check( 'R16-13: every hook in docs/HOOKS.md names its first plugin version, none later than this version', count( $r16_rows ) > 200 && array() === $r16_no_since, implode( ', ', $r16_no_since ) );
 $r16_addon = array( 'vcap_admin_menu' => '1.2.0', 'vcap_settings_sections' => '1.2.0', 'vcap_settings_fields' => '1.0.0', 'vcap_template_design' => '1.0.0', 'vcap_report_tabs' => '1.2.0', 'vcap_report_page' => '1.2.0', 'vcap_report_group' => '1.1.0', 'vcap_voucher_links' => '1.2.0', 'vcap_voucher_event' => '1.0.0', 'vcap_voucher_issued_standalone' => '1.2.0', 'vcap_voucher_redeemed' => '1.1.0' );
 // The "Since" cells of API.md → "Extension points for add-ons" agree with the generated reference.
-$r16_api = (string) strstr( (string) strstr( (string) file_get_contents( $r16_root . '/API.md' ), '## Extension points for add-ons' ), '## WP Pass Captain', true );
+$r16_api = (string) strstr( (string) strstr( (string) file_get_contents( $r16_root . '/API.md' ), '## Extension points for add-ons' ), '## Pass Captain', true );
 $r16_api_wrong = array();
 foreach ( explode( "\n", $r16_api ) as $r16_line ) {
 	$r16_cells = explode( ' | ', $r16_line );

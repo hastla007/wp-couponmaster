@@ -74,7 +74,7 @@ final class Scanner {
 					'ticketType' => __( 'Ticket type', 'voucher-captain' ),
 					'date'       => __( 'Date', 'voucher-captain' ),
 					'attendee'   => __( 'Attendee', 'voucher-captain' ),
-					'passCaptainCheckins' => __( 'Check-ins in WP Pass Captain', 'voucher-captain' ),
+					'passCaptainCheckins' => __( 'Check-ins in Pass Captain', 'voucher-captain' ),
 					'confirmUndo' => __( 'Revert this check-in? The ticket can then be used for entry again.', 'voucher-captain' ),
 					'booked'      => __( 'Deducted', 'voucher-captain' ),
 					'uncovered'   => __( 'Still to be paid', 'voucher-captain' ),
@@ -128,7 +128,7 @@ final class Scanner {
 			</h1>
 			<p class="description"><?php esc_html_e( 'Scan ticket or voucher QR codes with the camera of this device, a USB/Bluetooth barcode scanner, or type a code.', 'voucher-captain' ); ?></p>
 			<?php if ( \VCAP\Compat\PassCaptainScanner::service() ) : ?>
-				<p class="description"><?php esc_html_e( 'Shared scanner: WP Pass Captain tickets are recognised too and checked in at Pass Captain (needs the Pass Captain check-in permission). Voucher codes are always looked up in Voucher Captain first.', 'voucher-captain' ); ?></p>
+				<p class="description"><?php esc_html_e( 'Shared scanner: Pass Captain tickets are recognised too and checked in at Pass Captain (needs the Pass Captain check-in permission). Voucher codes are always looked up in Voucher Captain first.', 'voucher-captain' ); ?></p>
 			<?php endif; ?>
 			<div class="vcap-scanner">
 				<div class="vcap-scanner-video">

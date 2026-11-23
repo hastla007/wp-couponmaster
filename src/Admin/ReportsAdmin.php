@@ -446,7 +446,7 @@ final class ReportsAdmin {
 		<?php
 	}
 
-	/** Differences between Voucher Captain's redemptions and WP Pass Captain's orders. */
+	/** Differences between Voucher Captain's redemptions and Pass Captain's orders. */
 	private function reconcile_page(): void {
 		$result = ( new \VCAP\Compat\PassCaptainReconcile( vcap()->redemptions ) )->run();
 		$kinds  = array(
@@ -466,12 +466,12 @@ final class ReportsAdmin {
 			endif;
 			?>
 			<?php if ( 'table' === ( $result['source'] ?? '' ) ) : ?>
-				<div class="notice notice-warning inline"><p><?php esc_html_e( 'This version of WP Pass Captain has no reconciliation interface yet, so its order table is read directly as a fallback. Please update WP Pass Captain.', 'voucher-captain' ); ?></p></div>
+				<div class="notice notice-warning inline"><p><?php esc_html_e( 'This version of Pass Captain has no reconciliation interface yet, so its order table is read directly as a fallback. Please update Pass Captain.', 'voucher-captain' ); ?></p></div>
 			<?php endif; ?>
 			<p class="description">
 				<?php
 				/* translators: %d: number of Pass Captain orders checked */
-				echo esc_html( sprintf( __( 'Compares the vouchers used in WP Pass Captain (ticket checkout and ticket vouchers) with the redemptions in Voucher Captain: state, amount and refunds. %d Pass Captain orders checked; only differences are listed, nothing is changed.', 'voucher-captain' ), (int) $result['checked'] ) );
+				echo esc_html( sprintf( __( 'Compares the vouchers used in Pass Captain (ticket checkout and ticket vouchers) with the redemptions in Voucher Captain: state, amount and refunds. %d Pass Captain orders checked; only differences are listed, nothing is changed.', 'voucher-captain' ), (int) $result['checked'] ) );
 				?>
 			</p>
 			<table class="widefat striped">

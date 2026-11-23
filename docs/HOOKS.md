@@ -18,7 +18,7 @@ with a public API contract, the contract starts with 1.1.0). Add-ons check the c
 | `vcap_admin_menu` | 1.2.0 | `src/Admin/Menu.php` | The plugin's admin menu is registered (arg: parent slug "vcap-vouchers"): add-ons add their submenu pages with add_submenu_page( $parent_slug, … ) here (before "Settings", which is added last). |
 | `vcap_affiliate_campaign_partner_changed` | 1.1.0 | `src/Compat/AffiliateCaptain.php` | Fires after the partner of a voucher campaign was changed (for audit logs). |
 | `vcap_before_fields` | 1.0.0 | `src/Fields.php` | – |
-| `vcap_campaigns_table_cell` | 1.1.0 | `src/Admin/CampaignAdmin.php` | Extra cells of the campaign table (e.g. the partner of WP Affiliate Captain). |
+| `vcap_campaigns_table_cell` | 1.1.0 | `src/Admin/CampaignAdmin.php` | Extra cells of the campaign table (e.g. the partner of Affiliate Captain). |
 | `vcap_campaigns_table_header` | 1.1.0 | `src/Admin/CampaignAdmin.php` | – |
 | `vcap_card_moved_to_credit` | 1.2.0 | `src/CardToCredit.php` | A gift card was moved into a customer's store credit (args: card Voucher, user id, amount). |
 | `vcap_form_captain_request_approved` | 1.3.0 | `src/Integrations/FormCaptain/RequestService.php` | A voucher request from Form Captain was approved and its vouchers issued. |

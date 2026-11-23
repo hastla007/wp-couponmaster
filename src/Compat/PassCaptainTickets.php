@@ -8,7 +8,7 @@ use VCAP\VoucherRepository;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Ticket vouchers for WP Pass Captain: a voucher product can name a Pass Captain ticket type ("Concert X,
+ * Ticket vouchers for Pass Captain: a voucher product can name a Pass Captain ticket type ("Concert X,
  * 2 tickets"). The sold voucher is exchanged for those tickets – on the redeem page ([vcap_redeem]), by an
  * admin (voucher page) or by code (vcap()->passcaptain_tickets->exchange()).
  *

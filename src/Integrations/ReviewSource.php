@@ -1,6 +1,6 @@
 <?php
 /**
- * Captain Suite: review source for WP Review Captain (contract v1).
+ * Captain Suite: review source for Review Captain (contract v1).
  *
  * @package VCAP\Integrations
  */
@@ -15,7 +15,7 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * Review source contract v1 (API.md → "Captain Suite: review source"); 1.1.0 adds `locale` to recipient(). Voucher Captain only reports that a
- * redemption confirmed a service – it never invites, emails or stores reviews; that is WP Review Captain's job.
+ * redemption confirmed a service – it never invites, emails or stores reviews; that is Review Captain's job.
  *
  * A redemption becomes a review source ("eligible") only when all of this holds:
  * - the voucher's product is marked "Redemption confirms a service" (product meta `_vcap_review_service`, default

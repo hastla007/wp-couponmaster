@@ -25,7 +25,7 @@ final class Plugin {
 	public API\V1\ReadService $read;
 	/** The four voucher commands for automatic callers: issue, void, reactivate, redeem (since 1.3.0, contract 1.3.0). */
 	public API\V1\CommandService $commands;
-	/** Exchange of ticket vouchers for WP Pass Captain tickets (works only while Pass Captain is active). */
+	/** Exchange of ticket vouchers for Pass Captain tickets (works only while Pass Captain is active). */
 	public Compat\PassCaptainTickets $passcaptain_tickets;
 	/** Captain Suite (since 1.2.0): review source contract v1 and voucher requests from forms (contract v1). */
 	public Integrations\ReviewSource $review_source;

@@ -79,10 +79,10 @@ Außerhalb der 50 Punkte, Stand Release und Lizenz:
 41. [x] Öffentlichen, versionierten PHP-Service für Gutscheinprüfung und -einlösung definieren.
 42. [x] Einlöse-Provider-Schnittstelle ohne Abhängigkeit auf interne Tabellen spezifizieren.
 43. [x] Idempotency-Key und stabile Fehlercodes für externe Connectoren festlegen.
-44. [x] Voucher Captain und WP Pass Captain (früher „Ticket Captain“) über dokumentierten, optionalen Vertrag integrieren. (Pass-Captain-Checkout, Gutschein → Ticket, gemeinsamer Scanner; Job `pass-captain`)
+44. [x] Voucher Captain und Pass Captain (früher „Ticket Captain“) über dokumentierten, optionalen Vertrag integrieren. (Pass-Captain-Checkout, Gutschein → Ticket, gemeinsamer Scanner; Job `pass-captain`)
 45. [x] Learnboating-Connector mit wiederholbarer Grant-Verarbeitung. (Gebaut als `learnboating-voucher-connector` im learnboating-Repository: eigenes, nicht verkauftes Projektprodukt mit eigener Lizenz nach Entscheidung 17 vom 16.11.2026, kein Add-on dieses Repositorys und kein Teil von Voucher Captain Pro; nutzt nur die öffentlichen Verträge, CONNECTORS.md §8. TODO.md → Connector für Learnboating.)
 46. [x] Ablauf-, Übertragbarkeits-, Restwert- und Einlösebedingungen im Kundenkonto erklären. (Kundenkonto-Tab, E-Mail, Produktseite; Bedingungen pro Land)
 47. [ ] Steuerbehandlung und Erstattungsreihenfolge je Gutscheinart mit Fachberatung spezifizieren. (Technisch umgesetzt und in TAX.md beschrieben: Steuerbehandlung je Produkt, Einstellung „Mehrzweckgutscheine als Zahlung“; offen: Freigabe durch die Steuerberatung.)
 48. [ ] Übersetzungen, Tastaturbedienung und Screenreader-Flows für Kauf und Einlösung prüfen. (Tastatur und axe automatisiert in `browser-e2e`; Übersetzung de_DE/de_AT vollständig geprüft in `smoke`, de_DE_formal/de_CH fallen auf de_DE zurück; offen: echter Screenreader)
 49. [x] Release-ZIP in sauberer WordPress-Installation installieren, aktualisieren und deinstallieren.
-50. [x] Abnahme von VCAP allein, WP Pass Captain allein und beiden Plugins gemeinsam als Release-Gate einführen.
+50. [x] Abnahme von VCAP allein, Pass Captain allein und beiden Plugins gemeinsam als Release-Gate einführen.

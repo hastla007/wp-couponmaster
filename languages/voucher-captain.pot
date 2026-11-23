@@ -6,7 +6,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-23 09:17+0000\n"
+"POT-Creation-Date: 2026-11-23 09:21+0000\n"
 "X-Domain: voucher-captain\n"
 
 #. Plugin Name of the plugin
@@ -21,7 +21,7 @@ msgstr ""
 
 #. Description of the plugin
 #: voucher-captain.php
-msgid "Sell personalised PDF vouchers, gift cards and store credit with WooCommerce: visual PDF designer, recipient fields, scheduled delivery, balance-tracked gift cards, code import and redemption in the shop, by API or in WP Pass Captain."
+msgid "Sell personalised PDF vouchers, gift cards and store credit with WooCommerce: visual PDF designer, recipient fields, scheduled delivery, balance-tracked gift cards, code import and redemption in the shop, by API or in Pass Captain."
 msgstr ""
 
 #. Author of the plugin
@@ -1038,11 +1038,11 @@ msgid "Scanner"
 msgstr ""
 
 #: src/Admin/Menu.php:56 src/Diagnostics.php:49
-msgid "WP Pass Captain"
+msgid "Pass Captain"
 msgstr ""
 
 #: src/Admin/Menu.php:56
-msgid "WP Pass Captain ↗"
+msgid "Pass Captain ↗"
 msgstr ""
 
 #: src/Admin/Menu.php:66 src/Admin/Menu.php:66 src/Plugin.php:232 src/Shortcodes.php:74
@@ -1558,13 +1558,13 @@ msgid "Without order"
 msgstr ""
 
 #: src/Admin/ReportsAdmin.php:469
-msgid "This version of WP Pass Captain has no reconciliation interface yet, so its order table is read directly as a fallback. Please update WP Pass Captain."
+msgid "This version of Pass Captain has no reconciliation interface yet, so its order table is read directly as a fallback. Please update Pass Captain."
 msgstr ""
 
 #. translators: %d: number of Pass Captain orders checked
 #: src/Admin/ReportsAdmin.php:474
 #, php-format
-msgid "Compares the vouchers used in WP Pass Captain (ticket checkout and ticket vouchers) with the redemptions in Voucher Captain: state, amount and refunds. %d Pass Captain orders checked; only differences are listed, nothing is changed."
+msgid "Compares the vouchers used in Pass Captain (ticket checkout and ticket vouchers) with the redemptions in Voucher Captain: state, amount and refunds. %d Pass Captain orders checked; only differences are listed, nothing is changed."
 msgstr ""
 
 #: src/Admin/ReportsAdmin.php:479
@@ -1712,7 +1712,7 @@ msgid "Attendee"
 msgstr ""
 
 #: src/Admin/Scanner.php:77
-msgid "Check-ins in WP Pass Captain"
+msgid "Check-ins in Pass Captain"
 msgstr ""
 
 #: src/Admin/Scanner.php:78
@@ -1848,7 +1848,7 @@ msgid "Scan ticket or voucher QR codes with the camera of this device, a USB/Blu
 msgstr ""
 
 #: src/Admin/Scanner.php:131
-msgid "Shared scanner: WP Pass Captain tickets are recognised too and checked in at Pass Captain (needs the Pass Captain check-in permission). Voucher codes are always looked up in Voucher Captain first."
+msgid "Shared scanner: Pass Captain tickets are recognised too and checked in at Pass Captain (needs the Pass Captain check-in permission). Voucher codes are always looked up in Voucher Captain first."
 msgstr ""
 
 #: src/Admin/Scanner.php:135
@@ -2100,7 +2100,7 @@ msgid "Open scanner"
 msgstr ""
 
 #: src/Admin/VoucherAdmin.php:130
-msgid "Void the selected vouchers? They can no longer be redeemed; tickets they were exchanged for in WP Pass Captain are revoked and not reissued when a voucher is reactivated."
+msgid "Void the selected vouchers? They can no longer be redeemed; tickets they were exchanged for in Pass Captain are revoked and not reissued when a voucher is reactivated."
 msgstr ""
 
 #: src/Admin/VoucherAdmin.php:139
@@ -2108,7 +2108,7 @@ msgid "Search code, email, name, order"
 msgstr ""
 
 #: src/Admin/VoucherAdmin.php:155
-msgid "Void this voucher? It can no longer be redeemed; tickets it was exchanged for in WP Pass Captain are revoked."
+msgid "Void this voucher? It can no longer be redeemed; tickets it was exchanged for in Pass Captain are revoked."
 msgstr ""
 
 #. translators: %s: voucher code
@@ -3264,7 +3264,7 @@ msgstr ""
 #. translators: %s: campaign name
 #: src/Compat/AffiliateCaptain.php:99
 #, php-format
-msgid "The campaign \"%s\" is assigned to a partner in WP Affiliate Captain: its codes earn that partner commission. Generating more codes under this name needs the right to manage affiliates. No codes were generated."
+msgid "The campaign \"%s\" is assigned to a partner in Affiliate Captain: its codes earn that partner commission. Generating more codes under this name needs the right to manage affiliates. No codes were generated."
 msgstr ""
 
 #: src/Compat/AffiliateCaptain.php:170
@@ -3272,11 +3272,11 @@ msgid "Unknown campaign."
 msgstr ""
 
 #: src/Compat/AffiliateCaptain.php:177
-msgid "This partner code is unknown or not active in WP Affiliate Captain."
+msgid "This partner code is unknown or not active in Affiliate Captain."
 msgstr ""
 
 #: src/Compat/AffiliateCaptain.php:237
-msgid "Partner (WP Affiliate Captain)"
+msgid "Partner (Affiliate Captain)"
 msgstr ""
 
 #: src/Compat/AffiliateCaptain.php:252 src/Compat/AffiliateCaptain.php:253
@@ -3312,7 +3312,7 @@ msgid "Not active – vouchers in the ticket checkout, ticket vouchers and the s
 msgstr ""
 
 #: src/Compat/PassCaptain.php:69
-msgid "Vouchers and gift cards pay in the ticket checkout (contract v1; tick \"WP Pass Captain\" under \"Redeemable via\" or leave all channels unticked)."
+msgid "Vouchers and gift cards pay in the ticket checkout (contract v1; tick \"Pass Captain\" under \"Redeemable via\" or leave all channels unticked)."
 msgstr ""
 
 #: src/Compat/PassCaptain.php:70
@@ -3320,7 +3320,7 @@ msgid "Ticket vouchers: choose a ticket type or event in the product's voucher s
 msgstr ""
 
 #: src/Compat/PassCaptain.php:70
-msgid "Ticket vouchers: not available – update WP Pass Captain."
+msgid "Ticket vouchers: not available – update Pass Captain."
 msgstr ""
 
 #: src/Compat/PassCaptain.php:71
@@ -3328,7 +3328,7 @@ msgid "Shared scanner: Vouchers → Scanner also checks in Pass Captain tickets.
 msgstr ""
 
 #: src/Compat/PassCaptain.php:71
-msgid "Shared scanner: not available – update WP Pass Captain."
+msgid "Shared scanner: not available – update Pass Captain."
 msgstr ""
 
 #: src/Compat/PassCaptain.php:72
@@ -3336,7 +3336,7 @@ msgid "Gift card shortfall: tickets of the shop order wait for the review."
 msgstr ""
 
 #: src/Compat/PassCaptain.php:72
-msgid "Gift card shortfall: this WP Pass Captain issues tickets anyway – update it."
+msgid "Gift card shortfall: this Pass Captain issues tickets anyway – update it."
 msgstr ""
 
 #. translators: %s: version
@@ -3346,11 +3346,11 @@ msgid "Active (version %s)"
 msgstr ""
 
 #: src/Compat/PassCaptain.php:80
-msgid "Open WP Pass Captain"
+msgid "Open Pass Captain"
 msgstr ""
 
 #: src/Compat/PassCaptain.php:86
-msgid "WP Pass Captain (ticket checkout)"
+msgid "Pass Captain (ticket checkout)"
 msgstr ""
 
 #. translators: %s: URL of the voucher redemption page
@@ -3514,7 +3514,7 @@ msgstr[0] ""
 msgstr[1] ""
 
 #: src/Compat/PassCaptain/ProductSetup.php:21
-msgid "Tip: the voucher type \"Ticket\" is a simple admission pass without dates or capacity, checked in at Voucher Captain. For events with dates, capacity and admission rules, create them in WP Pass Captain and use a voucher with \"WP Pass Captain ticket\" below (or sell Pass Captain tickets directly)."
+msgid "Tip: the voucher type \"Ticket\" is a simple admission pass without dates or capacity, checked in at Voucher Captain. For events with dates, capacity and admission rules, create them in Pass Captain and use a voucher with \"Pass Captain ticket\" below (or sell Pass Captain tickets directly)."
 msgstr ""
 
 #: src/Compat/PassCaptain/ProductSetup.php:25
@@ -3546,7 +3546,7 @@ msgid "Ticket type #%d (no longer on sale)"
 msgstr ""
 
 #: src/Compat/PassCaptain/ProductSetup.php:47 src/Compat/PassCaptainScanner.php:77
-msgid "WP Pass Captain ticket"
+msgid "Pass Captain ticket"
 msgstr ""
 
 #: src/Compat/PassCaptain/ProductSetup.php:51
@@ -3652,11 +3652,11 @@ msgid "The customer could not be told that the voucher is valid again."
 msgstr ""
 
 #: src/Compat/PassCaptain/Revocation.php:118 src/Compat/PassCaptainReconcile.php:67
-msgid "WP Pass Captain is not active."
+msgid "Pass Captain is not active."
 msgstr ""
 
 #: src/Compat/PassCaptain/TicketAdmin.php:32
-msgid "WP Pass Captain tickets could not be cancelled or a voucher could not be given back. The customer may hold valid tickets while the voucher is free again (or the other way round). Check these vouchers and their history:"
+msgid "Pass Captain tickets could not be cancelled or a voucher could not be given back. The customer may hold valid tickets while the voucher is free again (or the other way round). Check these vouchers and their history:"
 msgstr ""
 
 #: src/Compat/PassCaptain/TicketAdmin.php:47
@@ -3676,7 +3676,7 @@ msgid "Undo exchange (e.g. to change the date)"
 msgstr ""
 
 #: src/Compat/PassCaptain/TicketAdmin.php:69
-msgid "Undo the exchange? Its tickets are cancelled in WP Pass Captain and the voucher becomes valid again, so it can be exchanged for another date."
+msgid "Undo the exchange? Its tickets are cancelled in Pass Captain and the voucher becomes valid again, so it can be exchanged for another date."
 msgstr ""
 
 #: src/Compat/PassCaptain/TicketAdmin.php:136
@@ -3688,7 +3688,7 @@ msgid "The exchange could not be undone completely: tickets that were already ch
 msgstr ""
 
 #: src/Compat/PassCaptain/TicketAdmin.php:168
-msgid "Tickets issued in WP Pass Captain and sent by email."
+msgid "Tickets issued in Pass Captain and sent by email."
 msgstr ""
 
 #: src/Compat/PassCaptain/TicketAdmin.php:169
@@ -3778,13 +3778,13 @@ msgid "This voucher reservation was already released. Please apply the voucher a
 msgstr ""
 
 #: src/Compat/PassCaptainReconcile.php:81
-msgid "This version of WP Pass Captain does not provide the order data needed for the reconciliation."
+msgid "This version of Pass Captain does not provide the order data needed for the reconciliation."
 msgstr ""
 
 #. translators: %s: missing columns
 #: src/Compat/PassCaptainReconcile.php:87
 #, php-format
-msgid "This version of WP Pass Captain stores its orders differently (missing: %s); the reconciliation is not available."
+msgid "This version of Pass Captain stores its orders differently (missing: %s); the reconciliation is not available."
 msgstr ""
 
 #: src/Compat/PassCaptainReconcile.php:191
@@ -4366,7 +4366,7 @@ msgid "Voucher %1$s: %2$s deducted, remaining balance %3$s."
 msgstr ""
 
 #: src/Coupons/Settlement.php:205
-msgid "Gift card shortfall: the installed WP Pass Captain cannot hold ticket issuance. If this order contains tickets, check them – and update WP Pass Captain."
+msgid "Gift card shortfall: the installed Pass Captain cannot hold ticket issuance. If this order contains tickets, check them – and update Pass Captain."
 msgstr ""
 
 #. translators: %s: order number
@@ -8074,7 +8074,7 @@ msgid "When a voucher is redeemed outside the shop checkout, for example by a bo
 msgstr ""
 
 #: src/Privacy.php:488
-msgid "Tickets: when you exchange a ticket voucher for tickets or pay for tickets with a gift card, the voucher code, the amount, your name and email address and the attendee names you enter are passed to the ticket system on this website (WP Pass Captain), which issues and sends the tickets. Its privacy information applies to the tickets."
+msgid "Tickets: when you exchange a ticket voucher for tickets or pay for tickets with a gift card, the voucher code, the amount, your name and email address and the attendee names you enter are passed to the ticket system on this website (Pass Captain), which issues and sends the tickets. Its privacy information applies to the tickets."
 msgstr ""
 
 #: src/Privacy.php:489
@@ -8416,7 +8416,7 @@ msgid "Single-purpose voucher (VAT already charged at sale)"
 msgstr ""
 
 #: src/ProductSettings.php:288
-msgid "How the voucher is treated for VAT when it is redeemed: by the shop with the setting \"Multi-purpose vouchers as payment\" (multi-purpose vouchers with \"Fixed cart discount\" then pay after tax and the full VAT stays; single-purpose vouchers and promotions keep lowering price and VAT) and by connected checkouts (e.g. WP Pass Captain). Have the classification checked by your tax adviser."
+msgid "How the voucher is treated for VAT when it is redeemed: by the shop with the setting \"Multi-purpose vouchers as payment\" (multi-purpose vouchers with \"Fixed cart discount\" then pay after tax and the full VAT stays; single-purpose vouchers and promotions keep lowering price and VAT) and by connected checkouts (e.g. Pass Captain). Have the classification checked by your tax adviser."
 msgstr ""
 
 #: src/ProductSettings.php:308
@@ -8500,7 +8500,7 @@ msgid "Redemption confirms a service (for review invitations)"
 msgstr ""
 
 #: src/ProductSettings.php:404
-msgid "For experience or service vouchers: a redemption at the counter then confirms that the service was provided, and a review plugin (e.g. WP Review Captain) may invite the customer afterwards. Voucher Captain sends no invitation itself. Purchases, issuing, top-ups, discount codes and store credit never count."
+msgid "For experience or service vouchers: a redemption at the counter then confirms that the service was provided, and a review plugin (e.g. Review Captain) may invite the customer afterwards. Voucher Captain sends no invitation itself. Purchases, issuing, top-ups, discount codes and store credit never count."
 msgstr ""
 
 #: src/ProductSettings.php:414
@@ -9074,7 +9074,7 @@ msgid "Number of invalid codes a user may enter within 15 minutes before further
 msgstr ""
 
 #: src/Settings.php:458
-msgid "WP Pass Captain (tickets)"
+msgid "Pass Captain (tickets)"
 msgstr ""
 
 #: src/Settings.php:465

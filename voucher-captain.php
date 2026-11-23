@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Voucher Captain
  * Plugin URI:        https://github.com/hastla007/wp-couponmaster
- * Description:       Sell personalised PDF vouchers, gift cards and store credit with WooCommerce: visual PDF designer, recipient fields, scheduled delivery, balance-tracked gift cards, code import and redemption in the shop, by API or in WP Pass Captain.
+ * Description:       Sell personalised PDF vouchers, gift cards and store credit with WooCommerce: visual PDF designer, recipient fields, scheduled delivery, balance-tracked gift cards, code import and redemption in the shop, by API or in Pass Captain.
  * Version:           1.3.0
  * Requires at least: 7.0
  * Requires PHP:      8.5

@@ -61,8 +61,8 @@ Stand 1.3.0 (Schema 1.8.0), abgeleitet aus `src/` und readme.txt. Alles in diese
 | Code-Import & Code-Kampagnen | CSV/XLS/XLSX/ODS mit Batches, Formatprüfung und Duplikaterkennung; Kampagnen aus Vorlage-Coupon oder Code-Pool mit CSV-Export; Hintergrundläufe für große Mengen |
 | Berichte & Journal | Übersicht, Kampagnen und Codes (Partner, Aktionen, Bonus), offener Gutscheinwert zum Stichtag, Einlösejournal (CSV, DATEV-Buchungsstapel), Kassen und Personal, Pass-Captain-Abgleich |
 | Einlöse-API & Connectoren | `vcap()->api_v1`, `vcap()->redemptions` (Reservieren, Buchen, Freigeben, Erstatten mit Idempotenzschlüssel), REST `vcap/v1`, Einlösewege (Kanäle), Provider-Vertrag `VCAP\Contracts\RedemptionProvider`, Beispiel-Connector |
-| WP Pass Captain | Bezahlen von Tickets mit Gutscheinen in der Pass-Captain-Kasse, Ticketgutscheine (fester Termin oder Wahltermin) mit Tausch auf der Einlöseseite, gemeinsamer Scanner, Rücknahme bei Storno, Abgleichbericht |
-| WP Affiliate Captain | Code-Kampagnen einem Partner zuordnen (Provision über `wpac_coupon_affiliate`), Partnerspalte in den Kampagnen |
+| Pass Captain | Bezahlen von Tickets mit Gutscheinen in der Pass-Captain-Kasse, Ticketgutscheine (fester Termin oder Wahltermin) mit Tausch auf der Einlöseseite, gemeinsamer Scanner, Rücknahme bei Storno, Abgleichbericht |
+| Affiliate Captain | Code-Kampagnen einem Partner zuordnen (Provision über `wpac_coupon_affiliate`), Partnerspalte in den Kampagnen |
 | Steuer & Recht | Steuerbehandlung je Gutscheinart (Einzweck/Mehrzweck/Aktion), Einzweckgutscheine nur für passende Steuersätze, gesetzliche Gültigkeit je Land (EU-Marktdaten), Bedingungen je Land, Steuerprüfung der Produkte |
 | Kompatibilität | HPOS und klassische Bestellspeicherung, Block-Warenkorb/-Kasse, WPML/WCML, Polylang, Mehrwährung (WCML, Aelia, WOOCS, CURCY, WooPayments), Flexible Product/Checkout Fields, Cache-Plugins, Multisite (Netzwerkaktivierung, Deinstallation je Site) |
 | Shortcodes & Blöcke | `[vcap_balance]`/`[vcap_voucher_status]`, `[vcap_redeem]`, `[vcap_my_vouchers]`, `[vcap_referral]` und die passenden Blöcke |

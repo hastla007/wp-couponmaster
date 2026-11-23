@@ -47,7 +47,7 @@ add_filter( 'vcap_redemption_providers', function( array $providers, string $cod
 }, 10, 3 );
 ```
 
-Register a provider only when its external system is available. This hook defines the integration seam; it does not itself install or activate a WP Pass Captain connector. A real cross-plugin adapter still needs a shared contract version and a two-plugin integration test.
+Register a provider only when its external system is available. This hook defines the integration seam; it does not itself install or activate a Pass Captain connector. A real cross-plugin adapter still needs a shared contract version and a two-plugin integration test.
 
 ## External redemptions (since 1.1.0)
 
@@ -426,12 +426,12 @@ None of them checks the current user: the connector decides who may see or trigg
 
 ## Captain Suite (since 1.2.0)
 
-Two in-process PHP contracts for the separate plugins WP Review Captain and WP Form Captain. Both are versioned
+Two in-process PHP contracts for the separate plugins Review Captain and Form Captain. Both are versioned
 (`CONTRACT`: review source `1.1.0`, voucher requests `1.0.0`; a consumer checks the major version), carry no personal data in events, are idempotent and
 never touch the other plugin's tables. Voucher Captain stays the only owner of codes, values, issuing, redemption,
 refunds and voucher personal data.
 
-### Review source (WP Review Captain), contract v1
+### Review source (Review Captain), contract v1
 
 `$source = apply_filters( 'vcap_review_source_v1', null )` returns `VCAP\Integrations\ReviewSource` (also
 `vcap()->review_source`). Voucher Captain only reports that a redemption **confirmed a service**; invitations,
@@ -495,7 +495,7 @@ add_action( 'vcap_review_redemption_revoked', fn( array $p ) => my_review_queue_
 $to = apply_filters( 'vcap_review_source_v1', null )?->recipient( $reference );
 ```
 
-### Voucher requests from forms (WP Form Captain), contract v1
+### Voucher requests from forms (Form Captain), contract v1
 
 `$requests = apply_filters( 'vcap_voucher_request_service_v1', null )` returns `VCAP\Integrations\VoucherRequests`
 (also `vcap()->voucher_requests`). A form plugin hands over what the visitor entered; Voucher Captain stores a
@@ -615,13 +615,13 @@ called in the code and listed in docs/HOOKS.md, the generated reference with eac
 The core makes no request to a license or update server and needs no add-on (tests/license-guard.php, readme.txt →
 External services). An add-on never locks or moves a core feature (docs/FREE-PREMIUM.md).
 
-## WP Pass Captain
+## Pass Captain
 
-When WP Pass Captain is active, Voucher Captain registers itself as its voucher provider (`wp_pass_captain_voucher_provider_v1`, contract version 1): vouchers and gift cards can pay for tickets in Pass Captain's own checkout. Quote, reserve, commit, release and refund map to the redemption API (target `passcaptain:{order reference}`, channel `passcaptain` – tick it under *Redeemable via*, or leave all channels unticked). Amounts are converted between Pass Captain's minor units and the voucher currency; vouchers in another currency are refused. Ticket refunds give the voucher share back proportionally. Checked in CI with both plugins installed (`tests/passcaptain-integration.php`).
+When Pass Captain is active, Voucher Captain registers itself as its voucher provider (`wp_pass_captain_voucher_provider_v1`, contract version 1): vouchers and gift cards can pay for tickets in Pass Captain's own checkout. Quote, reserve, commit, release and refund map to the redemption API (target `passcaptain:{order reference}`, channel `passcaptain` – tick it under *Redeemable via*, or leave all channels unticked). Amounts are converted between Pass Captain's minor units and the voucher currency; vouchers in another currency are refused. Ticket refunds give the voucher share back proportionally. Checked in CI with both plugins installed (`tests/passcaptain-integration.php`).
 
 ### Ticket vouchers (voucher → Pass Captain tickets)
 
-A voucher product can name a Pass Captain ticket type – a fixed date – or a whole event, where the customer chooses one of its upcoming dates (*WP Pass Captain ticket*: "Fixed date: …" or "Customer chooses the date: …"; optional *Ticket name (date choice)* to offer only ticket types with that name; *Tickets per voucher* in the product's voucher settings; shown while Pass Captain ≥ the version with `wp_pass_captain_ticket_service_v1` is active). Each sold voucher stores that target with its order line (`_vcap_line` → `passcaptain_ticket`) and is exchanged for the tickets:
+A voucher product can name a Pass Captain ticket type – a fixed date – or a whole event, where the customer chooses one of its upcoming dates (*Pass Captain ticket*: "Fixed date: …" or "Customer chooses the date: …"; optional *Ticket name (date choice)* to offer only ticket types with that name; *Tickets per voucher* in the product's voucher settings; shown while Pass Captain ≥ the version with `wp_pass_captain_ticket_service_v1` is active). Each sold voucher stores that target with its order line (`_vcap_line` → `passcaptain_ticket`) and is exchanged for the tickets:
 
 - **Customer:** entering the code on the redeem page (`[vcap_redeem]`) exchanges it instead of applying it to the cart. Tickets go to the logged-in customer, else to the voucher's recipient (or buyer). For an event voucher the form asks for the date first (select of upcoming dates).
 - **Admin:** *Exchange for tickets* on the voucher page (with a date select for event vouchers).

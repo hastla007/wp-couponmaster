@@ -1,6 +1,6 @@
 <?php
 /**
- * Captain Suite contracts against a real WordPress/WooCommerce (WP Form Captain and WP Review Captain are not
+ * Captain Suite contracts against a real WordPress/WooCommerce (Form Captain and Review Captain are not
  * needed: the test plays their part through the documented hooks and services):
  * - review source v1: counter redemption of a service voucher → eligible (once), cancellation → revoked; external
  *   redemption for a registered target → eligible, refund → revoked; no listener (missing connector) → nothing;

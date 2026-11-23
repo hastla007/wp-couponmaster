@@ -1,6 +1,6 @@
 <?php
 /**
- * WP Affiliate Captain adapter (partner per code campaign). Runs with and without Affiliate Captain installed:
+ * Affiliate Captain adapter (partner per code campaign). Runs with and without Affiliate Captain installed:
  * without it, the two contract functions are stubbed deterministically.
  *   wp eval-file tests/affiliate-captain-integration.php
  */
@@ -66,7 +66,7 @@ if ( ! $had_cap ) {
 	ob_start();
 	$admin->page();
 	$html = ob_get_clean();
-	vcap_aff_assert( str_contains( $html, 'Partner (WP Affiliate Captain)' ) && str_contains( $html, '<code>VCAP-TEST-PARTNER</code>' ) && ! str_contains( $html, 'value="VCAP-TEST-PARTNER"' ), 'without the Affiliate Captain capability the partner is shown read-only' );
+	vcap_aff_assert( str_contains( $html, 'Partner (Affiliate Captain)' ) && str_contains( $html, '<code>VCAP-TEST-PARTNER</code>' ) && ! str_contains( $html, 'value="VCAP-TEST-PARTNER"' ), 'without the Affiliate Captain capability the partner is shown read-only' );
 	$user->add_cap( AffiliateCaptain::CAPABILITY );
 }
 ob_start();
@@ -75,7 +75,7 @@ $html = ob_get_clean();
 if ( ! $had_cap ) {
 	$user->remove_cap( AffiliateCaptain::CAPABILITY );
 }
-vcap_aff_assert( str_contains( $html, 'Partner (WP Affiliate Captain)' ) && str_contains( $html, 'value="VCAP-TEST-PARTNER"' ), 'with the capability the campaign table shows the editable partner code' );
+vcap_aff_assert( str_contains( $html, 'Partner (Affiliate Captain)' ) && str_contains( $html, 'value="VCAP-TEST-PARTNER"' ), 'with the capability the campaign table shows the editable partner code' );
 
 $base = apply_filters( 'wpac_commission_base', 5000, array( 'product_id' => 0 ), array( 'source' => 'woocommerce' ) );
 vcap_aff_assert( 5000 === (int) $base, 'voucher sales earn commission by default' );

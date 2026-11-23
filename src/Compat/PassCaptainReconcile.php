@@ -7,7 +7,7 @@ use VCAP\Install;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Reconciliation of Voucher Captain's redemptions with WP Pass Captain's orders (same database):
+ * Reconciliation of Voucher Captain's redemptions with Pass Captain's orders (same database):
  *
  * - ticket checkout: every Pass Captain order paid (partly) by a voucher keeps a snapshot with the redemption
  *   key, amount, state and refunded share – compared with the redemption here;
@@ -64,7 +64,7 @@ final class PassCaptainReconcile {
 	 */
 	public static function unsupported_reason(): string {
 		if ( ! PassCaptain::active() ) {
-			return __( 'WP Pass Captain is not active.', 'voucher-captain' );
+			return __( 'Pass Captain is not active.', 'voucher-captain' );
 		}
 		if ( 'table' !== self::source() ) {
 			return '';
@@ -78,13 +78,13 @@ final class PassCaptainReconcile {
 		$table  = $wpdb->prefix . 'wpcap_orders';
 		$reason = '';
 		if ( $table !== $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-			$reason = __( 'This version of WP Pass Captain does not provide the order data needed for the reconciliation.', 'voucher-captain' );
+			$reason = __( 'This version of Pass Captain does not provide the order data needed for the reconciliation.', 'voucher-captain' );
 		} else {
 			$have    = array_map( 'strtolower', (array) $wpdb->get_col( $wpdb->prepare( 'SHOW COLUMNS FROM %i', $table ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$missing = array_diff( self::COLUMNS, $have );
 			if ( $missing ) {
 				/* translators: %s: missing columns */
-				$reason = sprintf( __( 'This version of WP Pass Captain stores its orders differently (missing: %s); the reconciliation is not available.', 'voucher-captain' ), implode( ', ', $missing ) );
+				$reason = sprintf( __( 'This version of Pass Captain stores its orders differently (missing: %s); the reconciliation is not available.', 'voucher-captain' ), implode( ', ', $missing ) );
 			}
 		}
 		set_transient( 'vcap_pc_reconcile_schema', array( 'schema' => $schema, 'reason' => $reason ), DAY_IN_SECONDS );

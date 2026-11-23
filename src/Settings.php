@@ -455,7 +455,7 @@ final class Settings {
 			array( 'type' => 'sectionend', 'id' => 'vcap_api' ),
 			array(
 				'type'  => 'title',
-				'title' => __( 'WP Pass Captain (tickets)', 'voucher-captain' ),
+				'title' => __( 'Pass Captain (tickets)', 'voucher-captain' ),
 				'id'    => 'vcap_passcaptain',
 				'desc'  => Compat\PassCaptain::status_html(),
 			),

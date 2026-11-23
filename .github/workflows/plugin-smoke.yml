@@ -457,7 +457,7 @@ jobs:
           $WP eval-file "$GITHUB_WORKSPACE/tests/upgrade-integration.php" verify
 
   pass-captain:
-    # Voucher Captain as voucher provider of WP Pass Captain (hastla007/wp-passmaster): a pinned release (tag commit,
+    # Voucher Captain as voucher provider of Pass Captain (hastla007/wp-passmaster): a pinned release (tag commit,
     # reproducible), released main and the current work branch. A download that fails (codeload 5xx, rate limit, ref
     # gone) fails the job for the release and main; only the work branch may be skipped, with a warning.
     runs-on: ubuntu-latest
@@ -500,7 +500,7 @@ jobs:
         run: composer install --no-interaction --prefer-dist
       - name: Download WP-CLI
         run: curl --fail --silent --show-error https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar --output wp-cli.phar
-      - name: Install WordPress, WooCommerce, WP Pass Captain and the release ZIP
+      - name: Install WordPress, WooCommerce, Pass Captain and the release ZIP
         run: |
           php wp-cli.phar core download --path=wp-test --version=7.1.4
           php wp-cli.phar config create --path=wp-test --dbname=wordpress --dbuser=root --dbpass=root --dbhost=127.0.0.1 --skip-check
@@ -508,10 +508,10 @@ jobs:
           php wp-cli.phar --path=wp-test plugin install woocommerce --version=11.3.0 --activate
           if ! curl --fail --silent --show-error --location --retry 4 --retry-all-errors --retry-delay 15 --output pass-captain.zip "https://codeload.github.com/hastla007/wp-passmaster/zip/${{ matrix.archive }}"; then
             if [ "${{ matrix.required }}" = "true" ]; then
-              echo "::error::WP Pass Captain ${{ matrix.pass_captain_ref }} could not be downloaded – the cross-plugin gate cannot pass without it (re-run the job)."
+              echo "::error::Pass Captain ${{ matrix.pass_captain_ref }} could not be downloaded – the cross-plugin gate cannot pass without it (re-run the job)."
               exit 1
             fi
-            echo "::warning::WP Pass Captain work branch ${{ matrix.pass_captain_ref }} is not available (deleted or download failed); its checks are skipped. The pinned release and main still ran."
+            echo "::warning::Pass Captain work branch ${{ matrix.pass_captain_ref }} is not available (deleted or download failed); its checks are skipped. The pinned release and main still ran."
             echo "VCAP_SKIP_PASS_CAPTAIN=1" >> "$GITHUB_ENV"
             exit 0
           fi

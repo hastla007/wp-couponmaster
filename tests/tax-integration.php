@@ -2,7 +2,7 @@
 /**
  * VAT classification of vouchers as described in TAX.md (the dossier for the tax adviser):
  * - which treatment each voucher kind gets (automatic and explicit product setting, filter),
- * - what WP Pass Captain receives in the quote (treatment / purpose),
+ * - what Pass Captain receives in the quote (treatment / purpose),
  * - what is recorded about the sale of a voucher (tax status, tax class, net and tax of the line),
  * - how WooCommerce currently taxes an order paid with a gift card (price reduction, TAX.md section 4).
  *
@@ -98,7 +98,7 @@ remove_filter( 'vcap_voucher_tax_treatment', $filter, 10 );
 
 /* ---- 3. What Pass Captain receives -------------------------------------------------------------------- */
 
-// Runs where WP Pass Captain is installed (CI job "pass-captain"); the provider implements its interface.
+// Runs where Pass Captain is installed (CI job "pass-captain"); the provider implements its interface.
 if ( interface_exists( 'PassCaptain\\Integrations\\Vouchers\\ProviderInterface' ) ) {
 	$provider = new VCAP\Compat\PassCaptainProvider( vcap()->redemptions, vcap()->vouchers );
 	$minor    = 10 ** VCAP\API\V1\RedemptionService::decimals( get_woocommerce_currency() );

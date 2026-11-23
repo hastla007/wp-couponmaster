@@ -18,7 +18,7 @@ final class ProductSetup {
 			return;
 		}
 		if ( $product instanceof \WC_Product && 'ticket' === $product->get_meta( '_vcap_type' ) ) {
-			echo '<p class="form-field vcap-passcaptain-hint"><span class="description">' . esc_html__( 'Tip: the voucher type "Ticket" is a simple admission pass without dates or capacity, checked in at Voucher Captain. For events with dates, capacity and admission rules, create them in WP Pass Captain and use a voucher with "WP Pass Captain ticket" below (or sell Pass Captain tickets directly).', 'voucher-captain' ) . '</span></p>';
+			echo '<p class="form-field vcap-passcaptain-hint"><span class="description">' . esc_html__( 'Tip: the voucher type "Ticket" is a simple admission pass without dates or capacity, checked in at Voucher Captain. For events with dates, capacity and admission rules, create them in Pass Captain and use a voucher with "Pass Captain ticket" below (or sell Pass Captain tickets directly).', 'voucher-captain' ) . '</span></p>';
 		}
 		$current = $product instanceof \WC_Product ? absint( $product->get_meta( TicketContract::META_TYPE ) ) : 0;
 		$event   = $product instanceof \WC_Product ? absint( $product->get_meta( TicketContract::META_EVENT ) ) : 0;
@@ -44,7 +44,7 @@ final class ProductSetup {
 		woocommerce_wp_select(
 			array(
 				'id'          => TicketContract::META_TYPE,
-				'label'       => __( 'WP Pass Captain ticket', 'voucher-captain' ),
+				'label'       => __( 'Pass Captain ticket', 'voucher-captain' ),
 				'options'     => $options,
 				'value'       => $event ? 'event:' . $event : ( $current ? (string) $current : '' ),
 				'desc_tip'    => true,

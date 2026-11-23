@@ -53,7 +53,7 @@ final class Menu {
 		add_submenu_page( 'vcap-vouchers', __( 'Scanner', 'voucher-captain' ), __( 'Scanner', 'voucher-captain' ), self::scan_cap(), 'vcap-scanner', array( new Scanner(), 'page' ) );
 		if ( \VCAP\Compat\PassCaptain::active() ) {
 			// Link into Pass Captain's own menu (both plugins keep their menus).
-			add_submenu_page( 'vcap-vouchers', __( 'WP Pass Captain', 'voucher-captain' ), __( 'WP Pass Captain ↗', 'voucher-captain' ), 'wpcap_checkin', 'admin.php?page=wp-pass-captain' );
+			add_submenu_page( 'vcap-vouchers', __( 'Pass Captain', 'voucher-captain' ), __( 'Pass Captain ↗', 'voucher-captain' ), 'wpcap_checkin', 'admin.php?page=wp-pass-captain' );
 		}
 		/**
 		 * The plugin's admin menu is registered (arg: parent slug "vcap-vouchers"): add-ons add their submenu pages
