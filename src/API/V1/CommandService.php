@@ -210,6 +210,41 @@ final class CommandService {
 	}
 
 	/**
+	 * Limits of the four commands as they apply now, for a display (SET-WC-15): switch, fixed ceilings, effective limits
+	 * for $currency (default: the shop currency) and today's calls per site. No codes, no personal data; per-recipient
+	 * counters are not included.
+	 *
+	 * @since 1.3.0 (contract 1.6.0)
+	 * @param string $currency ISO 4217 currency for the amount limits ('' = shop currency).
+	 * @return array{day: string, currency: string, shop_currency: string, fixed_currency: string, similar_currency: bool, commands: array<string, array{enabled: bool, fixed: array{max_amount_minor: int|null, per_day: int, per_recipient: int|null}, effective: array{per_day: int, per_recipient: int|null, max_amount_minor: int|null, amount_allowed: bool}, used_today: int, remaining_today: int}>}
+	 */
+	public function limits( string $currency = '' ): array {
+		$day      = $this->backend->today();
+		$shop     = strtoupper( (string) get_option( 'woocommerce_currency', '' ) );
+		$currency = preg_match( '/^[A-Za-z]{3}$/', $currency ) ? strtoupper( $currency ) : $shop;
+		$commands = array();
+		foreach ( CommandLimits::COMMANDS as $command ) {
+			$effective            = CommandLimits::effective( $command, $currency );
+			$used                 = $this->store->count( $day, $command );
+			$commands[ $command ] = array(
+				'enabled'         => CommandLimits::enabled( $command ),
+				'fixed'           => CommandLimits::FIXED[ $command ],
+				'effective'       => $effective,
+				'used_today'      => $used,
+				'remaining_today' => max( 0, $effective['per_day'] - $used ),
+			);
+		}
+		return array(
+			'day'              => $day,
+			'currency'         => $currency,
+			'shop_currency'    => $shop,
+			'fixed_currency'   => CommandLimits::FIXED_CURRENCY,
+			'similar_currency' => in_array( $currency, CommandLimits::SIMILAR_CURRENCIES, true ),
+			'commands'         => $commands,
+		);
+	}
+
+	/**
 	 * Runs a command by its spec name.
 	 *
 	 * @param string               $command voucher.issue, voucher.void, voucher.reactivate or voucher.redeem.

@@ -163,6 +163,12 @@ add_action( 'vcap_voucher_redeemed', function ( array $redemption ) { /* audit, 
 
 **Timing (D6).** Actions that report a change (`vcap_voucher_redeemed`, `vcap_redemption_reserved` / `_released` / `_refunded`, `vcap_voucher_updated`, `vcap_voucher_event`, `vcap_store_credit_changed` …) fire only after the database transaction that made the change was committed, exactly once, and never for a change that was rolled back; outside a transaction they fire immediately. The filters `vcap_redemption_allowed` and `vcap_redemption_target_available` decide and therefore run synchronously: `reserve()` evaluates them before it locks the voucher row (status, balance and owner are re-checked under the lock), but they can still run inside a caller's transaction – keep them fast, without remote calls or own transactions. Integrations that call the API inside their own transaction use `VCAP\Db::transaction( callable $work, string $context )` (or `Db::begin()` / `Db::commit()` / `Db::rollback_if_error()`): the call nests as a savepoint and its actions wait for the outermost COMMIT. Details: CONNECTORS.md → *Event timing*.
 
+**Journal id of credit and top-up bookings (since contract 1.7.0, VC-12).** `vcap_store_credit_changed` passes as
+7th argument and `vcap_gift_card_topped_up` as 5th argument a context array `array( 'journal_id' => int )`: the
+ledger (history) id of the booking. Two bookings of the same customer in the same second therefore stay apart, e.g.
+in a workflow event store (suite spec R-7.9a). Register the action with 7 or 5 accepted arguments to get it; existing
+listeners with fewer arguments keep working. `0` when no ledger row was written in this request.
+
 ## Issuing vouchers without an order (schema 1.8.0)
 
 `vcap()->issuer->issue_standalone( array $args )` issues one voucher without a WooCommerce order – for company orders with a list of recipients (one call per recipient), goodwill vouchers or prizes. It uses the same code generation, WooCommerce coupon, `issued` ledger entry and email delivery as a purchased voucher and returns the `VCAP\Voucher` or a `WP_Error`.
@@ -291,7 +297,7 @@ and abuse protection are enforced **here, in the core**, for every caller; no li
 plugin booted (`vcap_loaded`); check `function_exists( 'vcap_command_issue' )` or
 `version_compare( VCAP_CONTRACT_VERSION, '1.3.0', '>=' )`. The functions are thin wrappers of the service
 `vcap()->commands` (`VCAP\API\V1\CommandService`, methods `issue()`, `void()`, `reactivate()`, `redeem()`,
-`run( $command, $args )` and `protocol( $day )`).
+`run( $command, $args )`, `protocol( $day )` and `limits( $currency )`).
 
 | Function | Command | Fields besides the common ones | Capability of `authorized_by_user_id` | Since |
 |---|---|---|---|---|
@@ -338,6 +344,14 @@ the caller from workflow, workflow version, event id and step, R-8.4), `reason` 
   other currency is refused (`currency_not_allowed`) unless it is the shop currency and the operator entered an own
   *Maximum amount* there (worth no more than 100 EUR – not checked, there is no exchange rate in the core); until then
   `voucher.issue` and `voucher.redeem` are effectively off in that shop.
+- **Reading the limits** (since contract 1.6.0, SET-WC-15): `vcap_read_command_limits( string $currency = '' )`
+  (wrapper of `vcap()->commands->limits()`) returns the limits as they apply now, e.g. for a display in a workflow
+  editor: `day` (site time zone), `currency` (the given one, default the shop currency), `shop_currency`,
+  `fixed_currency` (`EUR`), `similar_currency` (CHF/USD/GBP), and per command under `commands['voucher.issue']` …:
+  `enabled`, `fixed` (the ceilings above), `effective` (`per_day`, `per_recipient`, `max_amount_minor` in minor units
+  of `currency` or null, `amount_allowed` – false when amounts in this currency are refused), `used_today` and
+  `remaining_today` (executed calls of the site today). No codes, no personal data, no per-recipient counters; null
+  before the plugin booted. Check `version_compare( VCAP_CONTRACT_VERSION, '1.6.0', '>=' )`.
 - **Atomic.** Checking, counting and executing run under one named database lock per site, so two parallel calls
   never pass a limit together (R-8.3b).
 - **Idempotent.** A second call with the same `idempotency_key` does nothing and returns the stored reply of the first

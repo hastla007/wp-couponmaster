@@ -165,8 +165,11 @@ final class StoreCredit {
 			throw $e;
 		}
 		CouponManager::sync_coupon( $fresh, array( 'amount' ) );
-		/** The store credit of a customer changed (args: user id, amount, balance after, event, reason, order id). */
-		Db::action( 'vcap_store_credit_changed', $user_id, $amount, $fresh->balance, $event, $reason, $order_id );
+		/**
+		 * The store credit of a customer changed (args: user id, amount, balance after, event, reason, order id,
+		 * context array with journal_id = ledger id of this booking (since contract 1.7.0, VC-12; register 7 args)).
+		 */
+		Db::action( 'vcap_store_credit_changed', $user_id, $amount, $fresh->balance, $event, $reason, $order_id, array( 'journal_id' => $this->repo->last_log_id( (int) $fresh->id, $event ) ) );
 		return array(
 			'balance' => $fresh->balance,
 			'amount'  => $amount,

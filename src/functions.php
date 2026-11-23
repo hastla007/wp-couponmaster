@@ -10,7 +10,7 @@
  *
  * Voucher commands (contract 1.3.0): vcap_command_issue(), vcap_command_void(), vcap_command_reactivate(),
  * vcap_command_redeem() – thin wrappers of vcap()->commands (VCAP\API\V1\CommandService); see API.md → "Voucher
- * commands".
+ * commands". vcap_read_command_limits() (contract 1.6.0) reads their limits as they apply now.
  *
  * @package VCAP
  */
@@ -168,6 +168,20 @@ if ( ! function_exists( 'vcap_command_redeem' ) ) {
 	 */
 	function vcap_command_redeem( array $args ): array {
 		return function_exists( 'vcap' ) && isset( vcap()->commands ) ? vcap()->commands->redeem( $args ) : vcap_command_unavailable( 'voucher.redeem' );
+	}
+}
+
+if ( ! function_exists( 'vcap_read_command_limits' ) ) {
+	/**
+	 * Limits of the voucher commands as they apply now (switch, fixed ceilings, effective limits for $currency, today's
+	 * calls per site), e.g. for a display in a workflow editor. No codes, no personal data.
+	 *
+	 * @since 1.3.0 (contract 1.6.0)
+	 * @param string $currency ISO 4217 currency for the amount limits ('' = shop currency).
+	 * @return array<string, mixed>|null Null before the plugin booted.
+	 */
+	function vcap_read_command_limits( string $currency = '' ): ?array {
+		return function_exists( 'vcap' ) && isset( vcap()->commands ) ? vcap()->commands->limits( $currency ) : null;
 	}
 }
 

@@ -7,6 +7,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "POT-Creation-Date: 2026-11-23 19:12+0000\n"
+"POT-Creation-Date: 2026-11-23 19:20+0000\n"
 "X-Domain: voucher-captain\n"
 
 #. Plugin Name of the plugin
@@ -1455,7 +1456,7 @@ msgid_plural "%d vouchers (goodwill, prizes, imports)"
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/Admin/ReportsAdmin.php:194 src/Admin/Scanner.php:115 src/Tickets.php:1176 src/Voucher.php:64 src/VoucherRepository.php:1140
+#: src/Admin/ReportsAdmin.php:194 src/Admin/Scanner.php:115 src/Tickets.php:1176 src/Voucher.php:64 src/VoucherRepository.php:1156
 msgid "Redeemed"
 msgstr ""
 
@@ -1475,7 +1476,7 @@ msgid_plural "%1$d vouchers with value left on %2$s"
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/Admin/ReportsAdmin.php:196 src/Ledger.php:550 src/Tickets.php:196 src/Voucher.php:65 src/VoucherRepository.php:1149
+#: src/Admin/ReportsAdmin.php:196 src/Ledger.php:550 src/Tickets.php:196 src/Voucher.php:65 src/VoucherRepository.php:1165
 msgid "Expired"
 msgstr ""
 
@@ -1575,7 +1576,7 @@ msgstr ""
 msgid "Amount"
 msgstr ""
 
-#: src/Admin/ReportsAdmin.php:328 src/Admin/StoreCreditAdmin.php:96 src/Admin/VoucherAdmin.php:356 src/Ledger.php:574 src/StoreCredit.php:617
+#: src/Admin/ReportsAdmin.php:328 src/Admin/StoreCreditAdmin.php:96 src/Admin/VoucherAdmin.php:356 src/Ledger.php:574 src/StoreCredit.php:620
 msgid "Balance after"
 msgstr ""
 
@@ -1859,7 +1860,7 @@ msgstr ""
 msgid "Request failed."
 msgstr ""
 
-#: src/Admin/Scanner.php:73 src/Admin/StoreCreditAdmin.php:96 src/Admin/VoucherAdmin.php:356 src/Privacy.php:76 src/StoreCredit.php:615
+#: src/Admin/Scanner.php:73 src/Admin/StoreCreditAdmin.php:96 src/Admin/VoucherAdmin.php:356 src/Privacy.php:76 src/StoreCredit.php:618
 msgid "Event"
 msgstr ""
 
@@ -2260,6 +2261,7 @@ msgid "You cannot add store credit to your own account. Ask a shop manager. Noth
 msgstr ""
 
 #: src/Admin/StoreCreditAdmin.php:70 src/Privacy.php:165 src/Settings.php:935 src/StoreCredit.php:605 src/Voucher.php:80
+#: src/Admin/StoreCreditAdmin.php:70 src/Privacy.php:165 src/Settings.php:832 src/StoreCredit.php:608 src/Voucher.php:80
 msgid "Store credit"
 msgstr ""
 
@@ -2517,7 +2519,7 @@ msgstr ""
 msgid "none (ticket)"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:192 src/VoucherRepository.php:1129
+#: src/Admin/VoucherAdmin.php:192 src/VoucherRepository.php:1145
 msgid "Delivered"
 msgstr ""
 
@@ -3327,7 +3329,7 @@ msgstr ""
 msgid "Buyer → recipient"
 msgstr ""
 
-#: src/Admin/VouchersListTable.php:34 src/Integrations/VoucherRequests.php:989 src/Ledger.php:550 src/VoucherRepository.php:1119
+#: src/Admin/VouchersListTable.php:34 src/Integrations/VoucherRequests.php:989 src/Ledger.php:550 src/VoucherRepository.php:1135
 msgid "Issued"
 msgstr ""
 
@@ -3560,12 +3562,12 @@ msgid "Voucher %s balance"
 msgstr ""
 
 #. translators: 1: balance, 2: link
-#: src/CartBlocks.php:131 src/StoreCredit.php:582
+#: src/CartBlocks.php:131 src/StoreCredit.php:585
 #, php-format
 msgid "You have %1$s store credit. %2$s"
 msgstr ""
 
-#: src/CartBlocks.php:132 src/StoreCredit.php:584 src/StoreCredit.php:610
+#: src/CartBlocks.php:132 src/StoreCredit.php:587 src/StoreCredit.php:613
 msgid "Use store credit"
 msgstr ""
 
@@ -4251,7 +4253,7 @@ msgstr ""
 msgid "Already checked in by this scan"
 msgstr ""
 
-#: src/Compat/PassCaptainScanner.php:97 src/Tickets.php:645 src/VoucherRepository.php:1145
+#: src/Compat/PassCaptainScanner.php:97 src/Tickets.php:645 src/VoucherRepository.php:1161
 msgid "Checked in"
 msgstr ""
 
@@ -5612,6 +5614,7 @@ msgid "This is the address the voucher is already sent to."
 msgstr ""
 
 #: src/Downloads.php:438 src/VoucherRepository.php:1156
+#: src/Downloads.php:400 src/VoucherRepository.php:1172
 msgid "Recipient corrected by the buyer"
 msgstr ""
 
@@ -10535,137 +10538,137 @@ msgstr ""
 msgid "The store credit is not sufficient."
 msgstr ""
 
-#: src/StoreCredit.php:179
+#: src/StoreCredit.php:182
 msgid "By email"
 msgstr ""
 
-#: src/StoreCredit.php:180
+#: src/StoreCredit.php:183
 msgid "By phone"
 msgstr ""
 
-#: src/StoreCredit.php:181
+#: src/StoreCredit.php:184
 msgid "In writing (letter, form)"
 msgstr ""
 
-#: src/StoreCredit.php:182
+#: src/StoreCredit.php:185
 msgid "In person"
 msgstr ""
 
-#: src/StoreCredit.php:183
+#: src/StoreCredit.php:186
 msgid "In the customer account"
 msgstr ""
 
-#: src/StoreCredit.php:206
+#: src/StoreCredit.php:209
 msgid "Another refund of this order is being recorded right now. Please reload the order and check its refunds before trying again."
 msgstr ""
 
-#: src/StoreCredit.php:211
+#: src/StoreCredit.php:214
 msgid "This refund as store credit was already submitted and recorded. Reload the order to see it."
 msgstr ""
 
 #. translators: 1: refund id, 2: amount that could not be taken back
-#: src/StoreCredit.php:313
+#: src/StoreCredit.php:316
 #, php-format
 msgid "Refund #%1$d (refunded as store credit or gift card) was deleted, but %2$s of the credit was already spent and could not be taken back. Settle it with the customer."
 msgstr ""
 
 #. translators: %s: order number
-#: src/StoreCredit.php:332
+#: src/StoreCredit.php:335
 #, php-format
 msgid "Refund of order #%s deleted"
 msgstr ""
 
 #. translators: %s: gift card code
-#: src/StoreCredit.php:339
+#: src/StoreCredit.php:342
 #, php-format
 msgid "Gift card %s of the deleted refund was voided."
 msgstr ""
 
 #. translators: %s: amount
-#: src/StoreCredit.php:351
+#: src/StoreCredit.php:354
 #, php-format
 msgid "%s of store credit taken back (the refund was deleted)."
 msgstr ""
 
-#: src/StoreCredit.php:367
+#: src/StoreCredit.php:370
 msgid "Record how the customer agreed to store credit instead of a money refund."
 msgstr ""
 
-#: src/StoreCredit.php:371
+#: src/StoreCredit.php:374
 msgid "Store credit is not enabled."
 msgstr ""
 
-#: src/StoreCredit.php:375
+#: src/StoreCredit.php:378
 msgid "Guest orders cannot be refunded as store credit."
 msgstr ""
 
-#: src/StoreCredit.php:378
+#: src/StoreCredit.php:381
 msgid "Please enter a reason and an amount up to the remaining refundable total."
 msgstr ""
 
 #. translators: 1: order currency, 2: shop base currency
-#: src/StoreCredit.php:390
+#: src/StoreCredit.php:393
 #, php-format
 msgid "This order was paid in %1$s and no exchange rate to the shop currency %2$s is known, so it cannot be refunded as store credit. Refund the money instead, or set up the exchange rate first."
 msgstr ""
 
 #. translators: %s: reason
-#: src/StoreCredit.php:433
+#: src/StoreCredit.php:436
 #, php-format
 msgid "Refunded as a gift card: %s"
 msgstr ""
 
 #. translators: %s: reason
-#: src/StoreCredit.php:435
+#: src/StoreCredit.php:438
 #, php-format
 msgid "Refunded as store credit: %s"
 msgstr ""
 
-#: src/StoreCredit.php:447
+#: src/StoreCredit.php:450
 msgid "Refund as a gift card failed"
 msgstr ""
 
-#: src/StoreCredit.php:450
+#: src/StoreCredit.php:453
 msgid "Refund as store credit failed"
 msgstr ""
 
-#: src/StoreCredit.php:452
+#: src/StoreCredit.php:455
 msgid "Store credit was added but the refund could not be recorded, and the credit could not be booked back. Please check the customer's store credit."
 msgstr ""
 
 #. translators: 1: amount, 2: gift card code
-#: src/StoreCredit.php:480
+#: src/StoreCredit.php:483
 #, php-format
 msgid "%1$s refunded as a new gift card %2$s (mailed to the customer)."
 msgstr ""
 
 #. translators: %s: amount
-#: src/StoreCredit.php:482
+#: src/StoreCredit.php:485
 #, php-format
 msgid "%s refunded as store credit."
 msgstr ""
 
 #. translators: 1: how the customer agreed (e.g. "By email"), 2: optional note
-#: src/StoreCredit.php:485
+#: src/StoreCredit.php:488
 #, php-format
 msgid "Customer consent to store credit: %1$s%2$s."
 msgstr ""
 
-#: src/StoreCredit.php:509
+#: src/StoreCredit.php:512
 msgid "This store credit belongs to another customer account."
 msgstr ""
 
-#: src/StoreCredit.php:517
+#: src/StoreCredit.php:520
 msgid "Store credit cannot be combined with discount codes."
 msgstr ""
 
 #. translators: %s: coupon code
-#: src/StoreCredit.php:608
+#: src/StoreCredit.php:611
 #, php-format
 msgid "Code for the cart: %s"
 msgstr ""
 
-#: src/StoreCredit.php:639
+#: src/StoreCredit.php:642
 msgid "No store credit bookings yet."
 msgstr ""
 
@@ -11295,7 +11298,7 @@ msgstr ""
 msgid "Please enter a reason for reverting this check-in."
 msgstr ""
 
-#: src/Tickets.php:645 src/VoucherRepository.php:1146
+#: src/Tickets.php:645 src/VoucherRepository.php:1162
 msgid "Check-in reverted"
 msgstr ""
 
@@ -11518,7 +11521,7 @@ msgid "The line has no value to add to the card."
 msgstr ""
 
 #. translators: %s: order number
-#: src/TopUp.php:408 src/TopUp.php:581
+#: src/TopUp.php:408 src/TopUp.php:584
 #, php-format
 msgid "Topped up with order #%s"
 msgstr ""
@@ -11538,119 +11541,119 @@ msgid "Gift card …%2$s topped up by %1$s."
 msgstr ""
 
 #. translators: 1: masked gift card code, 2: date and time
-#: src/TopUp.php:456
+#: src/TopUp.php:459
 #, php-format
 msgid "Security hold: the top-up of gift card …%1$s is booked on %2$s, unless the order is cancelled or refunded before then."
 msgstr ""
 
-#: src/TopUp.php:492
+#: src/TopUp.php:495
 msgid "Gift card top-up not booked: the order was cancelled or refunded during the security hold."
 msgstr ""
 
 #. translators: 1: masked gift card code, 2: amount added, 3: new balance
-#: src/TopUp.php:508
+#: src/TopUp.php:511
 #, php-format
 msgid "Your gift card …%1$s was topped up by %2$s. New balance: %3$s."
 msgstr ""
 
 #. translators: %s: expiry date
-#: src/TopUp.php:515
+#: src/TopUp.php:518
 #, php-format
 msgid "Valid until %s."
 msgstr ""
 
-#: src/TopUp.php:560
+#: src/TopUp.php:563
 msgid "This gift card cannot be topped up with this product: the card and the top-up are treated differently for VAT (multi-purpose or single-purpose voucher). Please choose the top-up product that belongs to your gift card, or buy a new gift card."
 msgstr ""
 
 #. translators: %s: reason
-#: src/TopUp.php:618 src/TopUp.php:659
+#: src/TopUp.php:621 src/TopUp.php:662
 #, php-format
 msgid "Gift card top-up not booked: %s Please refund or top up by hand."
 msgstr ""
 
-#: src/TopUp.php:619
+#: src/TopUp.php:622
 msgid "Your gift card could not be topped up. We will contact you and refund the amount or top up the card by hand."
 msgstr ""
 
 #. translators: %s: reason
-#: src/TopUp.php:624
+#: src/TopUp.php:627
 #, php-format
 msgid "Gift card top-up not booked: %s Refund the line or top up the card by hand."
 msgstr ""
 
-#: src/TopUp.php:630 src/TopUp.php:642
+#: src/TopUp.php:633 src/TopUp.php:645
 msgid "A gift card top-up could not be booked."
 msgstr ""
 
 #. translators: %s: product name
-#: src/TopUp.php:661
+#: src/TopUp.php:664
 #, php-format
 msgid "The line \"%s\" has no gift card code, so no new gift card was issued for it."
 msgstr ""
 
 #. translators: %s: order number
-#: src/TopUp.php:709
+#: src/TopUp.php:712
 #, php-format
 msgid "Top-up of order #%s booked again: the refund was not recorded"
 msgstr ""
 
 #. translators: 1: order number, 2: why (e.g. "refund deleted")
-#: src/TopUp.php:745
+#: src/TopUp.php:748
 #, php-format
 msgid "Top-up of order #%1$s booked again (%2$s)"
 msgstr ""
 
 #. translators: %s: masked gift card code
-#: src/TopUp.php:747
+#: src/TopUp.php:750
 #, php-format
 msgid "The top-up of gift card %s that was taken back could not be booked again. Top up the card by hand."
 msgstr ""
 
 #. translators: 1: masked gift card code, 2: amount
-#: src/TopUp.php:752
+#: src/TopUp.php:755
 #, php-format
 msgid "Gift card %1$s: the top-up taken back before (%2$s) was booked onto the card again."
 msgstr ""
 
-#: src/TopUp.php:806
+#: src/TopUp.php:809
 msgid "The gift card top-up could not be reversed: the gift card was not found. Please check the card balance."
 msgstr ""
 
-#: src/TopUp.php:807
+#: src/TopUp.php:810
 msgid "A gift card top-up could not be reversed because the gift card was not found. Check the card and take the top-up back by hand."
 msgstr ""
 
 #. translators: %s: order number
-#: src/TopUp.php:818
+#: src/TopUp.php:821
 #, php-format
 msgid "Top-up of order #%s reversed"
 msgstr ""
 
-#: src/TopUp.php:822
+#: src/TopUp.php:825
 msgid "The gift card top-up could not be reversed. Please check the card balance."
 msgstr ""
 
 #. translators: 1: amount taken back, 2: amount already spent
-#: src/TopUp.php:832
+#: src/TopUp.php:835
 #, php-format
 msgid "Gift card top-up reversed: %1$s taken back, %2$s had already been spent."
 msgstr ""
 
 #. translators: %s: amount
-#: src/TopUp.php:834
+#: src/TopUp.php:837
 #, php-format
 msgid "Gift card top-up reversed: %s taken back."
 msgstr ""
 
 #. translators: %s: masked gift card codes
-#: src/TopUp.php:1047
+#: src/TopUp.php:1050
 #, php-format
 msgid "The gift card topped up by this order cannot be found (%s), so its top-up cannot be taken back. Check the card before refunding the top-up."
 msgstr ""
 
 #. translators: 1: masked gift card codes, 2: maximum refund
-#: src/TopUp.php:1056
+#: src/TopUp.php:1059
 #, php-format
 msgid "The gift card top-up of this order was already spent from the card (%1$s). At most %2$s can be refunded now."
 msgstr ""
@@ -11683,135 +11686,135 @@ msgstr ""
 msgid "The minimum spend for coupon \"%1$s\" is %2$s. Voucher products in the cart do not count towards it."
 msgstr ""
 
-#: src/VoucherRepository.php:1120
+#: src/VoucherRepository.php:1136
 msgid "Balance reserved for payment"
 msgstr ""
 
-#: src/VoucherRepository.php:1121
+#: src/VoucherRepository.php:1137
 msgid "Used in a shop order although already redeemed elsewhere – check the order"
 msgstr ""
 
-#: src/VoucherRepository.php:1122
+#: src/VoucherRepository.php:1138
 msgid "Balance reservation committed"
 msgstr ""
 
-#: src/VoucherRepository.php:1123
+#: src/VoucherRepository.php:1139
 msgid "Balance reservation released"
 msgstr ""
 
-#: src/VoucherRepository.php:1124
+#: src/VoucherRepository.php:1140
 msgid "Reserved for external redemption"
 msgstr ""
 
-#: src/VoucherRepository.php:1125
+#: src/VoucherRepository.php:1141
 msgid "Redeemed externally"
 msgstr ""
 
-#: src/VoucherRepository.php:1126
+#: src/VoucherRepository.php:1142
 msgid "External reservation released"
 msgstr ""
 
-#: src/VoucherRepository.php:1127
+#: src/VoucherRepository.php:1143
 msgid "External redemption refunded"
 msgstr ""
 
-#: src/VoucherRepository.php:1128
+#: src/VoucherRepository.php:1144
 msgid "Delivery scheduled"
 msgstr ""
 
-#: src/VoucherRepository.php:1130
+#: src/VoucherRepository.php:1146
 msgid "Delivery failed"
 msgstr ""
 
-#: src/VoucherRepository.php:1131
+#: src/VoucherRepository.php:1147
 msgid "Delivery given up (no more automatic attempts)"
 msgstr ""
 
-#: src/VoucherRepository.php:1132
+#: src/VoucherRepository.php:1148
 msgid "Not delivered: already expired"
 msgstr ""
 
-#: src/VoucherRepository.php:1133
+#: src/VoucherRepository.php:1149
 msgid "Delivered without PDF"
 msgstr ""
 
-#: src/VoucherRepository.php:1134
+#: src/VoucherRepository.php:1150
 msgid "Expiry reminder"
 msgstr ""
 
-#: src/VoucherRepository.php:1135
+#: src/VoucherRepository.php:1151
 msgid "Credit added"
 msgstr ""
 
-#: src/VoucherRepository.php:1136
+#: src/VoucherRepository.php:1152
 msgid "Credit removed"
 msgstr ""
 
-#: src/VoucherRepository.php:1137
+#: src/VoucherRepository.php:1153
 msgid "Refunded as store credit"
 msgstr ""
 
-#: src/VoucherRepository.php:1138
+#: src/VoucherRepository.php:1154
 msgid "Store credit refund reversed"
 msgstr ""
 
-#: src/VoucherRepository.php:1139
+#: src/VoucherRepository.php:1155
 msgid "Email resent"
 msgstr ""
 
-#: src/VoucherRepository.php:1141
+#: src/VoucherRepository.php:1157
 msgid "Redemption cancelled (value booked back)"
 msgstr ""
 
-#: src/VoucherRepository.php:1142
+#: src/VoucherRepository.php:1158
 msgid "Balance restored"
 msgstr ""
 
-#: src/VoucherRepository.php:1143
+#: src/VoucherRepository.php:1159
 msgid "Balance adjusted"
 msgstr ""
 
-#: src/VoucherRepository.php:1144
+#: src/VoucherRepository.php:1160
 msgid "Rounding rest booked off"
 msgstr ""
 
-#: src/VoucherRepository.php:1147
+#: src/VoucherRepository.php:1163
 msgid "Voided"
 msgstr ""
 
-#: src/VoucherRepository.php:1148
+#: src/VoucherRepository.php:1164
 msgid "Reactivated"
 msgstr ""
 
-#: src/VoucherRepository.php:1150
+#: src/VoucherRepository.php:1166
 msgid "Edited"
 msgstr ""
 
-#: src/VoucherRepository.php:1151
+#: src/VoucherRepository.php:1167
 msgid "Downloaded"
 msgstr ""
 
-#: src/VoucherRepository.php:1152
+#: src/VoucherRepository.php:1168
 msgid "Reissued with a new code"
 msgstr ""
 
-#: src/VoucherRepository.php:1153
+#: src/VoucherRepository.php:1169
 msgid "Imported (existing card)"
 msgstr ""
 
-#: src/VoucherRepository.php:1154
+#: src/VoucherRepository.php:1170
 msgid "Moved to store credit"
 msgstr ""
 
-#: src/VoucherRepository.php:1155
+#: src/VoucherRepository.php:1171
 msgid "Activated"
 msgstr ""
 
-#: src/VoucherRepository.php:1157
+#: src/VoucherRepository.php:1173
 msgid "Delivery attempt"
 msgstr ""
 
-#: src/VoucherRepository.php:1158
+#: src/VoucherRepository.php:1174
 msgid "Buyer told that the gift was used"
 msgstr ""
 
@@ -11953,17 +11956,17 @@ msgstr ""
 msgid "Voucher Captain requires PHP 8.5 or newer."
 msgstr ""
 
-#: voucher-captain.php:98
+#: voucher-captain.php:100
 msgid "Voucher Captain requires WooCommerce to be installed and active."
 msgstr ""
 
 #. translators: %s: installed WooCommerce version
-#: voucher-captain.php:112
+#: voucher-captain.php:114
 #, php-format
 msgid "Voucher Captain requires WooCommerce 11.2.2 or newer (installed: %s). Please update WooCommerce."
 msgstr ""
 
-#: voucher-captain.php:112
+#: voucher-captain.php:114
 msgid "Until then, gift cards and store credit are refused at checkout, because their balance cannot be deducted."
 msgstr ""
 

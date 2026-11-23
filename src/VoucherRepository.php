@@ -213,6 +213,9 @@ final class VoucherRepository {
 	/** @var array<int, int> Ledger id of the latest "redeemed" row per voucher in this request (fire_redeemed()). */
 	private static array $last_redeemed = array();
 
+	/** @var array<string, int> Ledger id of the latest row per "voucher id:event" in this request (last_log_id(), VC-12). */
+	private static array $last_logged = array();
+
 	/** Most memo entries kept (a long CLI run reading many vouchers must not grow it without end). */
 	private const MEMO_MAX = 200;
 
@@ -1010,6 +1013,16 @@ final class VoucherRepository {
 	}
 
 	/**
+	 * Ledger id of the latest history row of $event for a voucher written in this request, 0 when none (VC-12: hooks
+	 * pass it as journal_id so that two bookings in the same second stay apart).
+	 *
+	 * @since 1.3.0
+	 */
+	public function last_log_id( int $voucher_id, string $event ): int {
+		return self::$last_logged[ $voucher_id . ':' . $event ] ?? 0;
+	}
+
+	/**
 	 * Writes a history entry. $note is free text or a coded note (Note::make(), translated when shown). The
 	 * source of the change (Source::current(): admin, cron, rest, scanner, checkout, cli, web) is stored with it.
 	 */
@@ -1041,6 +1054,9 @@ final class VoucherRepository {
 		$inserted = false !== $wpdb->insert( $this->events_table(), $row ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		if ( $inserted && 'redeemed' === $event ) {
 			self::$last_redeemed[ $voucher_id ] = (int) $wpdb->insert_id;
+		}
+		if ( $inserted ) {
+			self::$last_logged[ $voucher_id . ':' . $event ] = (int) $wpdb->insert_id;
 		}
 		if ( $inserted ) {
 			// Listeners get the note as text (a coded note in the site language).

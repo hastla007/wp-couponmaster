@@ -427,8 +427,11 @@ final class TopUp {
 		if ( apply_filters( 'vcap_topup_customer_note', true, $card, $order, $item ) ) {
 			$order->add_order_note( self::confirmation( $card, $amount ), 1 );
 		}
-		/** A gift card was topped up by an order (args: Voucher $card, float $amount, WC_Order $order, order item). */
-		Db::action( 'vcap_gift_card_topped_up', $card, $amount, $order, $item );
+		/**
+		 * A gift card was topped up by an order (args: Voucher $card, float $amount, WC_Order $order, order item, context
+		 * array with journal_id = ledger id of the top-up booking (since contract 1.7.0, VC-12; register 5 args)).
+		 */
+		Db::action( 'vcap_gift_card_topped_up', $card, $amount, $order, $item, array( 'journal_id' => $this->repo->last_log_id( (int) $card->id, 'topup' ) ) );
 		return 0;
 	}
 
