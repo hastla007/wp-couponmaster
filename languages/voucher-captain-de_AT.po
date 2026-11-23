@@ -4,7 +4,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: Voucher Captain 1.0.0\n"
-"POT-Creation-Date: 2026-11-23 20:25+0000\n"
+"POT-Creation-Date: 2026-11-23 20:28+0000\n"
 "PO-Revision-Date: 2026-11-14 16:00+0000\n"
 "Last-Translator: \n"
 "Language-Team: German\n"
@@ -707,11 +707,11 @@ msgstr "Nur die angehakten Werte werden geändert. Werte, die Sie selbst eingest
 msgid "Apply"
 msgstr "Anwenden"
 
-#: src/Admin/CountryProfilesAdmin.php:152 src/Admin/SettingsTools.php:256 src/Admin/SettingsTools.php:291 src/SettingsLog.php:235
+#: src/Admin/CountryProfilesAdmin.php:152 src/Admin/SettingsTools.php:275 src/Admin/SettingsTools.php:324 src/Admin/SettingsTools.php:356 src/SettingsLog.php:315
 msgid "Setting"
 msgstr "Einstellung"
 
-#: src/Admin/CountryProfilesAdmin.php:152 src/Admin/SettingsTools.php:256
+#: src/Admin/CountryProfilesAdmin.php:152 src/Admin/SettingsTools.php:275 src/Admin/SettingsTools.php:324
 msgid "Current value"
 msgstr "Aktueller Wert"
 
@@ -719,7 +719,7 @@ msgstr "Aktueller Wert"
 msgid "Suggested value"
 msgstr "Vorgeschlagener Wert"
 
-#: src/Admin/CountryProfilesAdmin.php:152 src/Admin/StoreCreditAdmin.php:96 src/Admin/VoucherAdmin.php:330 src/Admin/VoucherAdmin.php:356 src/Admin/VoucherRequestsAdmin.php:122 src/Integrations/FormCaptain/RequestsAdmin.php:239
+#: src/Admin/CountryProfilesAdmin.php:152 src/Admin/SettingsTools.php:324 src/Admin/StoreCreditAdmin.php:96 src/Admin/VoucherAdmin.php:330 src/Admin/VoucherAdmin.php:356 src/Admin/VoucherRequestsAdmin.php:122
 msgid "Note"
 msgstr "Notiz"
 
@@ -1647,7 +1647,7 @@ msgstr "Kassen und Personal"
 msgid "Pass Captain reconciliation"
 msgstr "Abgleich mit Pass Captain"
 
-#: src/Admin/ReportsAdmin.php:141 src/Admin/ReportsAdmin.php:204 src/Admin/ReportsAdmin.php:303 src/Admin/ReportsAdmin.php:381 src/Admin/SettingsTools.php:291 src/Discounts/Admin.php:207
+#: src/Admin/ReportsAdmin.php:141 src/Admin/ReportsAdmin.php:204 src/Admin/ReportsAdmin.php:303 src/Admin/ReportsAdmin.php:381 src/Admin/SettingsTools.php:356 src/Discounts/Admin.php:207
 msgid "From"
 msgstr "Von"
 
@@ -1833,7 +1833,7 @@ msgstr "Einlösungen, Erstattungen, Gutschriften und Korrekturen mit ihrem Betra
 msgid "Showing %1$s of %2$s bookings. Export the CSV for the complete journal."
 msgstr "%1$s von %2$s Buchungen werden angezeigt. Exportieren Sie die CSV-Datei für das vollständige Journal."
 
-#: src/Admin/ReportsAdmin.php:324 src/Admin/Scanner.php:75 src/Admin/SettingsTools.php:291 src/Admin/StoreCreditAdmin.php:96 src/Admin/VoucherAdmin.php:356 src/Compat/PassCaptain/RedeemPage.php:157
+#: src/Admin/ReportsAdmin.php:324 src/Admin/Scanner.php:75 src/Admin/SettingsTools.php:356 src/Admin/StoreCreditAdmin.php:96 src/Admin/VoucherAdmin.php:356 src/Compat/PassCaptain/RedeemPage.php:157
 msgid "Date"
 msgstr "Datum"
 
@@ -2325,215 +2325,253 @@ msgstr "Auf diesem Gerät gespeichert und bei jeder Einlösung und jedem Check-i
 msgid "The scanner works online only: without a connection nothing is booked, so no code can be redeemed twice."
 msgstr "Der Scanner arbeitet nur online: Ohne Verbindung wird nichts gebucht, so kann kein Code doppelt eingelöst werden."
 
-#: src/Admin/SettingsTools.php:66
+#: src/Admin/SettingsTools.php:77
 msgid "Export, import and reset settings"
 msgstr "Einstellungen exportieren, importieren und zurücksetzen"
 
-#: src/Admin/SettingsTools.php:68
-msgid "The export contains every global setting of this tab as a JSON file, never keys, passwords or other secrets, and no product settings or voucher data. An import is checked completely and shown as a preview before anything is changed."
-msgstr "Der Export enthält alle globalen Einstellungen dieses Reiters als JSON-Datei, nie Schlüssel, Passwörter oder andere Geheimnisse und keine Produkteinstellungen oder Gutscheindaten. Ein Import wird vollständig geprüft und als Vorschau gezeigt, bevor etwas geändert wird."
+#: src/Admin/SettingsTools.php:80
+msgid "The export contains the global settings of this tab as a JSON file – never keys, passwords or other secrets, no rights per role, product settings or voucher data. An import is checked completely and shown as a preview before anything is changed."
+msgstr "Der Export enthält die globalen Einstellungen dieses Reiters als JSON-Datei – nie Schlüssel, Passwörter oder andere Geheimnisse, keine Rechte je Rolle, Produkteinstellungen oder Gutscheindaten. Ein Import wird vollständig geprüft und als Vorschau gezeigt, bevor etwas geändert wird."
 
-#: src/Admin/SettingsTools.php:71
+#: src/Admin/SettingsTools.php:83
 msgid "Settings file"
 msgstr "Einstellungsdatei"
 
-#: src/Admin/SettingsTools.php:79
+#: src/Admin/SettingsTools.php:91
 msgid "Change log of the settings"
 msgstr "Änderungsprotokoll der Einstellungen"
 
-#: src/Admin/SettingsTools.php:81
+#: src/Admin/SettingsTools.php:93
 msgid "Who changed which setting when, from which value to which (secrets masked), from the settings page, an import, a reset or WP-CLI."
 msgstr "Wer hat wann welche Einstellung von welchem Wert auf welchen geändert (Geheimnisse maskiert) – über die Einstellungsseite, einen Import, ein Zurücksetzen oder WP-CLI."
 
-#: src/Admin/SettingsTools.php:86
+#: src/Admin/SettingsTools.php:98
 msgid "Keep the change log for (days)"
 msgstr "Änderungsprotokoll aufbewahren (Tage)"
 
-#: src/Admin/SettingsTools.php:89
+#: src/Admin/SettingsTools.php:101
 msgid "Entries older than this are removed by the daily maintenance (default 365). 0 = keep (only the newest 2,000 entries are kept)."
 msgstr "Ältere Einträge entfernt die tägliche Wartung (Standard 365). 0 = behalten (nur die neuesten 2.000 Einträge bleiben)."
 
-#: src/Admin/SettingsTools.php:93
+#: src/Admin/SettingsTools.php:105
 msgid "Latest changes"
 msgstr "Letzte Änderungen"
 
-#: src/Admin/SettingsTools.php:162
+#: src/Admin/SettingsTools.php:177
 msgid "All sections"
 msgstr "Alle Abschnitte"
 
-#: src/Admin/SettingsTools.php:211
+#: src/Admin/SettingsTools.php:228
 msgid "Export"
 msgstr "Export"
 
-#: src/Admin/SettingsTools.php:212
+#: src/Admin/SettingsTools.php:229
 msgid "Download settings (JSON)"
 msgstr "Einstellungen herunterladen (JSON)"
 
-#: src/Admin/SettingsTools.php:214
+#: src/Admin/SettingsTools.php:231
 msgid "Import"
 msgstr "Import"
 
-#: src/Admin/SettingsTools.php:215
+#: src/Admin/SettingsTools.php:232
 msgid "Settings file (JSON export of Voucher Captain)"
 msgstr "Einstellungsdatei (JSON-Export von Voucher Captain)"
 
-#: src/Admin/SettingsTools.php:217
+#: src/Admin/SettingsTools.php:234
 msgid "Check file and show changes"
 msgstr "Datei prüfen und Änderungen zeigen"
 
-#: src/Admin/SettingsTools.php:219
+#: src/Admin/SettingsTools.php:236
 msgid "Reset to defaults"
 msgstr "Auf Standard zurücksetzen"
 
-#: src/Admin/SettingsTools.php:220
-msgid "Sets the chosen settings back to what a new installation has. A backup of all settings is saved first. Secrets, the data removal switch, product settings and vouchers are not changed."
-msgstr "Setzt die gewählten Einstellungen auf den Stand einer neuen Installation zurück. Vorher wird eine Sicherung aller Einstellungen gespeichert. Geheimnisse, der Schalter zum Entfernen der Daten, Produkteinstellungen und Gutscheine bleiben unverändert."
+#: src/Admin/SettingsTools.php:237
+msgid "Sets the chosen settings back to their defaults – the values a shop uses while it never saved them. You see every change (current value → default) before anything is reset, and a backup of all settings is saved first. Secrets, the data removal switch, the rights per role, product settings and vouchers are not changed."
+msgstr "Setzt die gewählten Einstellungen auf ihre Standardwerte zurück – die Werte, die ein Shop nutzt, solange er sie nie gespeichert hat. Sie sehen jede Änderung (aktueller Wert → Standard), bevor etwas zurückgesetzt wird, und vorher wird eine Sicherung aller Einstellungen gespeichert. Geheimnisse, der Schalter zum Entfernen der Daten, die Rechte je Rolle, Produkteinstellungen und Gutscheine werden nicht geändert."
 
-#: src/Admin/SettingsTools.php:221
+#: src/Admin/SettingsTools.php:241
 msgid "Section"
 msgstr "Abschnitt"
 
-#: src/Admin/SettingsTools.php:226
-msgid "Yes, reset these settings to their defaults."
-msgstr "Ja, diese Einstellungen auf Standard zurücksetzen."
+#: src/Admin/SettingsTools.php:245
+msgid "Show what a reset changes"
+msgstr "Zeigen, was das Zurücksetzen ändert"
 
-#: src/Admin/SettingsTools.php:227
-msgid "Reset settings"
-msgstr "Einstellungen zurücksetzen"
-
-#: src/Admin/SettingsTools.php:231
+#: src/Admin/SettingsTools.php:250
 msgid "Automatic backups"
 msgstr "Automatische Sicherungen"
 
-#: src/Admin/SettingsTools.php:233
+#: src/Admin/SettingsTools.php:252
 msgid "before a reset"
 msgstr "vor dem Zurücksetzen"
 
-#: src/Admin/SettingsTools.php:233
+#: src/Admin/SettingsTools.php:252
 msgid "before a country profile"
 msgstr "vor einem Länderprofil"
 
-#: src/Admin/SettingsTools.php:233
+#: src/Admin/SettingsTools.php:252
 msgid "before an import"
 msgstr "vor einem Import"
 
-#: src/Admin/SettingsTools.php:236
+#: src/Admin/SettingsTools.php:255
 msgid "Download a backup and import it to restore the settings it contains."
 msgstr "Laden Sie eine Sicherung herunter und importieren Sie sie, um die darin enthaltenen Einstellungen wiederherzustellen."
 
-#: src/Admin/SettingsTools.php:249
+#: src/Admin/SettingsTools.php:268
 msgid "Preview of the import"
 msgstr "Vorschau des Imports"
 
-#: src/Admin/SettingsTools.php:251
+#: src/Admin/SettingsTools.php:270
 msgid "The file contains no changes: every setting already has this value."
 msgstr "Die Datei enthält keine Änderungen: Jede Einstellung hat diesen Wert bereits."
 
 #. translators: %d: number of settings
-#: src/Admin/SettingsTools.php:254
+#: src/Admin/SettingsTools.php:273 src/Admin/SettingsTools.php:323
 #, php-format
 msgid "%d setting will change:"
 msgid_plural "%d settings will change:"
 msgstr[0] "%d Einstellung wird geändert:"
 msgstr[1] "%d Einstellungen werden geändert:"
 
-#: src/Admin/SettingsTools.php:256
+#: src/Admin/SettingsTools.php:275
 msgid "New value"
 msgstr "Neuer Wert"
 
 #. translators: %s: option names
-#: src/Admin/SettingsTools.php:265
+#: src/Admin/SettingsTools.php:287
 #, php-format
 msgid "Not known on this site and skipped: %s"
 msgstr "Auf dieser Website unbekannt und übersprungen: %s"
 
-#: src/Admin/SettingsTools.php:269
+#: src/Admin/SettingsTools.php:291
 msgid "Apply these changes"
 msgstr "Diese Änderungen übernehmen"
 
-#: src/Admin/SettingsTools.php:271
+#: src/Admin/SettingsTools.php:293
 msgid "Cancel import"
 msgstr "Import abbrechen"
 
-#: src/Admin/SettingsTools.php:286
+#. translators: %s: section
+#: src/Admin/SettingsTools.php:318
+#, php-format
+msgid "Preview of the reset: %s"
+msgstr "Vorschau des Zurücksetzens: %s"
+
+#: src/Admin/SettingsTools.php:320
+msgid "Nothing to reset: every setting already has its default."
+msgstr "Nichts zurückzusetzen: Jede Einstellung hat bereits ihren Standardwert."
+
+#: src/Admin/SettingsTools.php:324
+msgid "After the reset"
+msgstr "Nach dem Zurücksetzen"
+
+#: src/Admin/SettingsTools.php:326
+msgid "Legal or tax weight – check before resetting"
+msgstr "Rechtlich oder steuerlich bedeutsam – vor dem Zurücksetzen prüfen"
+
+#: src/Admin/SettingsTools.php:330
+msgid "Yes, reset these settings to their defaults."
+msgstr "Ja, diese Einstellungen auf Standard zurücksetzen."
+
+#: src/Admin/SettingsTools.php:334
+msgid "Reset settings"
+msgstr "Einstellungen zurücksetzen"
+
+#: src/Admin/SettingsTools.php:336
+msgid "Cancel reset"
+msgstr "Zurücksetzen abbrechen"
+
+#: src/Admin/SettingsTools.php:351
 msgid "No changes recorded yet."
 msgstr "Noch keine Änderungen aufgezeichnet."
 
-#: src/Admin/SettingsTools.php:291 src/Admin/StoreCreditAdmin.php:96 src/Admin/VoucherAdmin.php:356
+#: src/Admin/SettingsTools.php:356 src/Admin/StoreCreditAdmin.php:96 src/Admin/VoucherAdmin.php:356
 msgid "User"
 msgstr "Benutzer"
 
-#: src/Admin/SettingsTools.php:291 src/SettingsLog.php:243
+#: src/Admin/SettingsTools.php:356 src/SettingsLog.php:323
 msgid "To"
 msgstr "Auf"
 
-#: src/Admin/SettingsTools.php:291 src/SettingsLog.php:247
+#: src/Admin/SettingsTools.php:356 src/SettingsLog.php:327
 msgid "Source"
 msgstr "Quelle"
 
-#: src/Admin/SettingsTools.php:348
+#: src/Admin/SettingsTools.php:430
 msgid "This backup no longer exists."
 msgstr "Diese Sicherung gibt es nicht mehr."
 
-#: src/Admin/SettingsTools.php:359
+#: src/Admin/SettingsTools.php:441
 msgid "Please choose a settings file (JSON) to import."
 msgstr "Bitte wählen Sie eine Einstellungsdatei (JSON) zum Importieren."
 
-#: src/Admin/SettingsTools.php:362 src/SettingsTransfer.php:110
+#: src/Admin/SettingsTools.php:444 src/SettingsTransfer.php:156
 msgid "The file is too large for a settings export."
 msgstr "Die Datei ist für einen Einstellungs-Export zu groß."
 
 #. translators: %s: reasons
-#: src/Admin/SettingsTools.php:368 src/Admin/SettingsTools.php:387
+#: src/Admin/SettingsTools.php:450 src/Admin/SettingsTools.php:471
 #, php-format
 msgid "The file was not imported, nothing was changed: %s"
 msgstr "Die Datei wurde nicht importiert, nichts wurde geändert: %s"
 
-#: src/Admin/SettingsTools.php:382
+#: src/Admin/SettingsTools.php:465
 msgid "The import preview has expired. Please upload the file again."
 msgstr "Die Vorschau des Imports ist abgelaufen. Bitte laden Sie die Datei erneut hoch."
 
 #. translators: %d: number of settings
-#: src/Admin/SettingsTools.php:390
+#: src/Admin/SettingsTools.php:474
 #, php-format
 msgid "%d setting imported. A backup of the previous settings was saved."
 msgid_plural "%d settings imported. A backup of the previous settings was saved."
 msgstr[0] "%d Einstellung importiert. Eine Sicherung der bisherigen Einstellungen wurde gespeichert."
 msgstr[1] "%d Einstellungen importiert. Eine Sicherung der bisherigen Einstellungen wurde gespeichert."
 
-#: src/Admin/SettingsTools.php:419
+#: src/Admin/SettingsTools.php:503
 msgid "Import cancelled, nothing was changed."
 msgstr "Import abgebrochen, nichts wurde geändert."
 
-#: src/Admin/SettingsTools.php:428
+#: src/Admin/SettingsTools.php:511
 msgid "Please choose what to reset."
 msgstr "Bitte wählen Sie, was zurückgesetzt werden soll."
 
-#: src/Admin/SettingsTools.php:431
+#: src/Admin/SettingsTools.php:522
+msgid "Reset cancelled, nothing was changed."
+msgstr "Zurücksetzen abgebrochen, nichts wurde geändert."
+
+#: src/Admin/SettingsTools.php:533
+msgid "The reset preview has expired. Please choose the section and show the changes again."
+msgstr "Die Vorschau des Zurücksetzens ist abgelaufen. Bitte wählen Sie den Bereich und lassen Sie sich die Änderungen erneut zeigen."
+
+#: src/Admin/SettingsTools.php:536
 msgid "Nothing was reset: please tick the confirmation first."
 msgstr "Nichts wurde zurückgesetzt: Bitte setzen Sie zuerst das Häkchen zur Bestätigung."
 
+#: src/Admin/SettingsTools.php:542
+msgid "Nothing was reset: every setting already has its default."
+msgstr "Nichts wurde zurückgesetzt: Jede Einstellung hat bereits ihren Standardwert."
+
 #. translators: %d: number of settings
-#: src/Admin/SettingsTools.php:435
+#: src/Admin/SettingsTools.php:545
 #, php-format
 msgid "%d setting reset to its default. A backup of the previous settings was saved (see \"Automatic backups\")."
 msgid_plural "%d settings reset to their defaults. A backup of the previous settings was saved (see \"Automatic backups\")."
 msgstr[0] "%d Einstellung auf Standard zurückgesetzt. Eine Sicherung der bisherigen Einstellungen wurde gespeichert (siehe „Automatische Sicherungen“)."
 msgstr[1] "%d Einstellungen auf Standard zurückgesetzt. Eine Sicherung der bisherigen Einstellungen wurde gespeichert (siehe „Automatische Sicherungen“)."
 
-#: src/Admin/SettingsUi.php:54 src/Integrations/FormCaptain/RequestsAdmin.php:265 templates/myaccount/vouchers-table.php:145
+#: src/Admin/SettingsUi.php:57 src/Integrations/FormCaptain/RequestsAdmin.php:265 templates/myaccount/vouchers-table.php:145
 msgid "Save changes"
 msgstr "Änderungen speichern"
 
-#: src/Admin/SettingsUi.php:104
+#: src/Admin/SettingsUi.php:107
 msgid "(empty)"
 msgstr "(leer)"
 
-#: src/Admin/SettingsUi.php:108 src/Diagnostics.php:85 src/Fields.php:690 src/Ledger.php:556 src/Privacy.php:167
+#: src/Admin/SettingsUi.php:111 src/Diagnostics.php:85 src/Fields.php:690 src/Ledger.php:556 src/Privacy.php:167
 msgid "Yes"
 msgstr "Ja"
 
-#: src/Admin/SettingsUi.php:111 src/Diagnostics.php:85 src/Diagnostics.php:90 src/Ledger.php:556 src/Privacy.php:167
+#: src/Admin/SettingsUi.php:114 src/Diagnostics.php:85 src/Diagnostics.php:90 src/Ledger.php:556 src/Privacy.php:167
 msgid "No"
 msgstr "Nein"
 
@@ -10937,23 +10975,23 @@ msgstr "Das Journal gehört zu Ihren Buchführungsunterlagen: Die Aufbewahrungsf
 msgid "Export the complete journal (CSV)"
 msgstr "Vollständiges Journal exportieren (CSV)"
 
-#: src/SettingsLog.php:185
+#: src/SettingsLog.php:265
 msgid "import"
 msgstr "Import"
 
-#: src/SettingsLog.php:186
+#: src/SettingsLog.php:266
 msgid "reset to defaults"
 msgstr "Zurücksetzen auf Standard"
 
-#: src/SettingsLog.php:187
+#: src/SettingsLog.php:267
 msgid "country profile"
 msgstr "Länderprofil"
 
-#: src/SettingsLog.php:188
+#: src/SettingsLog.php:268
 msgid "settings command"
 msgstr "Einstellungsbefehl"
 
-#: src/SettingsLog.php:203 src/SettingsLog.php:227
+#: src/SettingsLog.php:283 src/SettingsLog.php:307
 msgid "Voucher settings changes"
 msgstr "Änderungen an Gutschein-Einstellungen"
 
@@ -11005,84 +11043,102 @@ msgstr "%1$s: „%2$s“ wurde nicht gespeichert – erlaubt sind %3$s %4$s. Der
 msgid "%1$s: %2$s is not allowed – allowed are %4$s %5$s. %3$s was saved instead."
 msgstr "%1$s: %2$s ist nicht erlaubt – erlaubt sind %4$s %5$s. Gespeichert wurde %3$s."
 
-#: src/SettingsTransfer.php:114
+#: src/SettingsTransfer.php:160
 msgid "This is no settings export of Voucher Captain (JSON with \"format\": \"voucher-captain-settings\" expected)."
 msgstr "Das ist kein Einstellungs-Export von Voucher Captain (erwartet wird JSON mit \"format\": \"voucher-captain-settings\")."
 
-#: src/SettingsTransfer.php:118
+#: src/SettingsTransfer.php:164
 msgid "The settings export has no valid version field."
 msgstr "Der Einstellungs-Export hat kein gültiges Versionsfeld."
 
 #. translators: 1: version of the file, 2: version this plugin reads
-#: src/SettingsTransfer.php:124
+#: src/SettingsTransfer.php:170
 #, php-format
 msgid "The settings export has format version %1$d; this version of Voucher Captain reads up to version %2$d. Update the plugin first."
 msgstr "Der Einstellungs-Export hat die Formatversion %1$d; diese Version von Voucher Captain liest bis Version %2$d. Aktualisieren Sie zuerst das Plugin."
 
-#: src/SettingsTransfer.php:128
+#: src/SettingsTransfer.php:174
 msgid "The settings export has no \"settings\" object."
 msgstr "Der Einstellungs-Export enthält kein Objekt \"settings\"."
 
 #. translators: %s: option name
-#: src/SettingsTransfer.php:142
+#: src/SettingsTransfer.php:189
 #, php-format
 msgid "%s is never part of a settings export."
 msgstr "%s ist nie Teil eines Einstellungs-Exports."
 
+#. translators: 1: option name, 2: lines that cannot be read
+#: src/SettingsTransfer.php:229
+#, php-format
+msgid "%1$s: these lines of the old text format cannot be read and are left out: %2$s"
+msgstr "%1$s: Diese Zeilen des alten Textformats sind nicht lesbar und werden weggelassen: %2$s"
+
 #. translators: %s: option name
-#: src/SettingsTransfer.php:175
+#: src/SettingsTransfer.php:235
+#, php-format
+msgid "%s was never saved in the exported shop and is skipped; the rule of this site stays."
+msgstr "%s war im exportierten Shop nie gespeichert und wird übersprungen; die Regel dieser Website bleibt."
+
+#. translators: 1: option name, 2: default value
+#: src/SettingsTransfer.php:240
+#, php-format
+msgid "%1$s is empty in the file and is read as its default %2$s."
+msgstr "%1$s ist in der Datei leer und wird als Standardwert %2$s gelesen."
+
+#. translators: %s: option name
+#: src/SettingsTransfer.php:258
 #, php-format
 msgid "%s is no setting of Voucher Captain."
 msgstr "%s ist keine Einstellung von Voucher Captain."
 
 #. translators: %s: option name
-#: src/SettingsTransfer.php:179
+#: src/SettingsTransfer.php:262
 #, php-format
 msgid "%s is a secret and cannot be read or changed here."
 msgstr "%s ist ein Geheimnis und kann hier weder gelesen noch geändert werden."
 
 #. translators: 1: option name, 2: what is expected
-#: src/SettingsTransfer.php:204
+#: src/SettingsTransfer.php:287
 #, php-format
 msgid "%1$s: invalid value, expected %2$s."
 msgstr "%1$s: ungültiger Wert, erwartet: %2$s."
 
-#: src/SettingsTransfer.php:229
+#: src/SettingsTransfer.php:313
 msgid "a list of values"
 msgstr "eine Liste von Werten"
 
-#: src/SettingsTransfer.php:234
+#: src/SettingsTransfer.php:318
 msgid "a page or post ID"
 msgstr "eine Seiten- oder Beitrags-ID"
 
-#: src/SettingsTransfer.php:238 src/SettingsTransfer.php:243
+#: src/SettingsTransfer.php:322 src/SettingsTransfer.php:327
 msgid "text"
 msgstr "Text"
 
-#: src/SettingsTransfer.php:247
+#: src/SettingsTransfer.php:334
 msgid "letters, digits, dot, hyphen and underscore (up to 20 characters, separator up to 3)"
 msgstr "Buchstaben, Ziffern, Punkt, Bindestrich und Unterstrich (bis 20 Zeichen, Trennzeichen bis 3)"
 
-#: src/SettingsTransfer.php:253
+#: src/SettingsTransfer.php:340
 msgid "days between 1 and 365 separated by commas, or 0"
 msgstr "Tage zwischen 1 und 365, durch Kommas getrennt, oder 0"
 
-#: src/SettingsTransfer.php:273 src/SettingsTransfer.php:279
+#: src/SettingsTransfer.php:377 src/SettingsTransfer.php:383
 msgid "a whole number"
 msgstr "eine ganze Zahl"
 
-#: src/SettingsTransfer.php:273
+#: src/SettingsTransfer.php:377
 msgid "a number"
 msgstr "eine Zahl"
 
 #. translators: 1: smallest value, 2: largest value
-#: src/SettingsTransfer.php:286
+#: src/SettingsTransfer.php:390
 #, php-format
 msgid "a value from %1$s to %2$s"
 msgstr "ein Wert von %1$s bis %2$s"
 
 #. translators: %s: highest amount
-#: src/SettingsTransfer.php:296
+#: src/SettingsTransfer.php:400
 #, php-format
 msgid "an amount up to %s"
 msgstr "ein Betrag bis %s"

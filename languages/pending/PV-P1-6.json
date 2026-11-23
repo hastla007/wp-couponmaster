@@ -1,7 +1,0 @@
-{
- "The export contains the global settings of this tab as a JSON file – never keys, passwords or other secrets, no rights per role, product settings or voucher data. An import is checked completely and shown as a preview before anything is changed.": {
-  "du": "Der Export enthält die globalen Einstellungen dieses Reiters als JSON-Datei – nie Schlüssel, Passwörter oder andere Geheimnisse, keine Rechte je Rolle, Produkteinstellungen oder Gutscheindaten. Ein Import wird vollständig geprüft und als Vorschau gezeigt, bevor etwas geändert wird.",
-  "sie": "Der Export enthält die globalen Einstellungen dieses Reiters als JSON-Datei – nie Schlüssel, Passwörter oder andere Geheimnisse, keine Rechte je Rolle, Produkteinstellungen oder Gutscheindaten. Ein Import wird vollständig geprüft und als Vorschau gezeigt, bevor etwas geändert wird.",
-  "at": "Der Export enthält die globalen Einstellungen dieses Reiters als JSON-Datei – nie Schlüssel, Passwörter oder andere Geheimnisse, keine Rechte je Rolle, Produkteinstellungen oder Gutscheindaten. Ein Import wird vollständig geprüft und als Vorschau gezeigt, bevor etwas geändert wird."
- }
-}
