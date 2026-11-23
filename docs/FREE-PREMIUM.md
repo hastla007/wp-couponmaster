@@ -1,6 +1,7 @@
 # Freier Kern und getrenntes Premium-Add-on
 
-Entscheidung des Betreibers vom 13.11.2026 (verbindlich). Dieses Dokument ersetzt das frühere LICENSING.md.
+Entscheidung des Betreibers vom 13.11.2026 (verbindlich), geändert am 23.11.2026 (Entscheidung S1: Hinweiszeilen auf
+Add-on-Funktionen, Regel 3). Dieses Dokument ersetzt das frühere LICENSING.md.
 
 ## Regeln
 
@@ -12,13 +13,21 @@ Entscheidung des Betreibers vom 13.11.2026 (verbindlich). Dieses Dokument ersetz
    bleibt dort.
 2. **Kein Lizenz- oder Update-Code im Kern.** Kein Lizenz-Client, keine Aufrufe von `wplc/v1`, kein `Update URI`-Header,
    keine eigenen Filter auf `pre_set_site_transient_update_plugins` oder `plugins_api`, keine Berechtigungsprüfungen
-   (`allows_entitlement` o. Ä.), keine Lizenzseite und kein Lizenzmenü, keine Upgrade-Hinweise („Upgrade to Premium“),
-   keine Konstanten `VCAP_EDITION`/`VCAP_LICENSE_*`, keine Aufteilung in Free- und Premium-Build. Es gibt **einen** Build
+   (`allows_entitlement` o. Ä.), keine Lizenzseite und kein Lizenzmenü, keine Werbebanner oder Upgrade-Aufforderungen
+   (erlaubt sind nur die Hinweiszeilen nach Regel 3), keine Rechteschlüssel-Namen, keine Konstanten `VCAP_EDITION`/`VCAP_LICENSE_*`, keine Aufteilung in Free- und Premium-Build. Es gibt **einen** Build
    (`bin/build.sh` → `build/voucher-captain.zip`); Updates kommen von WordPress.org.
    Der Kern ruft keinen Lizenz- oder Update-Server auf und braucht kein Add-on; seine einzigen HTTP-Anfragen stehen in
    readme.txt → *External services*.
-3. **WordPress.org-Richtlinie 11:** keine gesperrten Bedienelemente. Erlaubt wäre höchstens ein ausblendbarer Hinweis
-   auf den eigenen Admin-Seiten; der Kern verzichtet ganz darauf.
+3. **Hinweiszeilen auf Add-on-Funktionen (Entscheidung S1 vom 23.11.2026, WordPress.org-Richtlinien 5 und 11).** Im Tab
+   „Gutscheine“ der WooCommerce-Einstellungen darf am Ende eines Abschnitts ein Block „Erweiterungen“ stehen: je
+   Funktion des Add-ons, die verkauft wird, eine graue Textzeile mit Titel, „Pro“-Kennzeichen und einem Satz, was sie
+   kann (Liste: `config/pro-hints.php`, Filter `vcap_settings_hints`, Klasse `VCAP\Admin\ProHints`). Die Zeile ist
+   **nur Text**: kein Eingabefeld, auch kein deaktiviertes, keine Option, kein Formularwert, kein Netzaufruf, kein
+   Code der Funktion und keine Lizenzprüfung im Kern. Jeder Benutzer kann die Zeilen für sich ausblenden (Link
+   „Hinweise auf Erweiterungen ausblenden“, Benutzerprofil). Keine Hinweise im Dashboard, in Listen, Produkten oder
+   Bestellungen. Das Add-on meldet über `vcap_settings_fields` sein echtes Feld mit `'replaces' => '<id>'` an; dann
+   entfällt die Zeile. Ohne gültige Lizenz zeigt das Add-on selbst, was fehlt – der Kern erfährt davon nichts. Nichts,
+   was heute frei ist, wandert hinter Pro (Regel 1).
 4. **Bestandsdaten.** Ein Update räumt einmal je Site auf, was Vorabversionen mit Lizenzcode hinterlassen haben
    (`VCAP\Install::remove_license_data()`, Merker `vcap_license_data_removed`): die Optionen `vcap_wplc_*` (auch als
    Netzwerk-Optionen), das WP-Cron-Ereignis und die Action-Scheduler-Aktion `vcap_license_refresh` sowie den
@@ -34,6 +43,9 @@ Entscheidung des Betreibers vom 13.11.2026 (verbindlich). Dieses Dokument ersetz
    die ausgelieferten Dateien (`voucher-captain.php`, `uninstall.php`, `readme.txt`, `src/`, `templates/`, `assets/` ohne
    `assets/vendor/`, `examples/`, `config/`) nach Lizenz- und Update-Code, `bin/build.sh` nach einer zweiten Edition und
    prüft jede HTTP-Anfrage des Kerns gegen eine Allowlist; Treffer mit Datei:Zeile lassen den Job scheitern.
+   Für die Hinweiszeilen prüft er, dass `config/pro-hints.php` nur die Schlüssel `id`, `section`, `title`, `text`,
+   `link` und außer `__()` keine Funktionsaufrufe enthält; `tests/run.php` prüft, dass eine Zeile kein Formularelement
+   ausgibt, ausblendbar ist und durch ein Feld mit `replaces` entfällt.
    `bin/build.sh` verweigert außerdem einen Plugin-Kopf mit `Update URI` oder Editions-/Lizenzkonstanten. Dass die
    Kernabläufe ohne Add-on und ohne Netz laufen, prüfen `tests/run.php` (jede Anfrage des Unit-Laufs wird protokolliert,
    ohne Testtransport gibt es kein Netz) und die Integrationssuiten `woocommerce` und `order-lifecycle`

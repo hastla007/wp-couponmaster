@@ -188,6 +188,7 @@ with a public API contract, the contract starts with 1.1.0). Add-ons check the c
 | `vcap_physical_activation_statuses` | 1.2.0 | `src/PhysicalCards.php` | Order statuses at which physical gift cards are activated (default: completed). |
 | `vcap_placeholder_definitions` | 1.0.0 | `src/Placeholders.php` | Placeholders offered in the PDF designer and the email texts (arg: array of token => label); fill them in vcap_placeholders. |
 | `vcap_placeholders` | 1.0.0 | `src/Placeholders.php` | Values of the placeholders for a voucher (args: array of token => text, Voucher); texts are escaped when printed. |
+| `vcap_pro_hints_hidden` | 1.3.0 | `src/Admin/ProHints.php` | Whether the hint lines on add-on functions are hidden for the current user (default: the user's own setting "Hide hints on extensions"). |
 | `vcap_product_config` | 1.0.0 | `src/ProductConfig.php` | – |
 | `vcap_protect_voucher_coupons` | 1.2.0 | `src/Coupons/CouponSync.php` | Whether trashing/deleting a voucher's WooCommerce coupon is refused (default: in wp-admin and REST requests). |
 | `vcap_purgeable_claim_kinds` | 1.2.0 | `src/Claim.php` | – |
@@ -244,6 +245,7 @@ with a public API contract, the contract starts with 1.1.0). Add-ons check the c
 | `vcap_send_expiry_reminder` | 1.1.0 | `src/Delivery.php` | – |
 | `vcap_setting_` | 1.0.0 | `src/Settings.php` | – |
 | `vcap_settings_fields` | 1.0.0 | `src/Settings.php` | Fields of a section of the "Vouchers" settings tab (args: WooCommerce settings fields, section id – '' is "General"). Add-ons add fields to a core section or fill their own section from "vcap_settings_sections". |
+| `vcap_settings_hints` | 1.3.0 | `src/Admin/ProHints.php` | Hint lines for add-on functions (args: list of {id, section, title, text, link}). Text only; a line is dropped when its id, title or text is empty or its link is not https. |
 | `vcap_settings_sections` | 1.2.0 | `src/Settings.php` | Extra sections of the "Vouchers" settings tab (arg: array of section id => label). Add-ons add their own section here and its fields with "vcap_settings_fields" (second argument: the section id); WooCommerce saves them. Core sections cannot be renamed or removed. |
 | `vcap_shop_channel_refused_message` | 1.2.0 | `src/Coupons/CartCoupons.php` | Message for a voucher that is not redeemable in the shop (e.g. a ticket voucher: where to use it instead). |
 | `vcap_should_issue_for_order` | 1.0.0 | `src/Issuer.php` | – |

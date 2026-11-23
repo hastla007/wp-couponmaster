@@ -219,7 +219,9 @@ $panel_html = (string) ob_get_clean();
 vcap_sa_assert( str_contains( $panel_html, 'product=' . $search_product->get_id() ) && str_contains( $panel_html, '_vcap_allowed_templates' ) && str_contains( $panel_html, '_vcap_physical' ), 'M12-54/96/97: the product\'s Voucher tab links to its vouchers and offers designs and "Physical card"' );
 
 // ---- M12-90: settings sections. -----------------------------------------------------------------------------------
-$ids_of = static fn( string $section ): array => array_values( array_filter( array_map( static fn( $f ) => in_array( $f['type'] ?? '', array( 'title', 'sectionend' ), true ) ? '' : (string) ( $f['id'] ?? '' ), vcap()->settings->fields( $section ) ) ) );
+// Options only: blocks (title/sectionend) and fields that store nothing (is_option false: the hint lines on add-on
+// functions, SET-VC-07) are not options.
+$ids_of = static fn( string $section ): array => array_values( array_filter( array_map( static fn( $f ) => in_array( $f['type'] ?? '', array( 'title', 'sectionend' ), true ) || false === ( $f['is_option'] ?? true ) ? '' : (string) ( $f['id'] ?? '' ), vcap()->settings->fields( $section ) ) ) );
 $general_m = new ReflectionMethod( VCAP\Settings::class, 'general_fields' );
 $general_m->setAccessible( true );
 $all_general = array_values( array_filter( array_map( static fn( $f ) => in_array( $f['type'] ?? '', array( 'title', 'sectionend' ), true ) ? '' : (string) ( $f['id'] ?? '' ), $general_m->invoke( vcap()->settings ) ) ) );

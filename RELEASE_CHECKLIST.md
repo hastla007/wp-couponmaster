@@ -65,7 +65,7 @@ Checked one by one before the WordPress.org submission (A9). None is a security 
 ## Release probe (16.11.2026, release ZIP of the PR state)
 
 - Upgrade from the released 1.1.0 (schema 1.3.0, built from the release commit `1fb789d`) with fixture data to the current ZIP: data verified; rollback to 1.1.0 still reads the vouchers; forward again keeps the promotion uses (`tests/upgrade-integration.php`, also in CI `upgrade`).
-- Uninstall with "Delete data on uninstall" off: all 10 tables stay. With it on: no `vcap_*` table, no `vcap_*` option and no request/template/field-group post left.
+- Uninstall with "Remove all data when the plugin is deleted" off: all 10 tables stay. With it on: no `vcap_*` table, no `vcap_*` option and no request/template/field-group post left.
 - Fresh install, purchase, delivery, redemption and refunds of the ZIP: all 49 integration suites (HPOS and classic) and `browser-e2e` green.
 
 ## Load test (16.11.2026, 20 008 vouchers, 51 348 ledger entries, MariaDB 10.11, HPOS)

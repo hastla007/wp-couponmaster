@@ -623,6 +623,8 @@ called in the code and listed in docs/HOOKS.md, the generated reference with eac
 | `vcap_admin_menu_icon` | filter | `string $icon` (default `dashicons-tickets-alt`) | 1.2.0 | White label: icon of the main admin menu, as accepted by `add_menu_page()` (dashicon, image URL or data URI). |
 | `vcap_settings_sections` | filter | `array $sections` (id ⇒ label) | 1.2.0 | Own section of WooCommerce → Settings → Vouchers; core sections cannot be renamed or removed. |
 | `vcap_settings_fields` | filter | `array $fields`, `string $section` | 1.0.0 | Fields of a section (WooCommerce settings API, saved by WooCommerce). An add-on section starts empty. |
+| `vcap_settings_hints` | filter | `array $hints` (each `id`, `section`, `title`, `text`, `link`) | 1.3.0 | Hint lines on add-on functions at the end of a core section (decision S1, docs/FREE-PREMIUM.md rule 3): text only, no form control; list in `config/pro-hints.php` (`white_label`, `sms_delivery`, `wallet_passes`, `bulk_orders`). A field registered through `vcap_settings_fields` with `'replaces' => '<id>'` (string or array) removes its line. |
+| `vcap_pro_hints_hidden` | filter | `bool $hidden`, `int $user_id` | 1.3.0 | Whether the hint lines are hidden for the current user (default: the user's setting "Hide hints on extensions"). |
 | `vcap_product_settings_fields` / `vcap_product_settings_save` | action | – / `WC_Product`, `array $post` | 1.1.0 | Own fields in the product's *Voucher* tab and saving them. |
 | `vcap_template_design` | filter | `array $design`, `int $template_id` | 1.0.0 | The design a PDF template prints with. |
 | `vcap_sanitize_design` | filter | `array $clean`, `array $posted` | 1.0.0 | Keep own element keys when a design is saved. |

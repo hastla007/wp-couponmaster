@@ -1,6 +1,7 @@
 <?php
 namespace VCAP\CLI;
 
+use VCAP\Admin\DataRemoval;
 use VCAP\Delivery;
 use VCAP\Diagnostics;
 use VCAP\Health;
@@ -388,6 +389,49 @@ final class Command {
 		}
 		Plugin::reset_rate_limits();
 		self::success( 'Rate limit counters removed.' );
+	}
+
+	/**
+	 * Shows or changes "Remove all data when the plugin is deleted" of this site (off = data is kept, default).
+	 *
+	 * ## OPTIONS
+	 *
+	 * [<state>]
+	 * : on, off or status (default).
+	 *
+	 * [--confirm=<word>]
+	 * : Needed to switch it on: LÖSCHEN, LOESCHEN or DELETE (any letter case).
+	 *
+	 * ## EXAMPLES
+	 *
+	 *     wp vcap data-removal on --confirm=LÖSCHEN
+	 *     wp vcap data-removal off
+	 *
+	 * @subcommand data-removal
+	 * @param array $args       Positional arguments.
+	 * @param array $assoc_args Options.
+	 */
+	public function data_removal( $args = array(), $assoc_args = array() ): void {
+		$state = (string) ( $args[0] ?? 'status' );
+		if ( 'off' === $state ) {
+			update_option( DataRemoval::OPTION, 'no' );
+			self::success( 'Data removal is off: deleting the plugin keeps all data.' );
+			return;
+		}
+		if ( 'on' === $state ) {
+			if ( ! DataRemoval::is_confirmation( $assoc_args['confirm'] ?? '' ) ) {
+				self::error( 'Switching data removal on needs --confirm=LÖSCHEN (or LOESCHEN, DELETE). Nothing was changed.' );
+				return;
+			}
+			update_option( DataRemoval::OPTION, 'yes' );
+			self::warning( 'Data removal is on: deleting the plugin removes all voucher data of this site.' );
+			return;
+		}
+		if ( 'status' !== $state ) {
+			self::error( 'Usage: wp vcap data-removal [on|off|status] [--confirm=LÖSCHEN]' );
+			return;
+		}
+		self::line( 'yes' === get_option( DataRemoval::OPTION, 'no' ) ? 'on' : 'off' );
 	}
 
 	/**

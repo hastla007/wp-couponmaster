@@ -1,10 +1,11 @@
 <?php
 /**
- * Uninstall: only removes data when "Delete data on uninstall" is enabled. Always: leftovers of the license client
- * of earlier builds are removed, gift card and store credit coupons and coupons with rules only Voucher Captain
- * checks are suspended (draft) – without the plugin nothing would deduct their balance or check their rules; with
- * data deletion all Voucher Captain coupons go to the trash (restorable there), the other WooCommerce coupons are
- * kept.
+ * Uninstall: only removes data when "Remove all data when the plugin is deleted" is on (switched on only with the typed
+ * word LÖSCHEN/DELETE, VCAP\Admin\DataRemoval; each site of a network decides for itself). Always: scheduled jobs
+ * and leftovers of the license client of earlier builds are removed, gift card and store credit coupons and coupons
+ * with rules only Voucher Captain checks are suspended (draft) – without the plugin nothing would deduct their
+ * balance or check their rules; with data deletion all Voucher Captain coupons go to the trash (restorable there),
+ * the other WooCommerce coupons are kept.
  */
 
 // VCAP_UNINSTALL_FUNCTIONS_ONLY: tests/install-integration.php loads the functions without uninstalling.
@@ -122,6 +123,7 @@ function vcap_uninstall_site(): bool {
 	vcap_uninstall_license_data(); // Every uninstall, also when the data is kept.
 	$delete_data = 'yes' === get_option( 'vcap_delete_on_uninstall', 'no' );
 	vcap_uninstall_coupons( $delete_data ); // First: needs the voucher table, which data deletion drops.
+	vcap_uninstall_jobs(); // Every uninstall, also when the data is kept: nothing would run the jobs any more.
 	if ( ! $delete_data ) {
 		return false;
 	}
@@ -161,9 +163,6 @@ function vcap_uninstall_site(): bool {
 		}
 	}
 	remove_role( 'vcap_cashier' );
-	if ( function_exists( 'as_unschedule_all_actions' ) ) {
-		as_unschedule_all_actions( '', array(), 'vcap' );
-	}
 	$uploads = wp_upload_dir( null, false );
 	// The private folder: "vcap" or, since M12-43, "vcap-<random suffix>" (the option naming it is already gone).
 	$dirs = array_filter(
@@ -181,6 +180,19 @@ function vcap_uninstall_site(): bool {
 		rmdir( $dir ); // phpcs:ignore
 	}
 	return true;
+}
+
+/**
+ * Removes the scheduled jobs of the current site (Action Scheduler group "vcap", the recurring maintenance and
+ * reservation release; the WP-Cron hook of earlier builds goes with vcap_uninstall_license_data()) – on every
+ * uninstall, also when the data is kept.
+ */
+function vcap_uninstall_jobs(): void {
+	if ( function_exists( 'as_unschedule_all_actions' ) ) {
+		as_unschedule_all_actions( '', array(), 'vcap' );
+		as_unschedule_all_actions( 'vcap_daily_maintenance' );
+		as_unschedule_all_actions( 'vcap_release_stale_order_reservations' );
+	}
 }
 
 /**
