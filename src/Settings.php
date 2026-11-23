@@ -370,7 +370,8 @@ final class Settings {
 					'title'             => __( 'One PDF up to (vouchers)', 'voucher-captain' ),
 					'type'              => 'number',
 					'custom_attributes' => array( 'step' => 1 ),
-					'desc_tip'          => __( 'A bundled email with up to this many vouchers carries one PDF with a page per voucher (default 20 for new shops). Larger bundles carry no attachment but a download link per voucher and the link to My Account. 0 = never attach a PDF to a bundled email.', 'voucher-captain' ),
+					/* translators: 1: value a new installation stores, 2: value of shops that never saved the setting */
+					'desc_tip'          => sprintf( __( 'A bundled email with up to this many vouchers carries one PDF with a page per voucher. New installations start with %1$d; shops installed before that and never saved this field use %2$d. Larger bundles carry no attachment but a download link per voucher and the link to My Account. 0 = never attach a PDF to a bundled email.', 'voucher-captain' ), (int) SettingsRegistry::fresh_default( 'vcap_bundle_pdf_limit' ), (int) SettingsRegistry::default( 'vcap_bundle_pdf_limit' ) ),
 				)
 			),
 			array( 'type' => 'sectionend', 'id' => 'vcap_bundle' ),
@@ -736,6 +737,7 @@ final class Settings {
 					'title'   => __( 'Default template', 'voucher-captain' ),
 					'type'    => 'select',
 					'options' => $this->template_options(),
+					'desc_tip' => __( 'PDF template of voucher products without a template of their own (product → Voucher settings). "— None —" uses the built-in layout.', 'voucher-captain' ),
 				)
 			),
 			SettingsRegistry::field(
@@ -805,6 +807,7 @@ final class Settings {
 					'type'              => 'number',
 					'css'               => 'width:90px',
 					'custom_attributes' => array( 'step' => 1 ),
+					'desc_tip'          => __( 'How long vouchers held by the limit above wait after the payment before they are delivered and redeemable (default 24). 0 = no hold.', 'voucher-captain' ),
 				)
 			),
 			array( 'type' => 'sectionend', 'id' => 'vcap_abuse' ),
@@ -848,6 +851,7 @@ final class Settings {
 						'numeric'     => __( 'Digits only', 'voucher-captain' ),
 						'alnum'       => __( 'Letters and digits, mixed case', 'voucher-captain' ),
 					),
+					'desc_tip' => __( 'Characters of the random part of new codes. Fewer characters make longer codes (see "Random part length"). Existing codes do not change.', 'voucher-captain' ),
 				)
 			),
 			SettingsRegistry::field(
@@ -856,6 +860,7 @@ final class Settings {
 					'title'             => __( 'Separator', 'voucher-captain' ),
 					'type'              => 'text',
 					'css'               => 'width:60px',
+					'desc_tip'          => __( 'Placed between prefix, order number, random part and suffix, e.g. "-". Letters, digits, dot, hyphen and underscore, up to 3 characters; empty = no separator.', 'voucher-captain' ),
 					'custom_attributes' => array( 'maxlength' => 3, 'pattern' => '[A-Za-z0-9._\-]*' ),
 				)
 			),
@@ -948,6 +953,7 @@ final class Settings {
 						'last'  => __( 'Gift cards first, then store credit', 'voucher-captain' ),
 						'first' => __( 'Store credit first, then gift cards', 'voucher-captain' ),
 					),
+					'desc_tip' => __( 'Which pays first when a customer uses gift cards and store credit in the same order. Discount codes are always calculated before both.', 'voucher-captain' ),
 				)
 			),
 			SettingsRegistry::field(
@@ -1093,6 +1099,7 @@ final class Settings {
 					'title' => __( 'Refer a friend', 'voucher-captain' ),
 					'type'  => 'checkbox',
 					'desc'  => __( 'Enable referral codes', 'voucher-captain' ),
+					'desc_tip' => __( 'Gives every customer a personal referral code in My Account → Vouchers; the rules are set below.', 'voucher-captain' ),
 				)
 			),
 			SettingsRegistry::field(
@@ -1102,6 +1109,7 @@ final class Settings {
 					'type'              => 'number',
 					'css'               => 'width:90px',
 					'custom_attributes' => array( 'step' => '0.01' ),
+					'desc_tip'          => __( 'Discount the friend gets on the first order with the referral code: an amount in the shop currency or a percentage (see "Discount type").', 'voucher-captain' ),
 				)
 			),
 			SettingsRegistry::field(
@@ -1113,6 +1121,7 @@ final class Settings {
 						'fixed_cart' => __( 'Fixed amount', 'voucher-captain' ),
 						'percent'    => __( 'Percentage', 'voucher-captain' ),
 					),
+					'desc_tip' => __( 'Fixed amount off the order, or a percentage of the order value.', 'voucher-captain' ),
 				)
 			),
 			SettingsRegistry::field(
@@ -1133,6 +1142,7 @@ final class Settings {
 					'type'              => 'number',
 					'css'               => 'width:90px',
 					'custom_attributes' => array( 'step' => '0.01' ),
+					'desc_tip'          => __( 'Amount in the shop currency the referring customer gets for each successful referral. 0 = no reward.', 'voucher-captain' ),
 				)
 			),
 			SettingsRegistry::field(
@@ -1144,6 +1154,7 @@ final class Settings {
 						'coupon' => __( 'Coupon by email', 'voucher-captain' ),
 						'credit' => __( 'Store credit (requires store credit)', 'voucher-captain' ),
 					),
+					'desc_tip' => __( 'A single-use coupon sent by email, or a credit on the customer\'s store credit account (only when "Store credit" is switched on).', 'voucher-captain' ),
 				)
 			),
 			SettingsRegistry::field(
@@ -1153,6 +1164,7 @@ final class Settings {
 					'type'              => 'number',
 					'css'               => 'width:90px',
 					'custom_attributes' => array( 'step' => 1 ),
+					'desc_tip'          => __( 'The reward coupon expires this many days after it was created (default 90). 0 = never expires.', 'voucher-captain' ),
 				)
 			),
 			SettingsRegistry::field(
@@ -1172,7 +1184,7 @@ final class Settings {
 					'type'              => 'number',
 					'css'               => 'width:90px',
 					'custom_attributes' => array( 'step' => 1 ),
-					'desc_tip'          => __( '0 = unlimited.', 'voucher-captain' ),
+					'desc_tip'          => __( 'Highest number of rewards one referring customer can earn within 30 days; a referral beyond the limit earns nothing. 0 = unlimited.', 'voucher-captain' ),
 				)
 			),
 			SettingsRegistry::field(
@@ -1207,6 +1219,7 @@ final class Settings {
 					'type'              => 'number',
 					'css'               => 'width:90px',
 					'custom_attributes' => $money,
+					'desc_tip'          => __( 'Highest total value one staff member may redeem at the counter per shop day. 0 = unlimited.', 'voucher-captain' ),
 				)
 			),
 			SettingsRegistry::field(
@@ -1216,6 +1229,7 @@ final class Settings {
 					'type'              => 'number',
 					'css'               => 'width:90px',
 					'custom_attributes' => $count,
+					'desc_tip'          => __( 'Highest number of counter redemptions per staff member and shop day. 0 = unlimited.', 'voucher-captain' ),
 				)
 			),
 			SettingsRegistry::field(
@@ -1235,6 +1249,7 @@ final class Settings {
 					'type'              => 'number',
 					'css'               => 'width:90px',
 					'custom_attributes' => $count,
+					'desc_tip'          => __( 'Highest number of counter redemptions per till/branch and shop day; devices without a till share one limit. 0 = unlimited.', 'voucher-captain' ),
 				)
 			),
 			SettingsRegistry::field(

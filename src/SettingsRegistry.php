@@ -226,6 +226,8 @@ final class SettingsRegistry {
 	/**
 	 * A settings field of a registered option completed from the register: id, default (unless the field sets its
 	 * own, e.g. a default computed at runtime) and, for number fields, min and max before the other attributes.
+	 * SET-VC-23: the help of a setting with legal weight is shown as visible text below the field, never only as a
+	 * tooltip (a string desc_tip becomes the start of desc; desc_tip true is dropped, so desc stays visible).
 	 *
 	 * @param string               $key   Option name.
 	 * @param array<string, mixed> $field WooCommerce settings field without id.
@@ -239,6 +241,14 @@ final class SettingsRegistry {
 		}
 		if ( ! array_key_exists( 'default', $field ) ) {
 			$field['default'] = $entry['default'];
+		}
+		if ( $entry['legal'] && array_key_exists( 'desc_tip', $field ) && 'checkbox' !== ( $field['type'] ?? '' ) ) {
+			$tip = $field['desc_tip'];
+			unset( $field['desc_tip'] );
+			if ( is_string( $tip ) && '' !== trim( $tip ) ) {
+				$desc          = trim( (string) ( $field['desc'] ?? '' ) );
+				$field['desc'] = '' !== $desc ? $tip . ' ' . $desc : $tip;
+			}
 		}
 		if ( 'number' === ( $field['type'] ?? '' ) ) {
 			$bounds = array_filter(
@@ -310,7 +320,61 @@ final class SettingsRegistry {
 	 */
 	public static function sanitize_option( $value, $option = array() ) {
 		$key = is_array( $option ) ? (string) ( $option['id'] ?? '' ) : '';
-		return '' !== $key ? self::sanitize( $value, $key ) : $value;
+		if ( '' === $key ) {
+			return $value;
+		}
+		$fixed   = self::sanitize( $value, $key );
+		$message = self::correction_message( $value, $fixed, $key, (string) ( $option['title'] ?? '' ) );
+		if ( '' !== $message && class_exists( '\WC_Admin_Settings' ) ) {
+			\WC_Admin_Settings::add_error( $message );
+		}
+		return $fixed;
+	}
+
+	/**
+	 * SET-VC-23: the message shown when saving changed or refused a number – it names the field and the allowed
+	 * range. '' when the value was stored as entered (or is no number setting).
+	 *
+	 * @param mixed  $value Submitted value.
+	 * @param mixed  $fixed What sanitize() returned for it.
+	 * @param string $key   Option name.
+	 * @param string $label Field label ('' = the option name).
+	 */
+	public static function correction_message( $value, $fixed, string $key, string $label = '' ): string {
+		$entry = self::get( $key );
+		if ( null === $value || null === $entry || ! in_array( $entry['type'], array( 'int', 'decimal' ), true ) ) {
+			return '';
+		}
+		$text = is_scalar( $value ) ? trim( (string) $value ) : '';
+		if ( null !== $fixed && (string) $fixed === $text ) {
+			return '';
+		}
+		$label = '' !== trim( $label ) ? trim( wp_strip_all_tags( $label ) ) : $key;
+		$min   = $entry['min'];
+		$max   = $entry['max'];
+		if ( null !== $min && null !== $max ) {
+			/* translators: 1: smallest allowed value, 2: largest allowed value */
+			$range = sprintf( __( 'from %1$s to %2$s', 'voucher-captain' ), $min, $max );
+		} elseif ( null !== $min ) {
+			/* translators: %s: smallest allowed value */
+			$range = sprintf( __( '%s or more', 'voucher-captain' ), $min );
+		} elseif ( null !== $max ) {
+			/* translators: %s: largest allowed value */
+			$range = sprintf( __( 'up to %s', 'voucher-captain' ), $max );
+		} else {
+			$range = __( 'of any size', 'voucher-captain' );
+		}
+		$whole = 'int' === $entry['type'] ? __( 'whole numbers', 'voucher-captain' ) : __( 'numbers', 'voucher-captain' );
+		if ( null === $fixed && '' === $text ) {
+			/* translators: 1: field label, 2: "whole numbers" or "numbers", 3: allowed range */
+			return sprintf( __( '%1$s must not be empty – allowed are %2$s %3$s. The previous value is kept.', 'voucher-captain' ), $label, $whole, $range );
+		}
+		if ( null === $fixed ) {
+			/* translators: 1: field label, 2: value entered, 3: "whole numbers" or "numbers", 4: allowed range */
+			return sprintf( __( '%1$s: "%2$s" was not saved – allowed are %3$s %4$s. The previous value is kept.', 'voucher-captain' ), $label, $text, $whole, $range );
+		}
+		/* translators: 1: field label, 2: value entered, 3: value saved, 4: "whole numbers" or "numbers", 5: allowed range */
+		return sprintf( __( '%1$s: %2$s is not allowed – allowed are %4$s %5$s. %3$s was saved instead.', 'voucher-captain' ), $label, $text, (string) $fixed, $whole, $range );
 	}
 
 	/**

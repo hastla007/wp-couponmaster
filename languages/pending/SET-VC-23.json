@@ -1,0 +1,128 @@
+{
+  "%1$s must not be empty – allowed are %2$s %3$s. The previous value is kept.": {
+    "du": "%1$s darf nicht leer sein – erlaubt sind %2$s %3$s. Der bisherige Wert bleibt.",
+    "sie": "%1$s darf nicht leer sein – erlaubt sind %2$s %3$s. Der bisherige Wert bleibt.",
+    "at": "%1$s darf nicht leer sein – erlaubt sind %2$s %3$s. Der bisherige Wert bleibt."
+  },
+  "%1$s: \"%2$s\" was not saved – allowed are %3$s %4$s. The previous value is kept.": {
+    "du": "%1$s: „%2$s“ wurde nicht gespeichert – erlaubt sind %3$s %4$s. Der bisherige Wert bleibt.",
+    "sie": "%1$s: „%2$s“ wurde nicht gespeichert – erlaubt sind %3$s %4$s. Der bisherige Wert bleibt.",
+    "at": "%1$s: „%2$s“ wurde nicht gespeichert – erlaubt sind %3$s %4$s. Der bisherige Wert bleibt."
+  },
+  "%1$s: %2$s is not allowed – allowed are %4$s %5$s. %3$s was saved instead.": {
+    "du": "%1$s: %2$s ist nicht erlaubt – erlaubt sind %4$s %5$s. Gespeichert wurde %3$s.",
+    "sie": "%1$s: %2$s ist nicht erlaubt – erlaubt sind %4$s %5$s. Gespeichert wurde %3$s.",
+    "at": "%1$s: %2$s ist nicht erlaubt – erlaubt sind %4$s %5$s. Gespeichert wurde %3$s."
+  },
+  "from %1$s to %2$s": {"du": "von %1$s bis %2$s", "sie": "von %1$s bis %2$s", "at": "von %1$s bis %2$s"},
+  "%s or more": {"du": "ab %s", "sie": "ab %s", "at": "ab %s"},
+  "up to %s": {"du": "bis %s", "sie": "bis %s", "at": "bis %s"},
+  "of any size": {"du": "beliebiger Größe", "sie": "beliebiger Größe", "at": "beliebiger Größe"},
+  "whole numbers": {"du": "ganze Zahlen", "sie": "ganze Zahlen", "at": "ganze Zahlen"},
+  "numbers": {"du": "Zahlen", "sie": "Zahlen", "at": "Zahlen"},
+  "A bundled email with up to this many vouchers carries one PDF with a page per voucher. New installations start with %1$d; shops installed before that and never saved this field use %2$d. Larger bundles carry no attachment but a download link per voucher and the link to My Account. 0 = never attach a PDF to a bundled email.": {
+    "du": "Eine Sammel-E-Mail mit bis zu so vielen Gutscheinen enthält ein PDF mit einer Seite je Gutschein. Neue Installationen beginnen mit %1$d; Shops, die vorher installiert wurden und dieses Feld nie gespeichert haben, nutzen %2$d. Größere Sammlungen haben keinen Anhang, sondern je Gutschein einen Download-Link und den Link zu „Mein Konto“. 0 = einer Sammel-E-Mail nie ein PDF anhängen.",
+    "sie": "Eine Sammel-E-Mail mit bis zu so vielen Gutscheinen enthält ein PDF mit einer Seite je Gutschein. Neue Installationen beginnen mit %1$d; Shops, die vorher installiert wurden und dieses Feld nie gespeichert haben, nutzen %2$d. Größere Sammlungen haben keinen Anhang, sondern je Gutschein einen Download-Link und den Link zu „Mein Konto“. 0 = einer Sammel-E-Mail nie ein PDF anhängen.",
+    "at": "Eine Sammel-E-Mail mit bis zu so vielen Gutscheinen enthält ein PDF mit einer Seite je Gutschein. Neue Installationen beginnen mit %1$d; Shops, die vorher installiert wurden und dieses Feld nie gespeichert haben, nutzen %2$d. Größere Sammlungen haben keinen Anhang, sondern je Gutschein einen Download-Link und den Link zu „Mein Konto“. 0 = einer Sammel-E-Mail nie ein PDF anhängen."
+  },
+  "A single-use coupon sent by email, or a credit on the customer's store credit account (only when \"Store credit\" is switched on).": {
+    "du": "Ein einmal nutzbarer Gutschein per E-Mail oder eine Gutschrift auf dem Kundenguthaben (nur wenn „Kundenguthaben“ eingeschaltet ist).",
+    "sie": "Ein einmal nutzbarer Gutschein per E-Mail oder eine Gutschrift auf dem Kundenguthaben (nur wenn „Kundenguthaben“ eingeschaltet ist).",
+    "at": "Ein einmal nutzbarer Gutschein per E-Mail oder eine Gutschrift auf dem Kundenguthaben (nur wenn „Kundenguthaben“ eingeschaltet ist)."
+  },
+  "Amount in the shop currency the referring customer gets for each successful referral. 0 = no reward.": {
+    "du": "Betrag in Shop-Währung, den der Werbende für jede erfolgreiche Empfehlung erhält. 0 = keine Prämie.",
+    "sie": "Betrag in Shop-Währung, den der Werbende für jede erfolgreiche Empfehlung erhält. 0 = keine Prämie.",
+    "at": "Betrag in Shop-Währung, den der Werbende für jede erfolgreiche Empfehlung erhält. 0 = keine Prämie."
+  },
+  "Characters of the random part of new codes. Fewer characters make longer codes (see \"Random part length\"). Existing codes do not change.": {
+    "du": "Zeichen des Zufallsteils neuer Codes. Weniger verschiedene Zeichen ergeben längere Codes (siehe „Länge des Zufallsteils“). Bestehende Codes ändern sich nicht.",
+    "sie": "Zeichen des Zufallsteils neuer Codes. Weniger verschiedene Zeichen ergeben längere Codes (siehe „Länge des Zufallsteils“). Bestehende Codes ändern sich nicht.",
+    "at": "Zeichen des Zufallsteils neuer Codes. Weniger verschiedene Zeichen ergeben längere Codes (siehe „Länge des Zufallsteils“). Bestehende Codes ändern sich nicht."
+  },
+  "DATEV consultant number of your tax adviser (4 to 7 digits). Written into the header of the booking batch.": {
+    "du": "DATEV-Beraternummer deiner Steuerberatung (4 bis 7 Ziffern). Steht im Kopf des Buchungsstapels.",
+    "sie": "DATEV-Beraternummer Ihrer Steuerberatung (4 bis 7 Ziffern). Steht im Kopf des Buchungsstapels.",
+    "at": "DATEV-Beraternummer Ihrer Steuerberatung (4 bis 7 Ziffern). Steht im Kopf des Buchungsstapels."
+  },
+  "Discount the friend gets on the first order with the referral code: an amount in the shop currency or a percentage (see \"Discount type\").": {
+    "du": "Rabatt, den der Freund bei der ersten Bestellung mit dem Empfehlungscode erhält: ein Betrag in Shop-Währung oder ein Prozentsatz (siehe „Rabattart“).",
+    "sie": "Rabatt, den der Freund bei der ersten Bestellung mit dem Empfehlungscode erhält: ein Betrag in Shop-Währung oder ein Prozentsatz (siehe „Rabattart“).",
+    "at": "Rabatt, den der Freund bei der ersten Bestellung mit dem Empfehlungscode erhält: ein Betrag in Shop-Währung oder ein Prozentsatz (siehe „Rabattart“)."
+  },
+  "Fixed amount off the order, or a percentage of the order value.": {
+    "du": "Fester Betrag auf die Bestellung oder ein Prozentsatz des Bestellwerts.",
+    "sie": "Fester Betrag auf die Bestellung oder ein Prozentsatz des Bestellwerts.",
+    "at": "Fester Betrag auf die Bestellung oder ein Prozentsatz des Bestellwerts."
+  },
+  "Gives every customer a personal referral code in My Account → Vouchers; the rules are set below.": {
+    "du": "Jeder Kunde erhält unter „Mein Konto → Gutscheine“ einen persönlichen Empfehlungscode; die Regeln stellst du unten ein.",
+    "sie": "Jeder Kunde erhält unter „Mein Konto → Gutscheine“ einen persönlichen Empfehlungscode; die Regeln stellen Sie unten ein.",
+    "at": "Jeder Kunde erhält unter „Mein Konto → Gutscheine“ einen persönlichen Empfehlungscode; die Regeln stellen Sie unten ein."
+  },
+  "Highest number of counter redemptions per staff member and shop day. 0 = unlimited.": {
+    "du": "Höchstzahl der Einlösungen an der Kasse je Mitarbeiter und Shop-Tag. 0 = unbegrenzt.",
+    "sie": "Höchstzahl der Einlösungen an der Kasse je Mitarbeiter und Shop-Tag. 0 = unbegrenzt.",
+    "at": "Höchstzahl der Einlösungen an der Kassa je Mitarbeiter und Shop-Tag. 0 = unbegrenzt."
+  },
+  "Highest number of counter redemptions per till/branch and shop day; devices without a till share one limit. 0 = unlimited.": {
+    "du": "Höchstzahl der Einlösungen an der Kasse je Kasse/Filiale und Shop-Tag; Geräte ohne Kasse teilen sich ein Limit. 0 = unbegrenzt.",
+    "sie": "Höchstzahl der Einlösungen an der Kasse je Kasse/Filiale und Shop-Tag; Geräte ohne Kasse teilen sich ein Limit. 0 = unbegrenzt.",
+    "at": "Höchstzahl der Einlösungen an der Kassa je Kassa/Filiale und Shop-Tag; Geräte ohne Kassa teilen sich ein Limit. 0 = unbegrenzt."
+  },
+  "Highest number of rewards one referring customer can earn within 30 days; a referral beyond the limit earns nothing. 0 = unlimited.": {
+    "du": "Höchstzahl der Prämien, die ein Werbender innerhalb von 30 Tagen erhalten kann; eine Empfehlung über dem Limit bringt nichts. 0 = unbegrenzt.",
+    "sie": "Höchstzahl der Prämien, die ein Werbender innerhalb von 30 Tagen erhalten kann; eine Empfehlung über dem Limit bringt nichts. 0 = unbegrenzt.",
+    "at": "Höchstzahl der Prämien, die ein Werbender innerhalb von 30 Tagen erhalten kann; eine Empfehlung über dem Limit bringt nichts. 0 = unbegrenzt."
+  },
+  "Highest total value one staff member may redeem at the counter per shop day. 0 = unlimited.": {
+    "du": "Höchster Gesamtwert, den ein Mitarbeiter je Shop-Tag an der Kasse einlösen darf. 0 = unbegrenzt.",
+    "sie": "Höchster Gesamtwert, den ein Mitarbeiter je Shop-Tag an der Kasse einlösen darf. 0 = unbegrenzt.",
+    "at": "Höchster Gesamtwert, den ein Mitarbeiter je Shop-Tag an der Kassa einlösen darf. 0 = unbegrenzt."
+  },
+  "How long vouchers held by the limit above wait after the payment before they are delivered and redeemable (default 24). 0 = no hold.": {
+    "du": "Wie lange Gutscheine, die durch die Grenze oben zurückgehalten werden, nach der Zahlung warten, bevor sie zugestellt und einlösbar sind (Standard 24). 0 = kein Zurückhalten.",
+    "sie": "Wie lange Gutscheine, die durch die Grenze oben zurückgehalten werden, nach der Zahlung warten, bevor sie zugestellt und einlösbar sind (Standard 24). 0 = kein Zurückhalten.",
+    "at": "Wie lange Gutscheine, die durch die Grenze oben zurückgehalten werden, nach der Zahlung warten, bevor sie zugestellt und einlösbar sind (Standard 24). 0 = kein Zurückhalten."
+  },
+  "Month and day the financial year starts, e.g. 0101 for 1 January or 0701 for 1 July. The export assigns each booking to its financial year; agree it with your tax adviser.": {
+    "du": "Monat und Tag des Beginns des Wirtschaftsjahres, z. B. 0101 für 1. Januar oder 0701 für 1. Juli. Der Export ordnet jede Buchung ihrem Wirtschaftsjahr zu; stimme den Wert mit deiner Steuerberatung ab.",
+    "sie": "Monat und Tag des Beginns des Wirtschaftsjahres, z. B. 0101 für 1. Januar oder 0701 für 1. Juli. Der Export ordnet jede Buchung ihrem Wirtschaftsjahr zu; stimmen Sie den Wert mit Ihrer Steuerberatung ab.",
+    "at": "Monat und Tag des Beginns des Wirtschaftsjahres, z. B. 0101 für 1. Jänner oder 0701 für 1. Juli. Der Export ordnet jede Buchung ihrem Wirtschaftsjahr zu; stimmen Sie den Wert mit Ihrer Steuerberatung ab."
+  },
+  "Number of digits of your general ledger accounts in DATEV (4 to 9, default 4, e.g. SKR03/SKR04).": {
+    "du": "Stellenzahl deiner Sachkonten in DATEV (4 bis 9, Standard 4, z. B. SKR03/SKR04).",
+    "sie": "Stellenzahl Ihrer Sachkonten in DATEV (4 bis 9, Standard 4, z. B. SKR03/SKR04).",
+    "at": "Stellenzahl Ihrer Sachkonten in DATEV (4 bis 9, Standard 4, z. B. SKR03/SKR04)."
+  },
+  "PDF template of voucher products without a template of their own (product → Voucher settings). \"— None —\" uses the built-in layout.": {
+    "du": "PDF-Vorlage für Gutscheinprodukte ohne eigene Vorlage (Produkt → Gutschein-Einstellungen). „— Keine —“ nutzt das eingebaute Layout.",
+    "sie": "PDF-Vorlage für Gutscheinprodukte ohne eigene Vorlage (Produkt → Gutschein-Einstellungen). „— Keine —“ nutzt das eingebaute Layout.",
+    "at": "PDF-Vorlage für Gutscheinprodukte ohne eigene Vorlage (Produkt → Gutschein-Einstellungen). „— Keine —“ nutzt das eingebaute Layout."
+  },
+  "Placed between prefix, order number, random part and suffix, e.g. \"-\". Letters, digits, dot, hyphen and underscore, up to 3 characters; empty = no separator.": {
+    "du": "Steht zwischen Präfix, Bestellnummer, Zufallsteil und Suffix, z. B. „-“. Buchstaben, Ziffern, Punkt, Bindestrich und Unterstrich, bis zu 3 Zeichen; leer = kein Trennzeichen.",
+    "sie": "Steht zwischen Präfix, Bestellnummer, Zufallsteil und Suffix, z. B. „-“. Buchstaben, Ziffern, Punkt, Bindestrich und Unterstrich, bis zu 3 Zeichen; leer = kein Trennzeichen.",
+    "at": "Steht zwischen Präfix, Bestellnummer, Zufallsteil und Suffix, z. B. „-“. Buchstaben, Ziffern, Punkt, Bindestrich und Unterstrich, bis zu 3 Zeichen; leer = kein Trennzeichen."
+  },
+  "The reward coupon expires this many days after it was created (default 90). 0 = never expires.": {
+    "du": "Der Prämiengutschein läuft so viele Tage nach seiner Erstellung ab (Standard 90). 0 = läuft nie ab.",
+    "sie": "Der Prämiengutschein läuft so viele Tage nach seiner Erstellung ab (Standard 90). 0 = läuft nie ab.",
+    "at": "Der Prämiengutschein läuft so viele Tage nach seiner Erstellung ab (Standard 90). 0 = läuft nie ab."
+  },
+  "Vouchers one recipient may get from this command per calendar day (at most %d).": {
+    "du": "Gutscheine, die ein Empfänger je Kalendertag über diesen Befehl erhalten darf (höchstens %d).",
+    "sie": "Gutscheine, die ein Empfänger je Kalendertag über diesen Befehl erhalten darf (höchstens %d).",
+    "at": "Gutscheine, die ein Empfänger je Kalendertag über diesen Befehl erhalten darf (höchstens %d)."
+  },
+  "Which pays first when a customer uses gift cards and store credit in the same order. Discount codes are always calculated before both.": {
+    "du": "Was zuerst zahlt, wenn ein Kunde Geschenkkarten und Kundenguthaben in derselben Bestellung nutzt. Rabattcodes werden immer vor beiden berechnet.",
+    "sie": "Was zuerst zahlt, wenn ein Kunde Geschenkkarten und Kundenguthaben in derselben Bestellung nutzt. Rabattcodes werden immer vor beiden berechnet.",
+    "at": "Was zuerst zahlt, wenn ein Kunde Geschenkkarten und Kundenguthaben in derselben Bestellung nutzt. Rabattcodes werden immer vor beiden berechnet."
+  },
+  "Your DATEV client number at the tax adviser (1 to 5 digits).": {
+    "du": "Deine DATEV-Mandantennummer bei der Steuerberatung (1 bis 5 Ziffern).",
+    "sie": "Ihre DATEV-Mandantennummer bei der Steuerberatung (1 bis 5 Ziffern).",
+    "at": "Ihre DATEV-Mandantennummer bei der Steuerberatung (1 bis 5 Ziffern)."
+  }
+}

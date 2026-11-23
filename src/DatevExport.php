@@ -46,6 +46,7 @@ final class DatevExport {
 					'title'             => __( 'Consultant number', 'voucher-captain' ),
 					'type'              => 'text',
 					'custom_attributes' => array( 'pattern' => '[0-9]{4,7}', 'inputmode' => 'numeric' ),
+					'desc_tip'          => __( 'DATEV consultant number of your tax adviser (4 to 7 digits). Written into the header of the booking batch.', 'voucher-captain' ),
 				)
 			),
 			SettingsRegistry::field(
@@ -54,6 +55,7 @@ final class DatevExport {
 					'title'             => __( 'Client number', 'voucher-captain' ),
 					'type'              => 'text',
 					'custom_attributes' => array( 'pattern' => '[0-9]{1,5}', 'inputmode' => 'numeric' ),
+					'desc_tip'          => __( 'Your DATEV client number at the tax adviser (1 to 5 digits).', 'voucher-captain' ),
 				)
 			),
 			SettingsRegistry::field(
@@ -62,6 +64,7 @@ final class DatevExport {
 					'title'             => __( 'Start of the financial year (MMDD)', 'voucher-captain' ),
 					'type'              => 'text',
 					'custom_attributes' => array( 'pattern' => '[0-9]{4}', 'inputmode' => 'numeric' ),
+					'desc'              => __( 'Month and day the financial year starts, e.g. 0101 for 1 January or 0701 for 1 July. The export assigns each booking to its financial year; agree it with your tax adviser.', 'voucher-captain' ),
 				)
 			),
 			SettingsRegistry::field(
@@ -70,6 +73,7 @@ final class DatevExport {
 					'title'             => __( 'Length of ledger accounts', 'voucher-captain' ),
 					'type'              => 'number',
 					'custom_attributes' => array( 'step' => 1 ),
+					'desc_tip'          => __( 'Number of digits of your general ledger accounts in DATEV (4 to 9, default 4, e.g. SKR03/SKR04).', 'voucher-captain' ),
 				)
 			),
 			SettingsRegistry::field(

@@ -4230,5 +4230,65 @@ check(
 );
 unset( $GLOBALS['vcap_test_roles'] );
 
+
+// SET-VC-23: help text at every field, legal help visible, number corrections name field and range.
+echo "SET-VC-23 help texts and checks\n";
+$h23_settings = new VCAP\Settings();
+$h23_fields   = array();
+foreach ( array_keys( $h23_settings->section_list() ) as $h23_sec ) {
+	$h23_list = $h23_settings->fields( (string) $h23_sec );
+	if ( 'api' === $h23_sec ) {
+		$h23_list = VCAP\API\V1\ContactService::settings_fields( VCAP\API\V1\CommandService::settings_fields( $h23_list, 'api' ), 'api' );
+	}
+	foreach ( $h23_list as $h23_f ) {
+		$h23_id = (string) ( $h23_f['id'] ?? '' );
+		if ( VCAP\SettingsRegistry::has( $h23_id ) && ! in_array( $h23_f['type'] ?? '', array( 'title', 'sectionend' ), true ) ) {
+			$h23_fields[ $h23_id ] = $h23_f;
+		}
+	}
+}
+$h23_text    = static fn( $f ): string => trim( wp_strip_all_tags( ( is_string( $f['desc'] ?? null ) ? $f['desc'] : '' ) . ' ' . ( is_string( $f['desc_tip'] ?? null ) ? $f['desc_tip'] : '' ) ) );
+$h23_without = array_keys( array_filter( $h23_fields, static fn( $f ) => strlen( $h23_text( $f ) ) < 12 ) );
+check( 'SET-VC-23: every register field has a help text (desc or desc_tip with at least a short sentence)', array() === $h23_without && count( $h23_fields ) === count( array_filter( VCAP\SettingsRegistry::all(), static fn( $e ) => VCAP\SettingsRegistry::HIDDEN !== $e['section'] ) ), implode( ', ', $h23_without ) . ' / ' . count( $h23_fields ) );
+$h23_former = array( 'vcap_default_template', 'vcap_hold_hours', 'vcap_code_charset', 'vcap_code_separator', 'vcap_credit_apply_order', 'vcap_referral_friend_amount', 'vcap_referral_friend_type', 'vcap_referral_reward_amount', 'vcap_referral_reward_as', 'vcap_referral_reward_days', VCAP\Counter::USER_AMOUNT, VCAP\Counter::USER_COUNT, VCAP\Counter::TILL_COUNT, VCAP\DatevExport::OPTION_CONSULTANT, VCAP\DatevExport::OPTION_CLIENT, VCAP\DatevExport::OPTION_FY_START, VCAP\DatevExport::OPTION_LENGTH );
+check( 'SET-VC-23: the 17 fields without help (analysis 2.7) now explain themselves', 17 === count( $h23_former ) && array() === array_filter( $h23_former, static fn( $k ) => ! isset( $h23_fields[ $k ] ) || '' === $h23_text( $h23_fields[ $k ] ) ) );
+$h23_legal_hidden = array_keys( array_filter( $h23_fields, static fn( $f, $k ) => in_array( $k, VCAP\SettingsRegistry::with( 'legal' ), true ) && ( array_key_exists( 'desc_tip', $f ) || '' === trim( wp_strip_all_tags( (string) ( $f['desc'] ?? '' ) ) ) ), ARRAY_FILTER_USE_BOTH ) );
+$h23_legal_field  = VCAP\SettingsRegistry::field( 'vcap_retention_days', array( 'type' => 'number', 'desc_tip' => 'Tip.', 'desc' => 'More.' ) );
+check(
+	'SET-VC-23: help of settings with legal weight is visible text below the field, never only a tooltip (field() turns desc_tip into desc); other fields keep their tooltip',
+	array() === $h23_legal_hidden && 'Tip. More.' === $h23_legal_field['desc'] && ! array_key_exists( 'desc_tip', $h23_legal_field )
+		&& ! array_key_exists( 'desc_tip', VCAP\SettingsRegistry::field( 'vcap_datev_liability_account', array( 'type' => 'text', 'desc_tip' => true, 'desc' => 'D' ) ) )
+		&& 'Tip.' === VCAP\SettingsRegistry::field( 'vcap_hold_hours', array( 'type' => 'number', 'desc_tip' => 'Tip.' ) )['desc_tip']
+		&& str_contains( (string) $h23_fields['vcap_default_terms']['desc'], 'Not exchangeable for cash' ) && str_contains( (string) $h23_fields['vcap_retention_days']['desc'], '0 = keep' ),
+	implode( ', ', $h23_legal_hidden )
+);
+$h23_pdf = (string) ( $h23_fields['vcap_bundle_pdf_limit']['desc_tip'] ?? '' );
+check( 'SET-VC-23: vcap_bundle_pdf_limit – help text, register default (50, shops that never saved it) and fresh value (20, new installations) agree; stored values are not touched', 50 === VCAP\SettingsRegistry::default( 'vcap_bundle_pdf_limit' ) && 20 === VCAP\SettingsRegistry::fresh_default( 'vcap_bundle_pdf_limit' ) && 50 === $h23_fields['vcap_bundle_pdf_limit']['default'] && str_contains( $h23_pdf, 'New installations start with 20; shops installed before that and never saved this field use 50.' ) && ! str_contains( $h23_pdf, 'default 20' ), $h23_pdf );
+// Server-side corrections are reported with the field label and the allowed range.
+WC_Admin_Settings::$errors = array();
+$h23_saved = array(
+	VCAP\SettingsRegistry::sanitize_option( '30', array( 'id' => 'vcap_delivery_hour', 'title' => 'Delivery hour' ) ),
+	VCAP\SettingsRegistry::sanitize_option( '-5', array( 'id' => 'vcap_customer_daily_limit', 'title' => 'Daily limit' ) ),
+	VCAP\SettingsRegistry::sanitize_option( 'abc', array( 'id' => 'vcap_code_length', 'title' => 'Random part length' ) ),
+	VCAP\SettingsRegistry::sanitize_option( '', array( 'id' => 'vcap_hold_hours' ) ),
+	VCAP\SettingsRegistry::sanitize_option( '12.4', array( 'id' => 'vcap_code_length', 'title' => 'Random part length' ) ),
+	VCAP\SettingsRegistry::sanitize_option( '8', array( 'id' => 'vcap_delivery_hour', 'title' => 'Delivery hour' ) ),
+	VCAP\SettingsRegistry::sanitize_option( '10.50', array( 'id' => 'vcap_custom_max_default', 'title' => 'Max' ) ),
+	VCAP\SettingsRegistry::sanitize_option( '', array( 'id' => 'vcap_referral_min_spend', 'title' => 'Min' ) ),
+);
+$h23_err = WC_Admin_Settings::$errors;
+check(
+	'SET-VC-23: a number set to a bound, rounded or refused on saving shows an error naming the field, the value and the allowed range; valid values show none',
+	array( '23', '0', null, null, '12', '8', '10.50', '' ) === $h23_saved && 5 === count( $h23_err )
+		&& 'Delivery hour: 30 is not allowed – allowed are whole numbers from 0 to 23. 23 was saved instead.' === $h23_err[0]
+		&& 'Daily limit: -5 is not allowed – allowed are numbers 0 or more. 0 was saved instead.' === $h23_err[1]
+		&& 'Random part length: "abc" was not saved – allowed are whole numbers from 8 to 40. The previous value is kept.' === $h23_err[2]
+		&& 'vcap_hold_hours must not be empty – allowed are whole numbers 0 or more. The previous value is kept.' === $h23_err[3]
+		&& str_starts_with( $h23_err[4], 'Random part length: 12.4 is not allowed' ),
+	implode( ' | ', $h23_err )
+);
+WC_Admin_Settings::$errors = array();
+check( 'SET-VC-23: ACCESSIBILITY.md describes help texts, visible legal notes and the error messages of the settings', str_contains( (string) file_get_contents( VCAP_PATH . 'ACCESSIBILITY.md' ), '### Einstellungen: Hilfetexte und Fehlermeldungen' ) );
+
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );

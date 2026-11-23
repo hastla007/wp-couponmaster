@@ -268,7 +268,7 @@ final class CommandLimits {
 						'type'              => 'number',
 						'custom_attributes' => array( 'step' => 1 ),
 						/* translators: %d: highest number per recipient and day */
-						'desc'              => sprintf( __( 'At most %d.', 'voucher-captain' ), $fixed['per_recipient'] ),
+						'desc'              => sprintf( __( 'Vouchers one recipient may get from this command per calendar day (at most %d).', 'voucher-captain' ), $fixed['per_recipient'] ),
 					)
 				);
 			}

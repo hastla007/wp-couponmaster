@@ -28,6 +28,25 @@ Tastatur, Bildschirm nicht ansehen; Sprache der Seite Deutsch.
 Befunde mit Schweregrad (blockierend / erschwerend / kosmetisch) eintragen; blockierende vor dem Release beheben und
 in `tests/e2e/06-screen-reader.spec.js` als Regressionstest ergänzen.
 
+### Einstellungen: Hilfetexte und Fehlermeldungen
+
+*WooCommerce → Einstellungen → Gutscheine* (SET-VC-23):
+
+- **Jedes Feld hat einen Hilfetext** (Test „SET-VC-23: every register field has a help text“ in `tests/run.php`
+  prüft alle Felder des Einstellungs-Registers, auch die der Integrationen).
+- **Rechtlich relevante Hinweise stehen sichtbar unter dem Feld**, nicht nur im Tooltip: bei Einstellungen mit
+  `legal` im Register (z. B. Einlösebedingungen, Gültigkeit, Anonymisierung, Belegnummer an der Kasse, DATEV-Konten)
+  macht `SettingsRegistry::field()` aus dem Tooltip eine Beschreibung. Tooltips (Fragezeichen-Symbol) sind per
+  Tastatur und Screenreader schlecht erreichbar; die Beschreibung liest der Screenreader mit dem Feld vor.
+- **Fehlermeldungen nennen Feld und erlaubten Bereich.** Eine Zahl außerhalb von Mindest-/Höchstwert wird beim
+  Speichern auf die Grenze gesetzt, eine Kommazahl in einem Ganzzahlfeld gerundet, Text oder ein leeres Pflichtfeld
+  nicht gespeichert – jeweils mit einer Meldung oben auf der Seite, z. B. „Zustellstunde: 30 ist nicht erlaubt –
+  erlaubt sind ganze Zahlen von 0 bis 23. Gespeichert wurde 23.“ Die Zahlenfelder tragen `min`/`max` auch im HTML,
+  sodass Browser und Screenreader den Bereich schon bei der Eingabe kennen.
+- Die Tabelle *Rechte je Rolle* (Datenschutz & Erweitert) hat Spaltenköpfe, Zeilenköpfe je Rolle und für jedes
+  Kästchen einen Namen „Recht für Rolle“; feste Kästchen (Administrator, Rollen mit „WooCommerce verwalten“) sind
+  deaktiviert und angehakt.
+
 ### Gutschein-PDF
 
 Das PDF ist ein Druckdokument und **nicht getaggt** (dompdf erzeugt kein Tagged PDF/PDF/UA): Screenreader lesen den
