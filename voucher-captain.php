@@ -9,7 +9,7 @@
  * Requires Plugins:  woocommerce
  * WC requires at least: 11.2.2
  * WC tested up to:   11.3
- * Author:            CouponMaster
+ * Author:            Captain Suite
  * Text Domain:       voucher-captain
  * Domain Path:       /languages
  * License:           GPL-2.0-or-later

@@ -6,7 +6,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-23 09:21+0000\n"
+"POT-Creation-Date: 2026-11-23 13:05+0000\n"
 "X-Domain: voucher-captain\n"
 
 #. Plugin Name of the plugin
@@ -26,63 +26,63 @@ msgstr ""
 
 #. Author of the plugin
 #: voucher-captain.php
-msgid "CouponMaster"
+msgid "Captain Suite"
 msgstr ""
 
-#: src/API/V1/CommandLimits.php:199
+#: src/API/V1/CommandLimits.php:228
 msgid "Issue vouchers (voucher.issue)"
 msgstr ""
 
-#: src/API/V1/CommandLimits.php:200
+#: src/API/V1/CommandLimits.php:229
 msgid "Void vouchers (voucher.void)"
 msgstr ""
 
-#: src/API/V1/CommandLimits.php:201
+#: src/API/V1/CommandLimits.php:230
 msgid "Reactivate vouchers (voucher.reactivate)"
 msgstr ""
 
-#: src/API/V1/CommandLimits.php:202
+#: src/API/V1/CommandLimits.php:231
 msgid "Redeem vouchers (voucher.redeem)"
 msgstr ""
 
-#: src/API/V1/CommandLimits.php:207
+#: src/API/V1/CommandLimits.php:236
 msgid "Automatic voucher commands"
 msgstr ""
 
-#: src/API/V1/CommandLimits.php:209
+#: src/API/V1/CommandLimits.php:238
 msgid "Add-ons such as workflow automations can issue, void, reactivate and redeem vouchers through these entry points. Each one is off until you switch it on. The limits below are the highest values Voucher Captain allows; you can only lower them. Every call is recorded in the voucher history without the code."
 msgstr ""
 
-#: src/API/V1/CommandLimits.php:218
+#: src/API/V1/CommandLimits.php:247
 msgid "Allow this command"
 msgstr ""
 
-#: src/API/V1/CommandLimits.php:221
+#: src/API/V1/CommandLimits.php:250
 msgid "Calls per day"
 msgstr ""
 
 #. translators: %d: highest number of calls per day
-#: src/API/V1/CommandLimits.php:231
+#: src/API/V1/CommandLimits.php:260
 #, php-format
 msgid "Per calendar day and site, all automations together (at most %d)."
 msgstr ""
 
-#: src/API/V1/CommandLimits.php:235
+#: src/API/V1/CommandLimits.php:264
 msgid "Vouchers per recipient and day"
 msgstr ""
 
 #. translators: %d: highest number per recipient and day
-#: src/API/V1/CommandLimits.php:245
+#: src/API/V1/CommandLimits.php:274
 #, php-format
 msgid "At most %d."
 msgstr ""
 
-#: src/API/V1/CommandLimits.php:250 src/ProductSettings.php:244
+#: src/API/V1/CommandLimits.php:279 src/ProductSettings.php:244
 msgid "Maximum amount"
 msgstr ""
 
-#: src/API/V1/CommandLimits.php:254
-msgid "In the shop currency. Empty: 100 EUR. At most 100 EUR; in a shop with another currency, the command refuses amounts until you enter a maximum here that is worth no more than 100 EUR."
+#: src/API/V1/CommandLimits.php:283
+msgid "In the shop currency. Empty: 100 (in EUR, CHF, USD and GBP), at most 100 there. In a shop with another currency, the command refuses amounts until you enter a maximum here that is worth no more than 100 EUR."
 msgstr ""
 
 #: src/API/V1/CommandService.php:139
@@ -11131,17 +11131,17 @@ msgstr ""
 msgid "Voucher Captain requires PHP 8.5 or newer."
 msgstr ""
 
-#: voucher-captain.php:96
+#: voucher-captain.php:97
 msgid "Voucher Captain requires WooCommerce to be installed and active."
 msgstr ""
 
 #. translators: %s: installed WooCommerce version
-#: voucher-captain.php:110
+#: voucher-captain.php:111
 #, php-format
 msgid "Voucher Captain requires WooCommerce 11.2.2 or newer (installed: %s). Please update WooCommerce."
 msgstr ""
 
-#: voucher-captain.php:110
+#: voucher-captain.php:111
 msgid "Until then, gift cards and store credit are refused at checkout, because their balance cannot be deducted."
 msgstr ""
 

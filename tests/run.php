@@ -3273,16 +3273,31 @@ $vc1_cur  = $vc1->issue( $vc1_args( array( 'recipient_user_id' => 22, 'amount_mi
 $vc1_nok  = $vc1->issue( array( 'idempotency_key' => str_repeat( 'k', 101 ) ) + $vc1_args( array( 'recipient_user_id' => 22, 'amount_minor' => 100, 'currency' => 'EUR' ) ) );
 array_push( $vc1_all, $vc1_prod, $vc1_cur, $vc1_nok );
 check( 'VC-2: a percentage product is refused; the currency must be the shop currency; the key has at most 100 characters', 'percent_not_allowed' === $vc1_prod['code'] && 'currency_mismatch' === $vc1_cur['code'] && 'invalid_request' === $vc1_nok['code'] && 'idempotency_key' === $vc1_nok['field'] );
-// F-05a: a shop in another currency refuses amounts until the operator enters an own maximum.
+// F-05a (decided 23.11.2026): CHF/USD/GBP as shop currency get the number 100 without an entry; other currencies
+// refuse amounts until the operator enters an own maximum.
 $GLOBALS['vcap_test_options']['woocommerce_currency'] = 'CHF';
 $vc1_be->currency = 'CHF';
-$vc1_chf  = $vc1->issue( $vc1_args( array( 'recipient_user_id' => 22, 'amount_minor' => 100, 'currency' => 'CHF' ) ) );
+$vc1_be->day      = '2026-11-17';
+$vc1_chf  = $vc1->issue( $vc1_args( array( 'recipient_user_id' => 22, 'amount_minor' => 10001, 'currency' => 'CHF' ) ) );
+$vc1_chf1 = $vc1->issue( $vc1_args( array( 'recipient_user_id' => 22, 'amount_minor' => 10000, 'currency' => 'CHF' ) ) );
 $GLOBALS['vcap_test_options'][ VCAP\API\V1\CommandLimits::option( 'voucher.issue', 'max_amount' ) ] = '90.00';
 $vc1_be->day = '2026-11-18';
 $vc1_chf2 = $vc1->issue( $vc1_args( array( 'recipient_user_id' => 22, 'amount_minor' => 9001, 'currency' => 'CHF' ) ) );
 $vc1_chf3 = $vc1->issue( $vc1_args( array( 'recipient_user_id' => 22, 'amount_minor' => 9000, 'currency' => 'CHF' ) ) );
-array_push( $vc1_all, $vc1_chf, $vc1_chf2, $vc1_chf3 );
-check( 'VC-1 F-05a: non-EUR shop – refused (currency_not_allowed) without an own maximum; with one (90 CHF) above it refused, up to it done', 'currency_not_allowed' === $vc1_chf['code'] && true === $vc1_chf['final'] && 'amount_over_limit' === $vc1_chf2['code'] && 'done' === $vc1_chf3['status'] );
+array_push( $vc1_all, $vc1_chf, $vc1_chf1, $vc1_chf2, $vc1_chf3 );
+check( 'VC-3 F-05a: CHF shop – 100 CHF without an own entry (10001 refused, 10000 done); with an own maximum (90 CHF) above it refused, up to it done', 'amount_over_limit' === $vc1_chf['code'] && 'done' === $vc1_chf1['status'] && 'amount_over_limit' === $vc1_chf2['code'] && 'done' === $vc1_chf3['status'] );
+check( 'VC-3 F-05a: in a CHF shop the saved maximum is clamped to 100.00 as in EUR', '100.00' === VCAP\API\V1\CommandLimits::sanitize_amount( 'vcap_command_issue_max_amount', '250' ) );
+unset( $GLOBALS['vcap_test_options'][ VCAP\API\V1\CommandLimits::option( 'voucher.issue', 'max_amount' ) ] );
+$GLOBALS['vcap_test_options']['woocommerce_currency'] = 'SEK';
+$vc1_be->currency = 'SEK';
+$vc1_be->day      = '2026-11-19';
+$vc1_sek  = $vc1->issue( $vc1_args( array( 'recipient_user_id' => 22, 'amount_minor' => 100, 'currency' => 'SEK' ) ) );
+$vc1_sekc = VCAP\API\V1\CommandLimits::sanitize_amount( 'vcap_command_issue_max_amount', '1100' );
+$GLOBALS['vcap_test_options'][ VCAP\API\V1\CommandLimits::option( 'voucher.issue', 'max_amount' ) ] = $vc1_sekc;
+$vc1_sek2 = $vc1->issue( $vc1_args( array( 'recipient_user_id' => 22, 'amount_minor' => 110000, 'currency' => 'SEK' ) ) );
+array_push( $vc1_all, $vc1_sek, $vc1_sek2 );
+check( 'VC-3 F-05a: SEK shop (not in the list) – refused (currency_not_allowed, final) without an own maximum; the operator entry (1100 SEK, not clamped) allows it', 'currency_not_allowed' === $vc1_sek['code'] && true === $vc1_sek['final'] && '1100.00' === $vc1_sekc && 'done' === $vc1_sek2['status'] );
+check( 'VC-3 F-05a: the list of currencies of similar value is CHF, USD, GBP', array( 'CHF', 'USD', 'GBP' ) === VCAP\API\V1\CommandLimits::SIMILAR_CURRENCIES );
 unset( $GLOBALS['vcap_test_options'][ VCAP\API\V1\CommandLimits::option( 'voucher.issue', 'max_amount' ) ] );
 $GLOBALS['vcap_test_options']['woocommerce_currency'] = 'EUR';
 $vc1_be->currency = 'EUR';

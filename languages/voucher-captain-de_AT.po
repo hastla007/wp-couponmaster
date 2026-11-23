@@ -40,8 +40,8 @@ msgstr ""
 
 #. Author of the plugin
 #: voucher-captain.php
-msgid "CouponMaster"
-msgstr "CouponMaster"
+msgid "Captain Suite"
+msgstr "Captain Suite"
 
 #: src/API/V1/CommandLimits.php:199
 msgid "Issue vouchers (voucher.issue)"
@@ -107,13 +107,13 @@ msgstr "Höchstbetrag"
 
 #: src/API/V1/CommandLimits.php:254
 msgid ""
-"In the shop currency. Empty: 100 EUR. At most 100 EUR; in a shop with "
-"another currency, the command refuses amounts until you enter a maximum here "
-"that is worth no more than 100 EUR."
+"In the shop currency. Empty: 100 (in EUR, CHF, USD and GBP), at most 100 "
+"there. In a shop with another currency, the command refuses amounts until you "
+"enter a maximum here that is worth no more than 100 EUR."
 msgstr ""
-"In der Shopwährung. Leer: 100 EUR. Höchstens 100 EUR; in einem Shop mit "
-"anderer Währung lehnt der Befehl Beträge ab, bis Sie hier einen Höchstbetrag "
-"eintragen, der nicht mehr als 100 EUR wert ist."
+"In der Shopwährung. Leer: 100 (in EUR, CHF, USD und GBP), dort höchstens 100. "
+"In einem Shop mit anderer Währung lehnt der Befehl Beträge ab, bis Sie hier "
+"einen Höchstbetrag eintragen, der nicht mehr als 100 EUR wert ist."
 
 #: src/API/V1/CommandService.php:139
 msgid "Automatic command"

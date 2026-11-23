@@ -333,9 +333,11 @@ the caller from workflow, workflow version, event id and step, R-8.4), `reason` 
 
   A call above a limit is refused, not shortened. The calendar day is the site's time zone; all workflows count
   together; void and reactivate have separate counters. Only executed calls (`done`) count. **Other currencies
-  (F-05a, open):** an amount in a currency other than EUR is refused (`currency_not_allowed`) unless it is the shop
-  currency and the operator entered an own *Maximum amount* there (worth no more than 100 EUR – not checked, there is
-  no exchange rate in the core).
+  (F-05a, decided 23.11.2026):** the core converts nothing. When the shop currency is CHF, USD or GBP
+  (`CommandLimits::SIMILAR_CURRENCIES`), the same number 100 applies in that currency (the operator may lower it). Any
+  other currency is refused (`currency_not_allowed`) unless it is the shop currency and the operator entered an own
+  *Maximum amount* there (worth no more than 100 EUR – not checked, there is no exchange rate in the core); until then
+  `voucher.issue` and `voucher.redeem` are effectively off in that shop.
 - **Atomic.** Checking, counting and executing run under one named database lock per site, so two parallel calls
   never pass a limit together (R-8.3b).
 - **Idempotent.** A second call with the same `idempotency_key` does nothing and returns the stored reply of the first
