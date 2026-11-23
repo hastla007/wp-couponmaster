@@ -209,13 +209,17 @@ jobs:
           - key: woocs
             slug: woocommerce-currency-switcher
             version: '1.5.7'
+          # CURCY publishes only its newest version on wordpress.org (no versioned ZIPs; 2.2.22 answers 404 since
+          # 2.2.23 of 20 Nov 2026): the job installs the current ZIP and warns when it is not the version below.
           - key: curcy
             slug: woo-multi-currency
-            version: '2.2.22'
+            version: '2.2.23'
+            latest_only: true
           # CURCY with an exchange fee on top of the rate (effective rate 1.15 instead of 1.10).
           - key: curcy-fee
             slug: woo-multi-currency
-            version: '2.2.22'
+            version: '2.2.23'
+            latest_only: true
           - key: wcml
             slug: woocommerce-multilingual
             version: '5.6.3'
@@ -254,7 +258,15 @@ jobs:
           php wp-cli.phar --path=wp-test option update woocommerce_currency EUR
           bin/build.sh
           php wp-cli.phar --path=wp-test plugin install build/voucher-captain.zip --activate
-          php wp-cli.phar --path=wp-test plugin install ${{ matrix.slug }} --version=${{ matrix.version }} --activate
+          if [ "${{ matrix.latest_only }}" = "true" ]; then
+            php wp-cli.phar --path=wp-test plugin install ${{ matrix.slug }} --activate
+            installed="$(php wp-cli.phar --path=wp-test plugin get ${{ matrix.slug }} --field=version)"
+            if [ "$installed" != "${{ matrix.version }}" ]; then
+              echo "::warning::${{ matrix.slug }} ${installed} installed (wordpress.org offers only the newest version); the matrix names ${{ matrix.version }}. Update the version in plugin-smoke.yml."
+            fi
+          else
+            php wp-cli.phar --path=wp-test plugin install ${{ matrix.slug }} --version=${{ matrix.version }} --activate
+          fi
           php wp-cli.phar --path=wp-test plugin list
       - name: Voucher Captain with ${{ matrix.slug }}
         env:
