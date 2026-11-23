@@ -26,7 +26,7 @@ Diese Liste ist eine Arbeitsliste, kein verifizierter Fortschrittsbericht. Abgeh
 - **Überholte Zweige (nichts mehr zu übernehmen, können gelöscht werden):** `claude/wp-plugin-analyse-todo-hvollo-refactors` (PR #19, gemergt), `claude/sharp-mendel-xiiwf3` und `claude/sleepy-ptolemy-n32guj` (in PR #19 enthalten; PR #18 geschlossen), `claude/minver-newest` (PR #17 geschlossen; MINVER-1 ist erledigt), `codex/multi-expiry-reminders` (mehrere Erinnerungstage mit Wiederholung sind seit 1.2.0 drin, M12-84, R4 B7), `codex/fix-voucher-audit-findings`, `docs/security-check-todo`, `claude/trusting-edison-bb7r9s`, `claude/wp-plugin-analyse-todo-hvollo`, `claude/plugin-todo-liste-2a83v4`.
 - **Lizenz:** Entscheidung vom 13.11.2026 – der Kern ist frei, ohne Lizenz- und Update-Code (docs/FREE-PREMIUM.md, `tests/license-guard.php`). Das Add-on liegt in `hastla007/captain-pro`; Projekt-Connectoren sind eigene Lizenzprodukte (Entscheidung 17).
 - **Prüfstand von `main` 1.3.0 (23.11.2026):** vollständiger Lauf von „Plugin smoke tests“ auf `main` (`b801e2e`, GitHub-Actions-Lauf 45151762580) grün, alle 23 Jobs; lokal `php tests/run.php` 733 Prüfungen bestanden, Lizenzwächter, Hook-, POT-, E-Mail- und Rechtstext-Prüfung grün, PHPCS (WordPress, WooCommerce-Core) auf `src/API/V1`, `src/Contracts`, `src/Integrations/FormCaptain` ohne Befund. Die WordPress-Integrationssuiten, PHPStan und die Matrix laufen nur in der CI (`.github/workflows/plugin-smoke.yml`).
-- **Zählung:** 50 Aufgaben offen, 756 erledigt (Befehl: `grep -c '^\s*- \[ \]' TODO.md` und `grep -c '^\s*- \[x\]' TODO.md`).
+- **Zählung:** 52 Aufgaben offen, 756 erledigt (Befehl: `grep -c '^\s*- \[ \]' TODO.md` und `grep -c '^\s*- \[x\]' TODO.md`).
 
 ## Einstellungen für den Verkauf (Analyse vom 23.11.2026)
 
@@ -78,6 +78,19 @@ Auftrag des Inhabers (23.11.2026): Werte, die beim Verkauf einstellbar sein müs
 ### Braucht Entscheidung des Inhabers (wartet auf Inhaber, Stand 23.11.2026)
 
 Entschieden (Inhaber am 23.11.2026, übermittelt durch die Lizenz-Sitzung): **E1 = a)** – Pro-Hinweiszeile als graue Textzeile am Ende des Reiters, ausblendbar, kein Funktionscode, Add-on ersetzt sie (Regel S1); **E4 = a)** – Länderprofile nur als Vorschlag mit Vorher/Nachher; **S2** – Geschäftspolitik ist Einstellung mit sicherer Vorgabe plus Filter (Filter gewinnt), technische Werte bleiben Konstanten. E7 ist für Nicht-Euro-Shops durch F-05a (23.11.2026, VC-3) beantwortet; die Obergrenzen bleiben fest. Alle übrigen Fragen: **wartet auf Inhaber** (die Lizenz-Sitzung legt sie gesammelt vor).
+
+Weitere Entscheidungen des Inhabers vom 23.11.2026 (suiteweit, übermittelt durch die Lizenz-Sitzung):
+- **S4 Sprache:** de_DE = „du“, de_DE_formal = „Sie“, keine Mischung in einer Datei. Voucher Captain hat englische Quelltexte; `voucher-captain-de_DE.po` ist heute „Sie“ → Aufgabe SET-VC-S4.
+- **S5 (beantwortet E2):** Alle vorgeschlagenen Rechteschlüssel sind „geplant“; gebaut und verkauft wird jeder erst nach Einzelfreigabe. Hinweiszeilen erst, wenn verkauft (so umgesetzt in SET-VC-07).
+- **S6:** Logo und Absender auf Belegen und E-Mails sind im Kern frei; Pro (White Label) bleibt: Captain-Hinweise entfernen, Gestaltung, eigene Farben und Texte überall. → betrifft SET-VC-29 (frei).
+- **S8 (beantwortet E3):** Länderprofile DE, AT, CH (Rechts-/Steuerprüfung je Land vor Verkaufsstart) + EU + OTHER mit neutralen Werten, „nicht geprüft“ gekennzeichnet; immer Vorschlag mit Vorher/Nachher. → SET-VC-02/-03.
+- **S9 (beantwortet E5):** Aufbewahrung bei neuen Installationen technisch „nie“; das Länderprofil schlägt eine Frist vor, der Website-Zustand mahnt, solange keine gesetzt ist; bestehende Installationen unverändert. → SET-VC-08.
+- **S10:** Einstellung „Daten bei Deinstallation behalten/löschen“, Vorgabe behalten, Löschen nur nach ausdrücklicher Wahl mit Bestätigung. Voucher Captain hat `vcap_delete_on_uninstall` (Vorgabe „no“) → SET-VC-S10 prüft die Bestätigung.
+
+Noch offen bei Voucher Captain: E6, E8, E9, E10 (**wartet auf Inhaber**).
+
+- [ ] **SET-VC-S4 [WICHTIG] Sprachdateien nach S4.** `voucher-captain-de_DE.po` (heute „Sie“) wird `voucher-captain-de_DE_formal.po`; eine neue `voucher-captain-de_DE.po` in „du“; de_AT bleibt „Sie“ (Österreich, wie heute). Glossar-Test und Übersetzungs-Test (`tests/run.php` → Translations) um die Prüfung „keine Mischung du/Sie in einer Datei“ erweitern; LEGAL_TEXTS.md und EMAILS.md je Sprache neu erzeugen. Braucht: nichts (Mailtexte in „du“ gehen mit in die Freigabe der finalen Mailtexte).
+- [ ] **SET-VC-S10 [OPTIMIERUNG] Deinstallation: Löschen nur mit Bestätigung.** `vcap_delete_on_uninstall` (Vorgabe „no“, `src/Settings.php`) ist ein einfaches Kästchen; nach S10 braucht das Einschalten eine ausdrückliche Bestätigung (z. B. zweites Kästchen oder Eingabe „LÖSCHEN“), sonst bleibt der Wert „no“. Erledigt, wenn: Test, Hilfetext.
 
 | Nr. | Frage | Möglichkeiten | Empfehlung |
 |---|---|---|---|
