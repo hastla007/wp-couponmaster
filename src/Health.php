@@ -32,14 +32,17 @@ final class Health {
 
 	/**
 	 * Whether the request looks like it came through a reverse proxy or CDN while the rate limits still use
-	 * REMOTE_ADDR (no "vcap_client_ip" filter): then all customers share the proxy's counter.
+	 * REMOTE_ADDR (setting "Trusted proxy header" = none or its header missing, no "vcap_client_ip" filter): then all
+	 * customers share the proxy's counter. Signs: a proxy header is present, or REMOTE_ADDR is a private or reserved
+	 * address (a proxy or load balancer in the same network).
 	 *
 	 * @param array<string, mixed> $server $_SERVER.
 	 */
 	public static function proxy_without_client_ip( array $server ): bool {
 		$remote = isset( $server['REMOTE_ADDR'] ) && is_string( $server['REMOTE_ADDR'] ) ? $server['REMOTE_ADDR'] : '';
-		if ( (string) apply_filters( 'vcap_client_ip', $remote ) !== $remote ) { // Same filter as Plugin::client_ip().
-			return false; // The filter "vcap_client_ip" gives the visitor's address.
+		$client = Plugin::client_ip_from( $server, (string) Settings::value( Plugin::PROXY_HEADER_OPTION ) );
+		if ( (string) apply_filters( 'vcap_client_ip', $client ) !== $remote ) { // Same setting and filter as Plugin::client_ip().
+			return false; // The setting or the filter "vcap_client_ip" gives the visitor's address.
 		}
 		foreach ( array( 'HTTP_X_FORWARDED_FOR', 'HTTP_X_REAL_IP', 'HTTP_CF_CONNECTING_IP', 'HTTP_TRUE_CLIENT_IP', 'HTTP_FORWARDED', 'HTTP_X_CLUSTER_CLIENT_IP', 'HTTP_FASTLY_CLIENT_IP' ) as $header ) {
 			if ( ! empty( $server[ $header ] ) ) {
@@ -47,6 +50,53 @@ final class Health {
 			}
 		}
 		return '' !== $remote && false === filter_var( $remote, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE );
+	}
+
+	/** Limit hits looked at by single_source() (the most recent ones, at most 30 days old). */
+	private const SOURCE_HITS = 5;
+
+	/**
+	 * SET-VC-26: whether the last SOURCE_HITS rate-limit hits (Plugin::RATE_HITS_OPTION, all buckets, last 30 days)
+	 * all came from one address – the sign of a proxy whose address every visitor shares (or of one persistent
+	 * visitor). Fewer hits say nothing.
+	 *
+	 * @param mixed $hits Stored RATE_HITS_OPTION.
+	 */
+	public static function single_source( $hits ): bool {
+		$recent = array();
+		foreach ( is_array( $hits ) ? $hits : array() as $hit ) {
+			foreach ( is_array( $hit ) && is_array( $hit['from'] ?? null ) ? $hit['from'] : array() as $from ) {
+				if ( is_array( $from ) && is_string( $from[0] ?? null ) && '' !== $from[0] && (int) ( $from[1] ?? 0 ) > time() - 30 * DAY_IN_SECONDS ) {
+					$recent[] = array( $from[0], (int) $from[1] );
+				}
+			}
+		}
+		if ( count( $recent ) < self::SOURCE_HITS ) {
+			return false;
+		}
+		usort( $recent, static fn( array $a, array $b ) => $b[1] <=> $a[1] );
+		return 1 === count( array_unique( array_column( array_slice( $recent, 0, self::SOURCE_HITS ), 0 ) ) );
+	}
+
+	/**
+	 * Field "Trusted proxy header" of the section "Privacy & advanced" (SET-VC-26).
+	 *
+	 * @return array<string, mixed>
+	 */
+	public static function proxy_header_field(): array {
+		return SettingsRegistry::field(
+			Plugin::PROXY_HEADER_OPTION,
+			array(
+				'title'   => __( 'Trusted proxy header', 'voucher-captain' ),
+				'type'    => 'select',
+				'options' => array(
+					'none'       => __( 'None – use the connection address (REMOTE_ADDR)', 'voucher-captain' ),
+					'cloudflare' => __( 'Cloudflare (CF-Connecting-IP)', 'voucher-captain' ),
+					'xff_last'   => __( 'X-Forwarded-For, last entry', 'voucher-captain' ),
+				),
+				'desc'    => __( 'Rate limits for code entries count per visitor address. Behind a reverse proxy or CDN every visitor seems to come from the proxy\'s address; choose the header your proxy sets so each visitor is counted on their own. Only choose a header when every request passes through that proxy – otherwise visitors can fake the header and get around the limits. The filter "vcap_client_ip" wins over this setting.', 'voucher-captain' ),
+			)
+		);
 	}
 
 	/** Rate limits: visitor addresses behind a proxy, and limits reached in the last day. */
@@ -60,13 +110,18 @@ final class Health {
 			}
 		}
 		$proxy  = self::proxy_without_client_ip( $_SERVER ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- only checks which headers exist.
+		$single = self::single_source( $hits );
 		$reset  = '<p><a class="button" href="' . esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=vcap_reset_rate_limits' ), 'vcap_reset_rate_limits' ) ) . '">' . esc_html__( 'Reset rate limits', 'voucher-captain' ) . '</a></p>';
-		if ( ! $proxy && ! $recent ) {
+		if ( ! $proxy && ! $recent && ! $single ) {
 			return self::result( 'rate_limits', 'good', __( 'Code entry rate limits see each visitor', 'voucher-captain' ), __( 'Failed code entries and PDF previews are limited per visitor address; no limit was reached in the last 24 hours.', 'voucher-captain' ) );
 		}
 		$text = array();
 		if ( $proxy ) {
-			$text[] = __( 'This site seems to run behind a reverse proxy or CDN, but the rate limits count by the address of the proxy. All customers then share one counter and may see "Too many attempts". Return the real visitor address with the filter "vcap_client_ip" (only from headers your proxy sets).', 'voucher-captain' );
+			$text[] = __( 'This site seems to run behind a reverse proxy or CDN, but the rate limits count by the address of the proxy. All customers then share one counter and may see "Too many attempts". Choose the header your proxy sets under WooCommerce → Settings → Vouchers → Privacy & advanced → "Trusted proxy header" (or return the real visitor address with the filter "vcap_client_ip").', 'voucher-captain' );
+		}
+		if ( $single ) {
+			/* translators: %d: number of rate limit hits */
+			$text[] = sprintf( __( 'The last %d times a rate limit was reached, the requests all came from the same address. If that is the address of your proxy or CDN, choose its header under "Trusted proxy header"; if it is a single visitor trying many codes, the limit worked as intended.', 'voucher-captain' ), self::SOURCE_HITS );
 		}
 		if ( $recent ) {
 			/* translators: %s: list of rate limit names, e.g. "code, preview" */

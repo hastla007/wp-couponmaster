@@ -4065,6 +4065,69 @@ check( 'SET-VC-30: on product, cart, checkout and order received pages without p
 unset( $GLOBALS['vcap_test_options']['vcap_custom_css'] );
 $c30::reset();
 $GLOBALS['vcap_test_styles'] = array();
+// SET-VC-19: payment methods for buying vouchers ("Do not sell vouchers with …", payment methods paid later).
+echo "SET-VC-19 payment methods for vouchers\n";
+$pm_gw = array( 'cod' => 'COD', 'bacs' => 'BACS', 'stripe' => 'Stripe', 'paypal' => 'PayPal' );
+check( 'SET-VC-19: register – "Do not sell vouchers with" is empty by default, "paid later" is cash on delivery, bank transfer, cheque (as before), both on "General"', array() === VCAP\SettingsRegistry::default( VCAP\PaymentMethods::EXCLUDED_OPTION ) && array( 'cod', 'bacs', 'cheque' ) === VCAP\SettingsRegistry::default( VCAP\PaymentMethods::OFFLINE_OPTION ) && array( 'cod', 'bacs', 'cheque' ) === VCAP\PaymentMethods::offline() && '' === VCAP\SettingsRegistry::get( VCAP\PaymentMethods::EXCLUDED_OPTION )['section'] && 'list' === VCAP\SettingsRegistry::get( VCAP\PaymentMethods::OFFLINE_OPTION )['type'] );
+check( 'SET-VC-19: with the default (nothing excluded) every gateway stays, with or without a voucher in the cart', $pm_gw === VCAP\PaymentMethods::without_excluded( $pm_gw, true ) && $pm_gw === ( new VCAP\PaymentMethods() )->available_gateways( $pm_gw ) );
+$GLOBALS['vcap_test_options'][ VCAP\PaymentMethods::EXCLUDED_OPTION ] = array( 'cod', 'paypal', '', 'not_installed' );
+check( 'SET-VC-19: an excluded gateway disappears only while a voucher product is bought; a cart without vouchers keeps it', array( 'bacs' => 'BACS', 'stripe' => 'Stripe' ) === VCAP\PaymentMethods::without_excluded( $pm_gw, true ) && $pm_gw === VCAP\PaymentMethods::without_excluded( $pm_gw, false ) && array( 'cod', 'paypal', 'not_installed' ) === VCAP\PaymentMethods::excluded() );
+check( 'SET-VC-19: the checkout hook leaves the gateways alone when no cart or order with vouchers is there (admin, cron) and passes non-arrays on', $pm_gw === ( new VCAP\PaymentMethods() )->available_gateways( $pm_gw ) && null === ( new VCAP\PaymentMethods() )->available_gateways( null ) && false === VCAP\PaymentMethods::voucher_in_checkout() );
+add_filter( 'vcap_voucher_excluded_gateways', static fn( $ids ) => array( 'stripe' ) );
+check( 'SET-VC-19: the filter vcap_voucher_excluded_gateways wins over the setting', array( 'cod' => 'COD', 'bacs' => 'BACS', 'paypal' => 'PayPal' ) === VCAP\PaymentMethods::without_excluded( $pm_gw, true ) );
+unset( $GLOBALS['vcap_test_filters']['vcap_voucher_excluded_gateways'] );
+$GLOBALS['vcap_test_options'][ VCAP\PaymentMethods::OFFLINE_OPTION ] = array( 'cod', 'invoice' );
+$pm_fields = array_column( array_filter( ( new VCAP\Settings() )->fields( '' ), static fn( $f ) => isset( $f['id'] ) && 'sectionend' !== ( $f['type'] ?? '' ) ), null, 'id' );
+check( 'SET-VC-19: "General" has the block "Payment methods for vouchers" with both multiselects; ids that are saved or in the default list but not installed stay selectable', 'title' === ( $pm_fields['vcap_payment_methods']['type'] ?? '' ) && 'multiselect' === ( $pm_fields[ VCAP\PaymentMethods::EXCLUDED_OPTION ]['type'] ?? '' ) && 'multiselect' === ( $pm_fields[ VCAP\PaymentMethods::OFFLINE_OPTION ]['type'] ?? '' ) && array( 'cod', 'bacs', 'cheque', 'invoice', 'paypal', 'not_installed' ) === array_keys( $pm_fields[ VCAP\PaymentMethods::OFFLINE_OPTION ]['options'] ) && 'invoice (not installed)' === $pm_fields[ VCAP\PaymentMethods::EXCLUDED_OPTION ]['options']['invoice'] && array( 'cod', 'bacs', 'cheque' ) === $pm_fields[ VCAP\PaymentMethods::OFFLINE_OPTION ]['default'] );
+check( 'SET-VC-19: "paid later" comes from the setting; Issuer::offline_payment() passes it to the filter vcap_offline_payment_methods, which wins', array( 'cod', 'invoice' ) === VCAP\PaymentMethods::offline() && str_contains( (string) file_get_contents( VCAP_PATH . 'src/Issuer.php' ), "apply_filters( 'vcap_offline_payment_methods', PaymentMethods::offline(), \$order )" ) );
+unset( $GLOBALS['vcap_test_options'][ VCAP\PaymentMethods::EXCLUDED_OPTION ], $GLOBALS['vcap_test_options'][ VCAP\PaymentMethods::OFFLINE_OPTION ] );
+check( 'SET-VC-19: an emptied "paid later" list is respected (no method waits), a missing option is the default list', array() === ( static function () { $GLOBALS['vcap_test_options'][ VCAP\PaymentMethods::OFFLINE_OPTION ] = ''; $r = VCAP\PaymentMethods::offline(); unset( $GLOBALS['vcap_test_options'][ VCAP\PaymentMethods::OFFLINE_OPTION ] ); return $r; } )() && array( 'cod', 'bacs', 'cheque' ) === VCAP\PaymentMethods::offline() );
+check( 'SET-VC-19: the plugin hooks woocommerce_available_payment_gateways (classic and block checkout, pay for order)', str_contains( (string) file_get_contents( VCAP_PATH . 'src/Plugin.php' ), '( new PaymentMethods() )->register();' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'src/PaymentMethods.php' ), "add_filter( 'woocommerce_available_payment_gateways'" ) );
+
+// SET-VC-26: trusted proxy header as a setting; Site Health sees rate-limit hits from one address.
+echo "SET-VC-26 trusted proxy header\n";
+$px_server = array( 'REMOTE_ADDR' => '10.0.0.5', 'HTTP_CF_CONNECTING_IP' => '198.51.100.7', 'HTTP_X_FORWARDED_FOR' => '1.2.3.4, 203.0.113.9 ' );
+check( 'SET-VC-26: register – "Trusted proxy header" is a select (none, Cloudflare, X-Forwarded-For last entry) with default none on "Privacy & advanced"', 'none' === VCAP\SettingsRegistry::default( VCAP\Plugin::PROXY_HEADER_OPTION ) && array( 'none', 'cloudflare', 'xff_last' ) === VCAP\SettingsRegistry::get( VCAP\Plugin::PROXY_HEADER_OPTION )['choices'] && 'privacy' === VCAP\SettingsRegistry::get( VCAP\Plugin::PROXY_HEADER_OPTION )['section'] );
+check( 'SET-VC-26: none (default) uses REMOTE_ADDR and ignores every header (as before)', '10.0.0.5' === VCAP\Plugin::client_ip_from( $px_server, 'none' ) && '10.0.0.5' === VCAP\Plugin::client_ip_from( $px_server, '' ) && '10.0.0.5' === VCAP\Plugin::client_ip_from( $px_server, 'unknown' ) );
+check( 'SET-VC-26: Cloudflare takes CF-Connecting-IP, X-Forwarded-For the last entry (appended by the nearest proxy, not the spoofable first one), IPv6 too', '198.51.100.7' === VCAP\Plugin::client_ip_from( $px_server, 'cloudflare' ) && '203.0.113.9' === VCAP\Plugin::client_ip_from( $px_server, 'xff_last' ) && '2001:db8::1' === VCAP\Plugin::client_ip_from( array( 'REMOTE_ADDR' => '10.0.0.5', 'HTTP_X_FORWARDED_FOR' => '2001:db8::1' ), 'xff_last' ) );
+check( 'SET-VC-26: a missing or invalid header value falls back to REMOTE_ADDR', '10.0.0.5' === VCAP\Plugin::client_ip_from( array( 'REMOTE_ADDR' => '10.0.0.5' ), 'cloudflare' ) && '10.0.0.5' === VCAP\Plugin::client_ip_from( array( 'REMOTE_ADDR' => '10.0.0.5', 'HTTP_CF_CONNECTING_IP' => '<script>' ), 'cloudflare' ) && '10.0.0.5' === VCAP\Plugin::client_ip_from( array( 'REMOTE_ADDR' => '10.0.0.5', 'HTTP_X_FORWARDED_FOR' => '1.2.3.4, ' ), 'xff_last' ) && '' === VCAP\Plugin::client_ip_from( array(), 'xff_last' ) );
+$px_saved_server = $_SERVER;
+$_SERVER         = $px_server + $_SERVER;
+$GLOBALS['vcap_test_options'][ VCAP\Plugin::PROXY_HEADER_OPTION ] = 'cloudflare';
+$px_setting = VCAP\Plugin::client_ip();
+add_filter( 'vcap_client_ip', static fn( $ip ) => '192.0.2.44' );
+$px_filtered = VCAP\Plugin::client_ip();
+$px_filtered_health = VCAP\Health::proxy_without_client_ip( $px_server );
+unset( $GLOBALS['vcap_test_filters']['vcap_client_ip'] );
+check( 'SET-VC-26: client_ip() follows the setting, the filter vcap_client_ip wins over it', '198.51.100.7' === $px_setting && '192.0.2.44' === $px_filtered && false === $px_filtered_health );
+$px_cf_ok = VCAP\Health::proxy_without_client_ip( $px_server );
+$px_cf_missing = VCAP\Health::proxy_without_client_ip( array( 'REMOTE_ADDR' => '10.0.0.5' ) );
+unset( $GLOBALS['vcap_test_options'][ VCAP\Plugin::PROXY_HEADER_OPTION ] );
+$_SERVER = $px_saved_server;
+check( 'SET-VC-26: Site Health warns while the setting is none and a proxy header is sent or REMOTE_ADDR is a private address; not with a public address, nor once the setting gives the visitor address', true === VCAP\Health::proxy_without_client_ip( $px_server ) && true === VCAP\Health::proxy_without_client_ip( array( 'REMOTE_ADDR' => '10.0.0.5' ) ) && true === VCAP\Health::proxy_without_client_ip( array( 'REMOTE_ADDR' => '127.0.0.1' ) ) && false === VCAP\Health::proxy_without_client_ip( array( 'REMOTE_ADDR' => '198.51.100.20' ) ) && false === $px_cf_ok && true === $px_cf_missing );
+$px_now  = time();
+$px_hits = array(
+	'code'    => array( 'last' => $px_now, 'windows' => 3, 'from' => array( array( 'aaaa', $px_now - 50 ), array( 'aaaa', $px_now - 40 ), array( 'aaaa', $px_now - 30 ) ) ),
+	'preview' => array( 'last' => $px_now, 'windows' => 2, 'from' => array( array( 'aaaa', $px_now - 20 ), array( 'aaaa', $px_now - 10 ) ) ),
+);
+$px_mixed               = $px_hits;
+$px_mixed['preview']['from'][0][0] = 'bbbb';
+$px_older               = $px_hits;
+$px_older['code']['from'][] = array( 'cccc', $px_now - 100 ); // Older than the last five: does not count.
+$px_stale               = $px_hits;
+$px_stale['code']['from'][0][1] = $px_now - 31 * DAY_IN_SECONDS;
+check( 'SET-VC-26: Site Health – the last 5 rate-limit hits (all buckets, 30 days) from one address are reported; different addresses, fewer hits, old hits or the format before 1.3.0 are not', true === VCAP\Health::single_source( $px_hits ) && true === VCAP\Health::single_source( $px_older ) && false === VCAP\Health::single_source( $px_mixed ) && false === VCAP\Health::single_source( $px_stale ) && false === VCAP\Health::single_source( array( 'code' => array( 'last' => $px_now, 'windows' => 9 ) ) ) && false === VCAP\Health::single_source( 'broken' ) );
+$px_saved_server = $_SERVER;
+$_SERVER['REMOTE_ADDR'] = '2001:db8:1:2::5';
+$px_a = VCAP\Plugin::rate_hit_source();
+$_SERVER['REMOTE_ADDR'] = '2001:db8:1:2::99';
+$px_b = VCAP\Plugin::rate_hit_source();
+$_SERVER['REMOTE_ADDR'] = '198.51.100.7';
+$px_c = VCAP\Plugin::rate_hit_source();
+$_SERVER = $px_saved_server;
+check( 'SET-VC-26: a limit hit remembers the visitor network only as a short keyed hash (same IPv6 /64 = same source), at most 5 per bucket', 1 === preg_match( '/^[0-9a-f]{16}$/', $px_a ) && $px_a === $px_b && $px_a !== $px_c && ! str_contains( $px_c, '198' ) && 5 === VCAP\Plugin::RATE_HIT_SOURCES && str_contains( (string) file_get_contents( VCAP_PATH . 'src/Plugin.php' ), "'from'    => array_slice( \$from, -self::RATE_HIT_SOURCES )," ) );
+$px_field = array_values( array_filter( ( new VCAP\Settings() )->fields( 'privacy' ), static fn( $f ) => VCAP\Plugin::PROXY_HEADER_OPTION === ( $f['id'] ?? '' ) ) )[0] ?? array();
+check( 'SET-VC-26: "Privacy & advanced" has the select "Trusted proxy header" with the three choices and a warning about spoofed headers', 'select' === ( $px_field['type'] ?? '' ) && array( 'none', 'cloudflare', 'xff_last' ) === array_keys( $px_field['options'] ?? array() ) && 'none' === ( $px_field['default'] ?? '' ) && str_contains( (string) ( $px_field['desc'] ?? '' ), 'fake the header' ) );
 
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );

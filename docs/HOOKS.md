@@ -267,6 +267,7 @@ with a public API contract, the contract starts with 1.1.0). Add-ons check the c
 | `vcap_voucher_admin_messages` | 1.1.0 | `src/Admin/VoucherAdmin.php` | Extra messages for connector actions (keys ending in "_failed" are shown as errors). |
 | `vcap_voucher_amount` | 1.0.0 | `src/Issuer.php` | – |
 | `vcap_voucher_code` | 1.0.0 | `src/Issuer.php` | – |
+| `vcap_voucher_excluded_gateways` | 1.3.0 | `src/PaymentMethods.php` | Payment gateway ids that are not offered while the cart (or the order being paid) contains a voucher product. Default: the setting "Do not sell vouchers with" (empty). The filter wins over the setting. |
 | `vcap_voucher_expires_at` | 1.2.0 | `src/Issuer.php` | Expiry (UTC "Y-m-d H:i:s" or null) of a voucher being issued, e.g. no later than the event it is for. |
 | `vcap_voucher_is_means_of_payment` | 1.2.0 | `src/Coupons/CartCoupons.php` | – |
 | `vcap_voucher_links` | 1.2.0 | `src/Downloads.php` | Extra links of a voucher in its email and the customer's voucher list, e.g. "Add to Wallet". Args: list of array{label: string, url: string, id?: string, image?: string, width?: int, alt?: string}, Voucher, context ("email", "email_plain", "account" or "placeholder"). |

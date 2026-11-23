@@ -584,6 +584,7 @@ final class Settings {
 					'desc'  => sprintf( __( 'Write detailed entries about issuing and deliveries to the WooCommerce log (source "voucher-captain") for support. Switches itself off after %d hours.', 'voucher-captain' ), Logger::VERBOSE_HOURS ),
 				)
 			),
+			Health::proxy_header_field(), // SET-VC-26.
 			array( 'type' => 'sectionend', 'id' => 'vcap_privacy' ),
 		);
 		$fields = array_merge( $fields, self::counter_limit_fields() );
@@ -1184,7 +1185,7 @@ final class Settings {
 			),
 			array( 'type' => 'sectionend', 'id' => 'vcap_referral' ),
 		);
-		return $fields;
+		return array_merge( $fields, PaymentMethods::settings_fields() ); // SET-VC-19: block on "General".
 	}
 
 	/** Voucher products the setting "Multi-purpose vouchers as payment" leaves out (only on the settings page). */

@@ -48,6 +48,9 @@ $vcap_settings = array(
 	'vcap_customer_daily_limit'      => array( 'type' => 'decimal', 'default' => 1000, 'min' => 0, 'section' => '' ),
 	'vcap_hold_new_customer_above'   => array( 'type' => 'decimal', 'default' => 250, 'min' => 0, 'section' => '' ),
 	'vcap_hold_hours'                => array( 'type' => 'int', 'default' => 24, 'min' => 0, 'section' => '' ),
+	/* ---- General: payment methods for vouchers (SET-VC-19; filters vcap_voucher_excluded_gateways, vcap_offline_payment_methods win) ---- */
+	'vcap_voucher_excluded_gateways' => array( 'type' => 'list', 'default' => array(), 'section' => '' ),
+	'vcap_offline_payment_methods'   => array( 'type' => 'list', 'default' => array( 'cod', 'bacs', 'cheque' ), 'section' => '' ),
 
 	/* ---- Codes ---- */
 	'vcap_code_prefix'               => array( 'section' => 'codes' ),
@@ -141,6 +144,8 @@ $vcap_settings = array(
 	'vcap_delete_on_uninstall'       => array( 'type' => 'bool', 'default' => 'no', 'section' => 'privacy', 'legal' => true, 'export' => false ),
 	// Switches itself off after Logger::VERBOSE_HOURS; a support aid, not exported.
 	'vcap_debug_log'                 => array( 'type' => 'bool', 'default' => 'no', 'section' => 'privacy', 'export' => false ),
+	// SET-VC-26: header with the visitor address ('none' = REMOTE_ADDR only); the filter vcap_client_ip wins.
+	'vcap_proxy_header'              => array( 'type' => 'select', 'default' => 'none', 'choices' => array( 'none', 'cloudflare', 'xff_last' ), 'section' => 'privacy' ),
 	// R6: daily limits of counter (scanner) redemptions, off by default (0 = unlimited).
 	'vcap_counter_limit_amount'      => array( 'type' => 'decimal', 'default' => 0, 'min' => 0, 'section' => 'privacy' ),
 	'vcap_counter_limit_count'       => array( 'type' => 'int', 'default' => 0, 'min' => 0, 'section' => 'privacy' ),
