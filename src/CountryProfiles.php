@@ -511,6 +511,22 @@ final class CountryProfiles {
 	}
 
 	/**
+	 * OD-2: sets the user who applied the last country profile to 0 when it is the given user (erasure request).
+	 *
+	 * @param int $user_id User id.
+	 * @return int 1 when anonymised, else 0.
+	 */
+	public static function anonymise_user( int $user_id ): int {
+		$applied = get_option( self::APPLIED_OPTION, false );
+		if ( $user_id <= 0 || ! is_array( $applied ) || $user_id !== (int) ( $applied['user'] ?? 0 ) ) {
+			return 0;
+		}
+		$applied['user'] = 0;
+		update_option( self::APPLIED_OPTION, $applied, false );
+		return 1;
+	}
+
+	/**
 	 * The profile applied last, null when none was applied.
 	 *
 	 * @return array{id: string, time: int, user: int}|null

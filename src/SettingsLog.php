@@ -306,7 +306,8 @@ final class SettingsLog {
 
 	/**
 	 * OD-2: anonymises a user (found by email address) in the change log and the automatic settings backups – the user
-	 * id becomes 0 (shown as "unknown"); time, setting, values and source stay.
+	 * id becomes 0 (shown as "unknown"); time, setting, values and source stay. The same goes for the user who applied
+	 * the last country profile (option "vcap_country_profile").
 	 *
 	 * @param string $email Email address.
 	 * @param int    $page  Page (everything is done at once).
@@ -315,7 +316,7 @@ final class SettingsLog {
 	public static function erase_personal_data( $email, $page = 1 ): array {
 		$user    = function_exists( 'get_user_by' ) ? get_user_by( 'email', (string) $email ) : false;
 		$id      = is_object( $user ) && isset( $user->ID ) ? (int) $user->ID : 0;
-		$removed = $id > 0 && self::anonymise_user( $id ) + SettingsTransfer::anonymise_backups( $id ) > 0;
+		$removed = $id > 0 && self::anonymise_user( $id ) + SettingsTransfer::anonymise_backups( $id ) + CountryProfiles::anonymise_user( $id ) > 0;
 		return array(
 			'items_removed'  => $removed,
 			'items_retained' => false,

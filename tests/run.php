@@ -4590,6 +4590,18 @@ check(
 		&& 'unknown' === VCAP\SettingsLog::user_label( 0 ) && '#8' === VCAP\SettingsLog::user_label( 8 ) && 0 === VCAP\SettingsLog::anonymise_user( 0 ) && 0 === VCAP\SettingsTransfer::anonymise_backups( -1 ),
 	json_encode( array( $od2_erased, $od2_log, $od2_backups ) )
 );
+$GLOBALS['vcap_test_options'][ VCAP\CountryProfiles::APPLIED_OPTION ] = array( 'id' => 'AT', 'time' => 123, 'user' => 7 );
+$od2_other = VCAP\CountryProfiles::anonymise_user( 8 );
+$GLOBALS['vcap_test_users']['admin7@example.test'] = (object) array( 'ID' => 7, 'locale' => '' );
+$od2_cp = VCAP\SettingsLog::erase_personal_data( 'admin7@example.test' );
+unset( $GLOBALS['vcap_test_users']['admin7@example.test'] );
+$od2_applied = get_option( VCAP\CountryProfiles::APPLIED_OPTION );
+check(
+	'OD-2: the eraser also anonymises the staff user who applied the last country profile (vcap_country_profile), keeping profile and time; another user leaves it untouched',
+	0 === $od2_other && true === $od2_cp['items_removed'] && array( 'id' => 'AT', 'time' => 123, 'user' => 0 ) === $od2_applied && 0 === VCAP\CountryProfiles::anonymise_user( 0 ),
+	json_encode( array( $od2_cp, $od2_applied ) )
+);
+unset( $GLOBALS['vcap_test_options'][ VCAP\CountryProfiles::APPLIED_OPTION ] );
 check(
 	'OD-2: the eraser is registered next to the exporter (wp_privacy_personal_data_erasers), the log screen names an erased user "unknown" and the privacy policy text says so',
 	array( VCAP\SettingsLog::class, 'erase_personal_data' ) === VCAP\SettingsLog::erasers( 'x' )['voucher-captain-settings-log']['callback'] && isset( VCAP\SettingsLog::exporters( array() )['voucher-captain-settings-log'] )
