@@ -1,7 +1,0 @@
-{
-	"Number of invalid codes a user may enter within 15 minutes before further attempts are blocked (default 10, at least 1).": {
-		"du": "Anzahl ungültiger Codes, die ein Nutzer innerhalb von 15 Minuten eingeben darf, bevor weitere Versuche gesperrt werden (Standard 10, mindestens 1).",
-		"sie": "Anzahl ungültiger Codes, die ein Nutzer innerhalb von 15 Minuten eingeben darf, bevor weitere Versuche gesperrt werden (Standard 10, mindestens 1).",
-		"at": "Anzahl ungültiger Codes, die ein Nutzer innerhalb von 15 Minuten eingeben darf, bevor weitere Versuche gesperrt werden (Standard 10, mindestens 1)."
-	}
-}

@@ -1,7 +1,0 @@
-{
-	"Balances charged by an order are booked back (if \"Restore balance on cancellation\" is on) and reservations released when it reaches one of these statuses (default: Cancelled, Refunded, Failed). Any order status except the paid ones can be chosen; empty = the default.": {
-		"du": "Von einer Bestellung abgebuchter Restwert und abgebuchtes Kundenguthaben werden zurückgebucht (wenn „Restwert bei Stornierung wiederherstellen“ an ist) und Reservierungen freigegeben, wenn sie einen dieser Status erreicht (Standard: Storniert, Erstattet, Fehlgeschlagen). Wählbar ist jeder Bestellstatus außer den bezahlten; leer = Standard.",
-		"sie": "Von einer Bestellung abgebuchter Restwert und abgebuchtes Kundenguthaben werden zurückgebucht (wenn „Restwert bei Stornierung wiederherstellen“ an ist) und Reservierungen freigegeben, wenn sie einen dieser Status erreicht (Standard: Storniert, Erstattet, Fehlgeschlagen). Wählbar ist jeder Bestellstatus außer den bezahlten; leer = Standard.",
-		"at": "Von einer Bestellung abgebuchter Restwert und abgebuchtes Kundenguthaben werden zurückgebucht (wenn „Restwert bei Stornierung wiederherstellen“ an ist) und Reservierungen freigegeben, wenn sie einen dieser Status erreicht (Standard: Storniert, Erstattet, Fehlgeschlagen). Wählbar ist jeder Bestellstatus außer den bezahlten; leer = Standard."
-	}
-}
