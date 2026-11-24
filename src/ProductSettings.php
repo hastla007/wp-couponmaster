@@ -558,6 +558,21 @@ final class ProductSettings {
 			);
 		}
 		echo '</div><p class="description">' . esc_html__( 'Additional fields can be added under Vouchers → Field groups.', 'voucher-captain' ) . '</p></fieldset>';
+		// SET-VC-12: required consent checkbox – "use the global setting" (default), always or never on this product.
+		woocommerce_wp_select(
+			array(
+				'id'          => '_vcap_consent',
+				'label'       => __( 'Consent checkbox', 'voucher-captain' ),
+				'value'       => (string) $this->v( $p, 'consent' ),
+				'options'     => Consent::product_choices(),
+				'desc_tip'    => true,
+				'description' => sprintf(
+					/* translators: %s: current text of the consent checkbox */
+					__( 'A required checkbox on the product page; text and time are kept with the order and the voucher. Text (WooCommerce → Settings → Vouchers → General): "%s". Not legally checked.', 'voucher-captain' ),
+					Consent::text()
+				),
+			)
+		);
 		woocommerce_wp_text_input(
 			array(
 				'id'                => '_vcap_message_maxlength',
@@ -846,6 +861,9 @@ final class ProductSettings {
 		$hidden     = array_diff( array_map( 'sanitize_key', (array) $product->get_meta( '_vcap_channels' ) ), $registered );
 		$product->update_meta_data( '_vcap_channels', array_values( array_filter( array_unique( array_merge( $channels, $hidden ) ) ) ) );
 		$this->save_gift_options( $product, $post );
+		// SET-VC-12: '' = global setting, 'yes', 'no' (anything else is stored as '').
+		$consent = sanitize_key( (string) ( $post['_vcap_consent'] ?? '' ) );
+		$product->update_meta_data( '_vcap_consent', isset( Consent::product_choices()[ $consent ] ) ? $consent : '' );
 		/** A voucher product's settings are being saved (args: WC_Product, posted data): save the fields added in vcap_product_settings_fields. */
 		do_action( 'vcap_product_settings_save', $product, $post );
 		foreach ( array( 'product_ids', 'exclude_product_ids', 'category_ids', 'exclude_category_ids' ) as $key ) {

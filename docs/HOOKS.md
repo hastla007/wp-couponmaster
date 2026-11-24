@@ -99,6 +99,8 @@ with a public API contract, the contract starts with 1.1.0). Add-ons check the c
 | `vcap_client_ip` | 1.2.0 | `src/Health.php`, `src/Plugin.php` | – |
 | `vcap_command_limits` | 1.3.0 | `src/API/V1/CommandLimits.php` | Lowers the limits of an automatic voucher command or switches it off (args: limits {enabled, per_day, per_recipient, max_amount_minor, amount_allowed}, command, currency of the amount). Values above the given ones, and enabled = true for a command the operator switched off, have no effect. |
 | `vcap_command_log_days` | 1.3.0 | `src/API/V1/OptionCommandStore.php` | Days the daily counters and the protocol of the voucher commands are kept. 0 keeps them. |
+| `vcap_consent_required` | 1.3.0 | `src/Consent.php` | Whether the product page of a voucher asks for the consent checkbox (SET-VC-12). |
+| `vcap_consent_text` | 1.3.0 | `src/Consent.php` | Text of the consent checkbox on the product page (SET-VC-12); stored with the order as shown. |
 | `vcap_contact_opted_out` | 1.3.0 | `src/API/V1/ContactService.php` | Whether the address must not be contacted for this purpose (e.g. an opt-out list). An opted-out address is never returned. |
 | `vcap_contact_read_allowed` | 1.3.0 | `src/API/V1/ContactService.php` | Whether the current caller may read the contact of a voucher. |
 | `vcap_counter_limit_applies` | 1.2.0 | `src/Counter.php` | Whether the daily counter limits apply (default: not for staff who manage vouchers). Args: bool, user id, Voucher. |

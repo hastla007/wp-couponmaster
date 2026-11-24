@@ -4,7 +4,8 @@ namespace VCAP;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Shareable coupon links such as https://shop.example/?gutschein=SUMMER10 (opt-in, off by default).
+ * Shareable coupon links such as https://shop.example/?gutschein=SUMMER10 (opt-in, off by default). SET-VC-24: the
+ * parameter is a setting (new installations: by site language); "gutschein" always stays valid as an alias.
  *
  * The code is taken from the URL once, kept in the WooCommerce session and applied through WooCommerce's own
  * coupon validation as soon as the cart has items. The parameter is removed with a redirect, so reloading or
@@ -61,9 +62,33 @@ final class CouponLink {
 		return $this->settings->yes( 'vcap_coupon_link' );
 	}
 
+	/** SET-VC-24: the parameter of 1.2.0 – links with it keep working whatever parameter is set. */
+	public const LEGACY_PARAM = 'gutschein';
+
 	public function param(): string {
 		$param = sanitize_key( (string) $this->settings->get( 'vcap_coupon_link_param' ) );
-		return '' !== $param ? $param : 'gutschein';
+		return '' !== $param ? $param : self::LEGACY_PARAM;
+	}
+
+	/**
+	 * SET-VC-24: the parameters a link may use – the one set, then the old "gutschein" as an alias (links printed or
+	 * shared before the parameter was changed stay valid).
+	 *
+	 * @return string[]
+	 */
+	public function params(): array {
+		return array_values( array_unique( array( $this->param(), self::LEGACY_PARAM ) ) );
+	}
+
+	/**
+	 * SET-VC-24 (owner decision E10 a): parameter a first installation stores, by the site language – "gutschein" for
+	 * German (de, de_DE, de_AT, de_CH, de_DE_formal …), "voucher" for every other language. Existing shops keep theirs.
+	 */
+	public static function fresh_param( string $locale = '' ): string {
+		if ( '' === $locale ) {
+			$locale = function_exists( 'get_locale' ) ? (string) get_locale() : '';
+		}
+		return str_starts_with( strtolower( $locale ), 'de' ) ? self::LEGACY_PARAM : 'voucher';
 	}
 
 	/**
@@ -73,8 +98,8 @@ final class CouponLink {
 		if ( is_admin() || wp_doing_ajax() || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) || ! $this->enabled() ) {
 			return;
 		}
-		$param = $this->param();
-		if ( ! isset( $_GET[ $param ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification -- Public link, only stores a code for WooCommerce validation.
+		$param = $this->request_param();
+		if ( null === $param ) {
 			return;
 		}
 		$this->capture( (string) wp_unslash( $_GET[ $param ] ) ); // phpcs:ignore WordPress.Security.NonceVerification, WordPress.Security.ValidatedSanitizedInput
@@ -85,8 +110,18 @@ final class CouponLink {
 			nocache_headers();
 			header( 'Referrer-Policy: no-referrer' );
 		}
-		wp_safe_redirect( remove_query_arg( $param ) );
+		wp_safe_redirect( remove_query_arg( $this->params() ) );
 		exit;
+	}
+
+	/** SET-VC-24: the link parameter this request carries (the one set first, then the alias), null when none. */
+	public function request_param(): ?string {
+		foreach ( $this->params() as $param ) {
+			if ( isset( $_GET[ $param ] ) && is_string( $_GET[ $param ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification -- Public link, only stores a code for WooCommerce validation.
+				return $param;
+			}
+		}
+		return null;
 	}
 
 	/**

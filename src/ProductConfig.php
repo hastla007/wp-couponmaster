@@ -63,6 +63,8 @@ final class ProductConfig {
 		'physical'            => 'no',
 		// Captain Suite: a redemption of this product's vouchers confirms that a service was provided (review source).
 		'review_service'      => 'no',
+		// SET-VC-12: consent checkbox on the product page ('' = global setting vcap_consent_enabled, 'yes', 'no').
+		'consent'             => '',
 	);
 
 	/** Keys a variation may override (empty = inherit). */

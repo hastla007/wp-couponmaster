@@ -20,7 +20,7 @@ final class Multilingual {
 	public const GROUP = 'Voucher Captain';
 
 	/** Options with customer-facing texts (SET-VC-11: issuer, links and legal text of "Issuer and legal texts"). */
-	public const OPTIONS = array( 'vcap_default_terms', 'vcap_terms_by_country', 'vcap_issuer_name', 'vcap_issuer_address', 'vcap_issuer_contact', 'vcap_terms_url', 'vcap_privacy_url', 'vcap_withdrawal_url', 'vcap_legal_text' );
+	public const OPTIONS = array( 'vcap_default_terms', 'vcap_terms_by_country', 'vcap_issuer_name', 'vcap_issuer_address', 'vcap_issuer_contact', 'vcap_terms_url', 'vcap_privacy_url', 'vcap_withdrawal_url', 'vcap_legal_text', 'vcap_consent_text' );
 
 	/** Customer emails whose texts can be translated (WooCommerce option "woocommerce_{id}_settings"). */
 	public const EMAIL_IDS = array( 'vcap_voucher_buyer', 'vcap_voucher_recipient', 'vcap_voucher_bundle', 'vcap_voucher_expiry', 'vcap_bonus_voucher', 'vcap_referral_reward', 'vcap_gift_delivered', 'vcap_gift_used' );

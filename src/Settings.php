@@ -117,7 +117,7 @@ final class Settings {
 		add_action( 'woocommerce_sections_vcap', array( $this, 'sections' ) );
 		add_action( 'woocommerce_admin_field_' . Admin\SettingsUi::DEFAULT_SUBMIT_TYPE, array( Admin\SettingsUi::class, 'render_default_submit' ) );
 		add_filter( 'woocommerce_admin_settings_sanitize_option_' . Logger::VERBOSE_OPTION, array( Logger::class, 'sanitize_verbose' ) );
-		foreach ( array( 'vcap_code_prefix', 'vcap_code_suffix', 'vcap_code_separator' ) as $affix ) {
+		foreach ( array( 'vcap_code_prefix', 'vcap_code_suffix', 'vcap_code_separator', 'vcap_bonus_code_prefix', 'vcap_referral_code_prefix' ) as $affix ) {
 			add_filter( 'woocommerce_admin_settings_sanitize_option_' . $affix, array( $this, 'sanitize_affix' ), 10, 2 );
 		}
 		// SET-VC-04: validity and conditions per country are tables, checked row by row on save.
@@ -204,6 +204,12 @@ final class Settings {
 
 	public function get( string $key ) {
 		return apply_filters( 'vcap_setting_' . $key, get_option( $key, SettingsRegistry::default( $key ) ) );
+	}
+
+	/** SET-VC-24: the link parameter as CouponLink reads it (sanitized, '' = "gutschein"). */
+	private function link_param(): string {
+		$param = sanitize_key( (string) $this->get( 'vcap_coupon_link_param' ) );
+		return '' !== $param ? $param : CouponLink::LEGACY_PARAM;
 	}
 
 	public function yes( string $key ): bool {
@@ -927,6 +933,7 @@ final class Settings {
 	private const GENERAL_OPTIONS = array(
 		'vcap_campaigns_enabled'     => 'promotions',
 		'vcap_bonus_wait_days'       => 'promotions',
+		'vcap_bonus_code_prefix'     => 'promotions',
 		'vcap_discounts_on_vouchers' => 'promotions',
 		'vcap_coupon_link'           => 'promotions',
 		'vcap_coupon_link_param'     => 'promotions',
@@ -1246,6 +1253,16 @@ final class Settings {
 					'desc_tip'          => __( 'A bonus voucher is created when the order is paid, but sent and redeemable only after this many days; a cancelled or refunded order withdraws it before. 0 = at once.', 'voucher-captain' ),
 				)
 			),
+			// SET-VC-24: prefix of bonus codes (default "BONUS" as in 1.2.0; the filter vcap_bonus_code_prefix wins).
+			SettingsRegistry::field(
+				'vcap_bonus_code_prefix',
+				array(
+					'title'    => __( 'Prefix of bonus codes', 'voucher-captain' ),
+					'type'     => 'text',
+					'css'      => 'width:160px',
+					'desc_tip' => __( 'Start of every new bonus code, e.g. BONUS-AB12CD34EF. Letters, digits, dot, hyphen and underscore, up to 20 characters; empty = no prefix. Codes already created keep theirs.', 'voucher-captain' ),
+				)
+			),
 			SettingsRegistry::field(
 				'vcap_store_credit',
 				array(
@@ -1295,7 +1312,8 @@ final class Settings {
 				array(
 					'title' => __( 'Voucher links', 'voucher-captain' ),
 					'type'  => 'checkbox',
-					'desc'  => __( 'Apply a coupon automatically when a customer opens a link such as https://your-shop/?gutschein=CODE (any WooCommerce coupon). The code is applied once, validated by WooCommerce, and only when the cart has products.', 'voucher-captain' ),
+					/* translators: %s: name of the link parameter, e.g. "voucher" */
+					'desc'  => sprintf( __( 'Apply a coupon automatically when a customer opens a link such as https://your-shop/?%s=CODE (any WooCommerce coupon). The code is applied once, validated by WooCommerce, and only when the cart has products.', 'voucher-captain' ), esc_html( $this->link_param() ) ),
 				)
 			),
 			SettingsRegistry::field(
@@ -1304,7 +1322,7 @@ final class Settings {
 					'title'    => __( 'Link parameter', 'voucher-captain' ),
 					'type'     => 'text',
 					'css'      => 'width:160px',
-					'desc_tip' => __( 'Name of the URL parameter (letters, digits, - and _).', 'voucher-captain' ),
+					'desc_tip' => __( 'Name of the URL parameter (letters, digits, - and _). Links with the former parameter "gutschein" keep working after a change.', 'voucher-captain' ),
 				)
 			),
 			SettingsRegistry::field(
@@ -1421,6 +1439,16 @@ final class Settings {
 					'desc_tip' => __( 'Gives every customer a personal referral code in My Account → Vouchers; the rules are set below.', 'voucher-captain' ),
 				)
 			),
+			// SET-VC-24: prefix of referral codes (default "FRIEND" as in 1.2.0; the filter vcap_referral_code_prefix wins).
+			SettingsRegistry::field(
+				'vcap_referral_code_prefix',
+				array(
+					'title'    => __( 'Prefix of referral codes', 'voucher-captain' ),
+					'type'     => 'text',
+					'css'      => 'width:160px',
+					'desc_tip' => __( 'Start of every new personal referral code, e.g. FRIEND-AB12CD34. Letters, digits, dot, hyphen and underscore, up to 20 characters; empty = no prefix. Codes already given to customers keep theirs.', 'voucher-captain' ),
+				)
+			),
 			SettingsRegistry::field(
 				'vcap_referral_friend_amount',
 				array(
@@ -1518,7 +1546,7 @@ final class Settings {
 		);
 		// SET-VC-02: the country profile comes first – it suggests values for the blocks below.
 		// SET-VC-19: block "Payment methods for vouchers"; SET-VC-11: block "Issuer and legal texts".
-		return array_merge( Admin\CountryProfilesAdmin::fields(), $fields, PaymentMethods::settings_fields(), VoucherCurrency::settings_fields(), LegalInfo::settings_fields() ); // SET-VC-19, SET-VC-32, SET-VC-11: blocks on "General".
+		return array_merge( Admin\CountryProfilesAdmin::fields(), $fields, PaymentMethods::settings_fields(), VoucherCurrency::settings_fields(), LegalInfo::settings_fields(), Consent::settings_fields() ); // SET-VC-19, SET-VC-32, SET-VC-11, SET-VC-12: blocks on "General".
 	}
 
 	/**

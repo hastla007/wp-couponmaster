@@ -339,7 +339,7 @@ final class Bonus {
 		try {
 			$code = CodeIndex::unique(
 				array(
-					'prefix' => (string) apply_filters( 'vcap_bonus_code_prefix', 'BONUS', $campaign, $order ),
+					'prefix' => (string) apply_filters( 'vcap_bonus_code_prefix', (string) \VCAP\Settings::value( 'vcap_bonus_code_prefix' ), $campaign, $order ), // SET-VC-24: setting, the filter wins.
 					'length' => 10,
 				)
 			);

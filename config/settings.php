@@ -65,6 +65,10 @@ $vcap_settings = array(
 	'vcap_legal_text'                => array( 'type' => 'text', 'section' => '', 'legal' => true ),
 	/* ---- General: currencies (SET-VC-32; filter vcap_vouchers_shop_currency_only wins) ---- */
 	'vcap_vouchers_shop_currency_only' => array( 'type' => 'bool', 'default' => 'no', 'section' => '' ),
+	/* ---- General: consent checkbox (SET-VC-12, E6; off = no checkbox as in 1.2.0; filters vcap_consent_required, vcap_consent_text win) ---- */
+	// Products choose "use global" / "always" / "never" (product meta _vcap_consent). Text and effect not legally checked.
+	'vcap_consent_enabled'           => array( 'type' => 'bool', 'default' => 'no', 'section' => '', 'legal' => true ),
+	'vcap_consent_text'              => array( 'type' => 'text', 'default' => '', 'section' => '', 'legal' => true ),
 
 	/* ---- Codes ---- */
 	'vcap_code_prefix'               => array( 'section' => 'codes' ),
@@ -115,7 +119,14 @@ $vcap_settings = array(
 	'vcap_bonus_wait_days'           => array( 'type' => 'int', 'default' => 14, 'min' => 0, 'section' => 'promotions' ),
 	'vcap_discounts_on_vouchers'     => array( 'type' => 'bool', 'default' => 'no', 'section' => 'promotions' ),
 	'vcap_coupon_link'               => array( 'type' => 'bool', 'default' => 'no', 'section' => 'promotions' ),
+	// SET-VC-24 (E10 a): shops that never saved it keep "gutschein"; a first installation stores the parameter of the site
+	// language instead (Install::activate_site() → CouponLink::fresh_param(): de* "gutschein", else "voucher"). The old
+	// parameter "gutschein" always stays valid as an alias (CouponLink::params()).
 	'vcap_coupon_link_param'         => array( 'default' => 'gutschein', 'section' => 'promotions' ),
+	// SET-VC-24: prefixes of generated bonus and referral codes; defaults = the fixed prefixes of 1.2.0, the filters
+	// vcap_bonus_code_prefix / vcap_referral_code_prefix get the setting and win. '' = no prefix.
+	'vcap_bonus_code_prefix'         => array( 'default' => 'BONUS', 'section' => 'promotions' ),
+	'vcap_referral_code_prefix'      => array( 'default' => 'FRIEND', 'section' => 'promotions' ),
 	'vcap_referral_enabled'          => array( 'type' => 'bool', 'default' => 'no', 'section' => 'promotions' ),
 	'vcap_referral_friend_amount'    => array( 'type' => 'decimal', 'default' => 10, 'min' => 0, 'section' => 'promotions' ),
 	'vcap_referral_friend_type'      => array( 'type' => 'select', 'default' => 'fixed_cart', 'choices' => array( 'fixed_cart', 'percent' ), 'section' => 'promotions' ),

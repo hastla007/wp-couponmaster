@@ -6431,6 +6431,193 @@ check( 'SET-VC-05: no. 7 statuses – filters vcap_balance_deduct_statuses and v
 check( 'SET-VC-05: TAX.md section 5 describes the refund and cancellation settings (descriptive, to be checked)', str_contains( $v05_src( 'TAX.md' ), '### 5.3 Einstellungen „Erstattung & Storno“ (SET-VC-05) – zu prüfen' ) );
 $GLOBALS['vcap_test_filters'] = $v05_saved_filters;
 $GLOBALS['vcap_test_options'] = $v05_saved_opts;
+// SET-VC-12: consent checkbox at the voucher product (off by default; global setting, per-product switch, filter wins).
+echo "SET-VC-12 consent checkbox\n";
+$cn_saved_opts    = $GLOBALS['vcap_test_options'];
+$cn_saved_filters = $GLOBALS['vcap_test_filters'];
+VCAP\SettingsRegistry::reset();
+$cn_reg = VCAP\SettingsRegistry::all();
+check(
+	'SET-VC-12: register – vcap_consent_enabled (bool, default no) and vcap_consent_text (text, empty) are settings of "General" with legal weight, exported; product setting "consent" defaults to "use global" and is listed in wpml-config.xml',
+	'no' === $cn_reg['vcap_consent_enabled']['default'] && 'bool' === $cn_reg['vcap_consent_enabled']['type'] && '' === $cn_reg['vcap_consent_enabled']['section'] && $cn_reg['vcap_consent_enabled']['legal'] && $cn_reg['vcap_consent_enabled']['export']
+		&& '' === $cn_reg['vcap_consent_text']['default'] && 'text' === $cn_reg['vcap_consent_text']['type'] && $cn_reg['vcap_consent_text']['legal']
+		&& '' === ProductConfig::DEFAULTS['consent'] && str_contains( (string) file_get_contents( VCAP_PATH . 'wpml-config.xml' ), '<custom-field action="copy">_vcap_consent</custom-field>' )
+		&& in_array( 'vcap_consent_text', VCAP\Compat\Multilingual::OPTIONS, true )
+);
+$cn_fields = array_column( array_slice( VCAP\Consent::settings_fields(), 0, -1 ), null, 'id' );
+check(
+	'SET-VC-12: block "Consent checkbox" on "General" builds its fields with SettingsRegistry::field() (checkbox default no, textarea with the default text as placeholder) and says "Not legally checked"',
+	'checkbox' === $cn_fields['vcap_consent_enabled']['type'] && 'no' === $cn_fields['vcap_consent_enabled']['default'] && 'textarea' === $cn_fields['vcap_consent_text']['type'] && VCAP\Consent::default_text() === $cn_fields['vcap_consent_text']['placeholder']
+		&& str_contains( (string) $cn_fields['vcap_consent']['desc'], 'Not legally checked' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'src/Settings.php' ), 'Consent::settings_fields()' )
+);
+$cn_cfg     = static fn( array $over = array() ): array => array_merge( ProductConfig::DEFAULTS, $over );
+$cn_default = VCAP\Fields::builtin_definitions( $cn_cfg() );
+$cn_off     = ! VCAP\Consent::required_for( $cn_cfg() ) && ! isset( $cn_default['consent'] );
+$cn_product = VCAP\Consent::required_for( $cn_cfg( array( 'consent' => 'yes' ) ) );
+$GLOBALS['vcap_test_options']['vcap_consent_enabled'] = 'yes';
+$cn_global  = VCAP\Consent::required_for( $cn_cfg() ) && ! VCAP\Consent::required_for( $cn_cfg( array( 'consent' => 'no' ) ) );
+$cn_defs    = VCAP\Fields::builtin_definitions( $cn_cfg() );
+add_filter( 'vcap_consent_required', static fn( $required, $config ) => false, 10, 2 );
+$cn_filter  = ! VCAP\Consent::required_for( $cn_cfg( array( 'consent' => 'yes' ) ) );
+$GLOBALS['vcap_test_filters'] = $cn_saved_filters;
+check(
+	'SET-VC-12: default off – no checkbox (built-in fields as before); product "yes" shows it with the global setting off, the global setting shows it unless the product says "no"; the filter vcap_consent_required wins',
+	$cn_off && $cn_product && $cn_global && $cn_filter && array( 'recipient_name', 'recipient_email', 'message' ) === array_keys( $cn_default ),
+	json_encode( array( $cn_off, $cn_product, $cn_global, $cn_filter, array_keys( $cn_default ) ) )
+);
+check(
+	'SET-VC-12: the built-in field is a required checkbox, last of the built-in fields, labelled with the default text while the setting is empty',
+	isset( $cn_defs['consent'] ) && 'consent' === array_key_last( $cn_defs ) && 'checkbox' === $cn_defs['consent']['type'] && true === $cn_defs['consent']['required'] && VCAP\Consent::default_text() === $cn_defs['consent']['label']
+);
+$GLOBALS['vcap_test_options']['vcap_consent_text'] = "Ich möchte die sofortige\nZustellung <b>des Gutscheins</b>.";
+add_filter( 'vcap_consent_text', static fn( $text ) => $text . ' (AGB gelesen)' );
+$cn_text = VCAP\Consent::text();
+$GLOBALS['vcap_test_filters'] = $cn_saved_filters;
+check(
+	'SET-VC-12: own text – one line of plain text (no HTML), the filter vcap_consent_text wins; saving cleans and cuts it to 500 characters',
+	'Ich möchte die sofortige Zustellung des Gutscheins. (AGB gelesen)' === $cn_text && 500 === mb_strlen( VCAP\Consent::sanitize_text( str_repeat( 'ä', 600 ) ) ) && 'x' === VCAP\Consent::sanitize_text( '<i>x</i>' ),
+	$cn_text
+);
+$cn_cart    = array(
+	'recipient_name' => array( 'label' => 'Recipient name', 'value' => 'Anna' ),
+	'consent'        => array( 'label' => 'Terms read', 'value' => 'Yes' ),
+);
+$cn_stamped = VCAP\Consent::stamp( $cn_cart, 1795000000 );
+$cn_none    = VCAP\Consent::stamp( array( 'recipient_name' => $cn_cart['recipient_name'] ), 1795000000 );
+check(
+	'SET-VC-12: the order line keeps the text as shown and the time of the order (UTC) in "_vcap_fields" – classic and block checkout (woocommerce_checkout_create_order_line_item); without a consent nothing is added',
+	gmdate( 'Y-m-d H:i:s', 1795000000 ) === $cn_stamped['consent']['given_at'] && 'Terms read' === $cn_stamped['consent']['label'] && ! isset( $cn_none['consent'] )
+		&& array( 'text' => 'Terms read', 'given_at' => gmdate( 'Y-m-d H:i:s', 1795000000 ) ) === VCAP\Consent::of( $cn_stamped ) && null === VCAP\Consent::of( $cn_none ) && null === VCAP\Consent::of( 'x' )
+		&& str_contains( (string) file_get_contents( VCAP_PATH . 'src/Fields.php' ), "\$values['vcap_fields'] = Consent::stamp( (array) \$values['vcap_fields'] );" )
+);
+$cn_item  = new class( $cn_stamped ) {
+	public function __construct( private array $fields ) {}
+	public function get_meta( $k ) { return '_vcap_fields' === $k ? $this->fields : ''; }
+};
+$cn_again = ( new VCAP\Fields() )->order_again( array(), $cn_item, null );
+check(
+	'SET-VC-12: "order again" does not carry the consent over – it is asked anew (the field is required, validate() refuses the line without it)',
+	isset( $cn_again['vcap_fields']['recipient_name'] ) && ! isset( $cn_again['vcap_fields']['consent'] ) && str_contains( VCAP\Consent::missing_message( 'Terms read' ), 'Terms read' ),
+	json_encode( $cn_again )
+);
+$cn_voucher         = new VCAP\Voucher();
+$cn_voucher->fields = $cn_stamped;
+$cn_rows            = VCAP\Consent::export_rows( $cn_voucher->fields );
+$cn_privacy         = (string) file_get_contents( VCAP_PATH . 'src/Privacy.php' );
+check(
+	'SET-VC-12: the WordPress personal data export of a voucher lists the consent with its text and time (and not twice as a plain field)',
+	array( array( 'name' => 'Consent', 'value' => 'Terms read' ), array( 'name' => 'Consent given at (UTC)', 'value' => gmdate( 'Y-m-d H:i:s', 1795000000 ) ) ) === $cn_rows && array() === VCAP\Consent::export_rows( array() )
+		&& str_contains( $cn_privacy, 'Consent::export_rows( $voucher->fields )' ) && str_contains( $cn_privacy, 'if ( Consent::KEY === (string) $key ) {' ),
+	json_encode( $cn_rows )
+);
+$cn_labels = VCAP\Consent::event_labels( array() );
+$cn_note   = VCAP\Consent::note_text( 'x', VCAP\Consent::NOTE, array( 'Terms read', '2026-11-24 10:00:00' ) );
+check(
+	'SET-VC-12: the voucher history gets "Consent given" (event purchase_consent, reserved in CORE_EVENTS) with the text and the local time; the issuer writes it after "issued"',
+	'Consent given' === $cn_labels['purchase_consent'] && '"Terms read" confirmed with the order (24.11.2026 11:00).' === $cn_note && 'x' === VCAP\Consent::note_text( 'x', 'other', array() )
+		&& in_array( VCAP\Consent::EVENT, VCAP\API\V1\VoucherService::CORE_EVENTS, true ) && str_contains( (string) file_get_contents( VCAP_PATH . 'src/Issuer.php' ), 'Consent::log( $this->repo, $voucher, $order->get_id() );' ),
+	$cn_note
+);
+$cn_fields_src = (string) file_get_contents( VCAP_PATH . 'src/Fields.php' );
+$cn_ps_src     = (string) file_get_contents( VCAP_PATH . 'src/ProductSettings.php' );
+check(
+	'SET-VC-12: block cart/checkout – the Store API add-to-cart runs the same errors() (required checkbox), the checkout (classic and Store API: woocommerce_check_cart_items) stops a voucher line without the consent; the product screen offers global/yes/no and stores only those',
+	str_contains( $cn_fields_src, '$this->check_consent( $values );' ) && str_contains( $cn_fields_src, 'Consent::KEY === (string) $key ? Consent::missing_message( $label )' )
+		&& str_contains( $cn_ps_src, "'_vcap_consent', isset( Consent::product_choices()[ \$consent ] ) ? \$consent : ''" ) && array( '', 'yes', 'no' ) === array_keys( VCAP\Consent::product_choices() )
+);
+$GLOBALS['vcap_test_options'] = $cn_saved_opts;
+$GLOBALS['vcap_test_filters'] = $cn_saved_filters;
+
+// SET-VC-24: language-neutral defaults – code prefixes as settings, link parameter by site language for new
+// installations, the old parameter "gutschein" stays valid.
+echo "SET-VC-24 language-neutral defaults\n";
+$ln_saved_opts    = $GLOBALS['vcap_test_options'];
+$ln_saved_filters = $GLOBALS['vcap_test_filters'];
+$ln_saved_get     = $_GET;
+VCAP\SettingsRegistry::reset();
+check(
+	'SET-VC-24: register – prefixes of bonus and referral codes are settings of "Promotions" with the prefixes of 1.2.0 as default; the link parameter keeps "gutschein" for shops that never saved it; the PDF file name stays "voucher-{coupon_code}" (already neutral)',
+	'BONUS' === VCAP\SettingsRegistry::default( 'vcap_bonus_code_prefix' ) && 'FRIEND' === VCAP\SettingsRegistry::default( 'vcap_referral_code_prefix' ) && 'promotions' === VCAP\SettingsRegistry::get( 'vcap_bonus_code_prefix' )['section'] && 'promotions' === VCAP\SettingsRegistry::get( 'vcap_referral_code_prefix' )['section']
+		&& 'gutschein' === VCAP\SettingsRegistry::default( 'vcap_coupon_link_param' ) && 'voucher-{coupon_code}' === VCAP\SettingsRegistry::default( 'vcap_pdf_filename' )
+);
+$ln_bonus = (string) file_get_contents( VCAP_PATH . 'src/Discounts/Bonus.php' );
+$ln_ref   = (string) file_get_contents( VCAP_PATH . 'src/Referrals.php' );
+$GLOBALS['vcap_test_options']['vcap_bonus_code_prefix'] = 'BONO';
+$ln_setting = (string) apply_filters( 'vcap_bonus_code_prefix', (string) VCAP\Settings::value( 'vcap_bonus_code_prefix' ), array(), null );
+add_filter( 'vcap_bonus_code_prefix', static fn( $prefix ) => 'PROMO' );
+$ln_filter = (string) apply_filters( 'vcap_bonus_code_prefix', (string) VCAP\Settings::value( 'vcap_bonus_code_prefix' ), array(), null );
+$GLOBALS['vcap_test_filters'] = $ln_saved_filters;
+check(
+	'SET-VC-24: bonus and referral codes take their prefix from the setting, the filters vcap_bonus_code_prefix / vcap_referral_code_prefix get it and win',
+	'BONO' === $ln_setting && 'PROMO' === $ln_filter
+		&& str_contains( $ln_bonus, "apply_filters( 'vcap_bonus_code_prefix', (string) \\VCAP\\Settings::value( 'vcap_bonus_code_prefix' ), \$campaign, \$order )" )
+		&& str_contains( $ln_ref, "apply_filters( 'vcap_referral_code_prefix', (string) Settings::value( 'vcap_referral_code_prefix' ) )" )
+		&& ! str_contains( $ln_bonus, "'vcap_bonus_code_prefix', 'BONUS'" ) && ! str_contains( $ln_ref, "'vcap_referral_code_prefix', 'FRIEND'" )
+);
+$ln_settings = new VCAP\Settings();
+$ln_kept     = $ln_settings->sanitize_affix( 'B&B', array( 'id' => 'vcap_referral_code_prefix', 'title' => 'Prefix of referral codes' ) );
+check(
+	'SET-VC-24: a prefix is checked like the code prefix (letters, digits, dot, hyphen, underscore, up to 20): "B&B" is refused and the stored value kept; empty = no prefix is allowed',
+	'FRIEND' === $ln_kept && '' === $ln_settings->sanitize_affix( '', array( 'id' => 'vcap_bonus_code_prefix' ) ) && 'GIFT-2026' === $ln_settings->sanitize_affix( ' GIFT-2026 ', array( 'id' => 'vcap_bonus_code_prefix' ) )
+		&& str_contains( (string) file_get_contents( VCAP_PATH . 'src/Settings.php' ), "'vcap_code_separator', 'vcap_bonus_code_prefix', 'vcap_referral_code_prefix' ) as \$affix" ),
+	(string) $ln_kept
+);
+check(
+	'SET-VC-24 (E10 a): the parameter of a new installation follows the site language – German (de, de_DE, de_AT, de_CH, de_DE_formal) "gutschein", every other language "voucher"',
+	'gutschein' === VCAP\CouponLink::fresh_param( 'de_DE' ) && 'gutschein' === VCAP\CouponLink::fresh_param( 'de_AT' ) && 'gutschein' === VCAP\CouponLink::fresh_param( 'de_CH' ) && 'gutschein' === VCAP\CouponLink::fresh_param( 'de_DE_formal' ) && 'gutschein' === VCAP\CouponLink::fresh_param( 'de' )
+		&& 'voucher' === VCAP\CouponLink::fresh_param( 'en_US' ) && 'voucher' === VCAP\CouponLink::fresh_param( 'fr_FR' ) && 'voucher' === VCAP\CouponLink::fresh_param( 'nl_NL' ) && 'voucher' === VCAP\CouponLink::fresh_param( 'es_ES' )
+);
+$ln_install = (string) file_get_contents( VCAP_PATH . 'src/Install.php' );
+$ln_first   = (int) strpos( $ln_install, "add_option( 'vcap_coupon_link_param', CouponLink::fresh_param( self::site_locale() ), '', 'yes' );" );
+check(
+	'SET-VC-24: only a first installation stores it (inside "no version stored yet"), before Settings::store_request_defaults() would store "gutschein"; existing shops keep theirs (default unchanged)',
+	$ln_first > 0 && $ln_first < (int) strpos( $ln_install, 'self::upgrade_schema( $installed );' ) && $ln_first > (int) strpos( $ln_install, "if ( '' === self::stored_version() ) {\n\t\t\tadd_option( PaymentVouchers::OPTION" )
+		&& ! str_contains( (string) file_get_contents( VCAP_PATH . 'src/SettingsTransfer.php' ), 'fresh_param' )
+);
+if ( ! function_exists( 'is_multisite' ) ) {
+	function is_multisite() { return false; }
+}
+// A first installation on an English site and on a German site, an existing shop (option stored): add_option() as in activate_site().
+unset( $GLOBALS['vcap_test_options']['vcap_coupon_link_param'] );
+$GLOBALS['vcap_test_options']['WPLANG'] = 'en_GB';
+add_option( 'vcap_coupon_link_param', VCAP\CouponLink::fresh_param( VCAP\Install::site_locale() ), '', 'yes' );
+$ln_en = $GLOBALS['vcap_test_options']['vcap_coupon_link_param'];
+unset( $GLOBALS['vcap_test_options']['vcap_coupon_link_param'] );
+$GLOBALS['vcap_test_options']['WPLANG'] = 'de_AT';
+add_option( 'vcap_coupon_link_param', VCAP\CouponLink::fresh_param( VCAP\Install::site_locale() ), '', 'yes' );
+$ln_de = $GLOBALS['vcap_test_options']['vcap_coupon_link_param'];
+$GLOBALS['vcap_test_options']['vcap_coupon_link_param'] = 'gutschein';
+$GLOBALS['vcap_test_options']['WPLANG']                 = 'en_US';
+add_option( 'vcap_coupon_link_param', VCAP\CouponLink::fresh_param( VCAP\Install::site_locale() ), '', 'yes' );
+check(
+	'SET-VC-24: site language from WPLANG – an English site stores "voucher", an Austrian one "gutschein"; an existing shop keeps "gutschein" (add_option never overwrites)',
+	'voucher' === $ln_en && 'gutschein' === $ln_de && 'gutschein' === $GLOBALS['vcap_test_options']['vcap_coupon_link_param'],
+	json_encode( array( $ln_en, $ln_de ) )
+);
+// Old links keep working: with the parameter "voucher" set, ?gutschein=CODE is still read (alias), ?voucher=CODE first.
+$GLOBALS['vcap_test_options']['vcap_coupon_link_param'] = 'voucher';
+$ln_link = new VCAP\CouponLink( new VCAP\Settings() );
+$_GET    = array( 'gutschein' => 'SUMMER10' );
+$ln_old  = $ln_link->request_param();
+$_GET    = array( 'voucher' => 'SUMMER10', 'gutschein' => 'OTHER' );
+$ln_new  = $ln_link->request_param();
+$_GET    = array( 'coupon' => 'SUMMER10' );
+$ln_none = $ln_link->request_param();
+$_GET    = array( 'gutschein' => array( 'x' ) );
+$ln_arr  = $ln_link->request_param();
+$ln_both = $ln_link->params();
+$GLOBALS['vcap_test_options']['vcap_coupon_link_param'] = 'gutschein';
+$ln_same = ( new VCAP\CouponLink( new VCAP\Settings() ) )->params();
+$_GET    = $ln_saved_get;
+$ln_src  = (string) file_get_contents( VCAP_PATH . 'src/CouponLink.php' );
+check(
+	'SET-VC-24: old links work – with the parameter "voucher" a link ?gutschein=CODE is still applied (alias), the parameter set comes first, other parameters and arrays are ignored; with "gutschein" set there is one parameter; the redirect removes both',
+	'gutschein' === $ln_old && 'voucher' === $ln_new && null === $ln_none && null === $ln_arr && array( 'voucher', 'gutschein' ) === $ln_both && array( 'gutschein' ) === $ln_same
+		&& str_contains( $ln_src, '$param = $this->request_param();' ) && str_contains( $ln_src, 'wp_safe_redirect( remove_query_arg( $this->params() ) );' ),
+	json_encode( array( $ln_old, $ln_new, $ln_none, $ln_arr, $ln_same ) )
+);
+$GLOBALS['vcap_test_options'] = $ln_saved_opts;
+$GLOBALS['vcap_test_filters'] = $ln_saved_filters;
 VCAP\SettingsRegistry::reset();
 
 echo "\n$passed passed, $failed failed. Output: $out\n";

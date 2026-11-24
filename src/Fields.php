@@ -39,6 +39,7 @@ final class Fields {
 		add_action( 'woocommerce_before_order_item_object_save', array( $this, 'sync_visible_meta' ), 10, 1 );
 		add_filter( 'woocommerce_order_again_cart_item_data', array( $this, 'order_again' ), 10, 3 );
 		add_action( 'woocommerce_check_cart_items', array( $this, 'check_cart_items' ) );
+		Consent::register(); // SET-VC-12: history label and note, sanitizer of the text setting.
 		add_action( 'woocommerce_privacy_remove_order_personal_data', array( self::class, 'anonymise_order' ), 10, 1 );
 		add_action( 'wp_enqueue_scripts', array( $this, 'assets' ) );
 		add_action( 'woocommerce_after_shop_loop_item', array( $this, 'loop_assets' ) );
@@ -225,6 +226,10 @@ final class Fields {
 					$out[ $base ]['tooltip']  = self::required_tooltip( $base, $out[ $base ]['tooltip'], $config );
 				}
 			}
+		}
+		// SET-VC-12: the required consent checkbox (off by default), always the last built-in field.
+		if ( Consent::required_for( $config ) ) {
+			$out[ Consent::KEY ] = Consent::definition();
 		}
 		return apply_filters( 'vcap_builtin_fields', $out, $config );
 	}
@@ -844,7 +849,7 @@ final class Fields {
 			}
 			if ( ! empty( $field['required'] ) && '' === $raw ) {
 				/* translators: %s: field label */
-				$errors[]                       = sprintf( __( '%s is a required field.', 'voucher-captain' ), $label );
+				$errors[]                       = Consent::KEY === (string) $key ? Consent::missing_message( $label ) : sprintf( __( '%s is a required field.', 'voucher-captain' ), $label );
 				$this->invalid[ (string) $key ] = end( $errors );
 				continue;
 			}
@@ -988,6 +993,8 @@ final class Fields {
 		if ( empty( $values['vcap_fields'] ) ) {
 			return;
 		}
+		// SET-VC-12: a consent is kept with the time of the order (UTC) – classic and block checkout run this action.
+		$values['vcap_fields'] = Consent::stamp( (array) $values['vcap_fields'] );
 		$item->add_meta_data( '_vcap_fields', $values['vcap_fields'], true );
 		// Visible copy (admin order screen, emails, {item_meta:…} placeholders). M10: under a stable key
 		// ("vcap_recipient_name"), whatever the language of the order; the label is shown by display_meta_key().
@@ -1235,7 +1242,8 @@ final class Fields {
 		$fields = $item->get_meta( '_vcap_fields' );
 		if ( is_array( $fields ) ) {
 			// M12-59: the old delivery date is not taken over (it has usually passed: the voucher would go out at once).
-			unset( $fields['delivery_date'] );
+			// SET-VC-12: nor the consent – it is given anew for the new order.
+			unset( $fields['delivery_date'], $fields[ Consent::KEY ] );
 		}
 		if ( $fields ) {
 			$data['vcap_fields'] = $fields;
@@ -1270,6 +1278,7 @@ final class Fields {
 		}
 		$today = wp_date( 'Y-m-d' );
 		foreach ( WC()->cart->get_cart() as $values ) {
+			$this->check_consent( $values );
 			$date    = (string) ( $values['vcap_fields']['delivery_date']['value'] ?? '' );
 			$product = $values['data'] ?? null;
 			if ( '' === $date || ! $product instanceof \WC_Product ) {
@@ -1288,6 +1297,31 @@ final class Fields {
 				),
 				'error'
 			);
+		}
+	}
+
+	/**
+	 * SET-VC-12: a voucher whose product asks for the consent stops the checkout (classic and Store API) while its cart
+	 * line has none – e.g. added before the checkbox was switched on, or by code that skipped the product form.
+	 *
+	 * @param array<string, mixed> $values Cart item.
+	 */
+	private function check_consent( array $values ): void {
+		$product = $values['data'] ?? null;
+		if ( ! $product instanceof \WC_Product || ! ProductConfig::is_voucher( $product ) || null !== Consent::of( $values['vcap_fields'] ?? array() ) ) {
+			return;
+		}
+		if ( ! Consent::required_for( ProductConfig::get( $product ) ) ) {
+			return;
+		}
+		$message = sprintf(
+			/* translators: 1: product name, 2: text of the consent checkbox */
+			__( '"%1$s" needs your confirmation "%2$s". Please remove the voucher from the cart and add it again from its product page.', 'voucher-captain' ),
+			$product->get_name(),
+			Consent::text()
+		);
+		if ( ! wc_has_notice( $message, 'error' ) ) {
+			wc_add_notice( $message, 'error' );
 		}
 	}
 
@@ -1471,7 +1505,7 @@ final class Fields {
 		}
 		$fields_in = json_decode( wp_unslash( (string) ( $_POST['vcap_fields_json'] ?? '' ) ), true ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- sanitised below.
 		$fields    = array();
-		$reserved  = array( 'recipient_name', 'recipient_email', 'message', 'delivery_date' );
+		$reserved  = array( 'recipient_name', 'recipient_email', 'message', 'delivery_date', Consent::KEY ); // SET-VC-12: "consent" is built in.
 		foreach ( array_values( is_array( $fields_in ) ? $fields_in : array() ) as $index => $f ) {
 			$key = self::field_key( (string) ( $f['key'] ?? '' ), (string) ( $f['label'] ?? '' ), $index + 1 );
 			if ( '' === $key ) {

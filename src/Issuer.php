@@ -974,6 +974,7 @@ final class Issuer {
 			Db::fail( 'log_issued', array( 'voucher_id' => $voucher->id, 'order_id' => $order->get_id() ) );
 			$order->add_order_note( sprintf( /* translators: %s: code */ __( 'Voucher %s was issued, but its history entry could not be written.', 'voucher-captain' ), Mask::code( (string) $voucher->code ) ) );
 		}
+		Consent::log( $this->repo, $voucher, $order->get_id() ); // SET-VC-12: history entry of a consent given with the order.
 		return $voucher;
 	}
 

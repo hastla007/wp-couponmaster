@@ -259,6 +259,21 @@ final class Install {
 		} while ( $more );
 	}
 
+	/**
+	 * SET-VC-24: language of the current site (on a multisite the site switched to, whose locale WordPress may not
+	 * have loaded yet): its WPLANG option, else the network's, else get_locale(); '' stands for en_US.
+	 */
+	public static function site_locale(): string {
+		$locale = get_option( 'WPLANG', '' );
+		if ( ( ! is_string( $locale ) || '' === $locale ) && is_multisite() ) {
+			$locale = get_site_option( 'WPLANG', '' );
+		}
+		if ( ! is_string( $locale ) || '' === $locale ) {
+			$locale = (string) get_locale();
+		}
+		return $locale;
+	}
+
 	public static function activate_site(): void {
 		// Schema work only under the upgrade lock; when another request holds it, that request finishes the schema.
 		$locked = self::lock();
@@ -266,6 +281,9 @@ final class Install {
 		// the voucher pays shipping and fees too). Existing shops keep their setting (missing option = off).
 		if ( '' === self::stored_version() ) {
 			add_option( PaymentVouchers::OPTION, SettingsRegistry::fresh_default( PaymentVouchers::OPTION ) );
+			// SET-VC-24 (E10 a): the link parameter by the site language ("gutschein" for German, else "voucher"),
+			// stored before Settings::store_request_defaults() would store the default. Existing shops keep theirs.
+			add_option( 'vcap_coupon_link_param', CouponLink::fresh_param( self::site_locale() ), '', 'yes' );
 		}
 		$fresh  = '' === self::stored_version(); // M12-48: a first installation on this site.
 		try {
