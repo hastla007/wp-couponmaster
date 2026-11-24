@@ -607,7 +607,8 @@ final class Settings {
 			),
 			array( 'type' => 'sectionend', 'id' => 'vcap_suite_workflowcaptain' ),
 		);
-		return array_merge( $fields, self::integration_rule_fields(), DatevExport::settings_fields() ); // SET-VC-33, M12-69.
+		// SET-VC-33, SET-VC-20 (accounting export, country-neutral), M12-69 (DATEV block, only while shown).
+		return array_merge( $fields, self::integration_rule_fields(), AccountingExport::settings_fields(), DatevExport::settings_fields() );
 	}
 
 	/**

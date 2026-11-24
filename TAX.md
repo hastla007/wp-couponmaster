@@ -380,6 +380,31 @@ Verrechnungskonto an Verbindlichkeit, Wertabgang Verbindlichkeit an Verrechnungs
 Rundungsrest gegen das Ertragskonto. Aktionen (`discount`) bleiben draußen; kein BU-Schlüssel. Belegfeld 1 =
 Bestellnummer bzw. Code, Buchungstext = Ereignis + maskierter Code. Der Zeitraum muss in einem Wirtschaftsjahr
 liegen. **Testimport durch die Steuerberatung vor dem Einsatz.** Nachweis: „M12-69: …“.
+Seit 1.3.0 (SET-VC-20) stehen die drei Konten und der Wirtschaftsjahresbeginn im allgemeinen Block
+„Buchhaltungsexport“ (Optionsnamen unverändert); der DATEV-Block enthält nur noch Berater-/Mandantennummer und
+Sachkontenlänge und erscheint bei Länderprofil DE, Sitz in Deutschland, gespeicherten DATEV-Werten oder auf Wunsch
+(„DATEV-Einstellungen anzeigen“).
+
+### 6.4a Buchhaltungsexport länderneutral (SET-VC-20) – zu prüfen
+
+Beschreibend, **nicht steuerlich geprüft** (Kontenbelegung/Spalten: Steuerprüfung offen, je Land DE/AT/CH).
+WooCommerce → Einstellungen → Gutscheine → Integrationen → „Buchhaltungsexport“:
+
+- **Konten** Gutscheinverbindlichkeit, Verrechnungskonto, Ertragskonto für verfallene Werte – dieselben Werte nutzen
+  Journal-CSV und DATEV.
+- **„Konten in der Journal-CSV“** (Standard aus): hängt an die Journal-CSV die Spalten „Soll-Konto“ und
+  „Haben-Konto“ an – dieselbe Logik wie DATEV (Wertabgang: Verbindlichkeit an Verrechnungskonto bzw. bei Verfall,
+  verfallenem Rest, Abschreibung an Ertragskonto; Wertzugang umgekehrt; Aktionen und Nullbuchungen leer). Ohne
+  Häkchen bleibt die CSV wie in 1.2.0 (14 Spalten). So kann ein Shop in AT/CH das Journal ohne DATEV-Felder an die
+  eigene Buchhaltung geben. Zu prüfen: ob die Kontierung (insbesondere Ertrag aus Verfall ohne Steuer, F7) für das
+  jeweilige Land stimmt.
+- **Wirtschaftsjahresbeginn** (MMDD, Option `vcap_datev_fy_start` wie bisher): allgemein, DATEV liest ihn.
+  Ungültige Angaben gelten als 0101.
+- **CSV-Format** für alle CSV-Exporte: Trennzeichen, Dezimaltrennzeichen (automatisch nach Sprache wie bisher),
+  Zeichensatz (UTF-8 mit BOM wie bisher, UTF-8 ohne BOM, Windows-1252), Datumsformat (Y-m-d wie bisher,
+  d.m.Y, d/m/Y, m/d/Y). Der Filter `vcap_csv_format` gewinnt weiter.
+
+Weitere Formate (z. B. BMD, Abacus) sind Pro (P17, E2). Nachweis: `tests/run.php` „SET-VC-20: …“.
 
 ### 6.5 DSGVO-Löschung und Aufbewahrung (M12-66)
 

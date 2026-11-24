@@ -10,6 +10,10 @@ defined( 'ABSPATH' ) || exit;
  * e.g. de_DE, fr_FR, nl_NL, pl_PL; not de_CH) get a semicolon separator and a decimal comma (what Excel there
  * opens in columns), all others a comma and a decimal point. Filter "vcap_csv_format"
  * changes it, e.g. array( 'separator' => ';', 'decimal' => ',' ). Dates are local shop time.
+ *
+ * SET-VC-20: separator, decimal separator, character set and date format are settings (block "Accounting export",
+ * AccountingExport); their defaults give the output described above (automatic separators, UTF-8 with BOM,
+ * Y-m-d). The filter "vcap_csv_format" still gets the separators last and wins.
  */
 final class Csv {
 	/** @var array{separator:string, decimal:string}|null */
@@ -25,6 +29,15 @@ final class Csv {
 				'separator' => ',' === $decimal ? ';' : ',',
 				'decimal'   => $decimal,
 			);
+			// SET-VC-20: a separator chosen in the settings replaces the automatic one ('' = automatic).
+			$separator = (string) Settings::value( AccountingExport::OPTION_SEPARATOR );
+			$chosen    = (string) Settings::value( AccountingExport::OPTION_DECIMAL );
+			if ( in_array( $chosen, array( ',', '.' ), true ) ) {
+				$format['decimal'] = $chosen;
+			}
+			if ( in_array( $separator, array( ';', ',', 'tab' ), true ) ) {
+				$format['separator'] = 'tab' === $separator ? "\t" : $separator;
+			}
 			/**
 			 * CSV format of the exports.
 			 *
@@ -76,6 +89,18 @@ final class Csv {
 		return in_array( $lang, array( 'de', 'fr', 'it', 'es', 'nl', 'pl', 'pt', 'cs', 'sk', 'sl', 'hr', 'hu', 'ro', 'bg', 'el', 'da', 'fi', 'sv', 'nb', 'nn', 'et', 'lv', 'lt', 'ru', 'uk', 'tr', 'id', 'ca', 'gl', 'eu', 'is', 'sr', 'bs', 'mk', 'sq', 'az', 'kk', 'be', 'vi' ), true );
 	}
 
+	/** SET-VC-20: character set of the files – 'utf-8-bom' (default), 'utf-8' or 'windows-1252'. */
+	public static function charset(): string {
+		$charset = (string) Settings::value( AccountingExport::OPTION_CHARSET );
+		return in_array( $charset, array( 'utf-8-bom', 'utf-8', 'windows-1252' ), true ) ? $charset : 'utf-8-bom';
+	}
+
+	/** SET-VC-20: PHP date format of the date part (default Y-m-d). */
+	public static function date_format(): string {
+		$format = (string) Settings::value( AccountingExport::OPTION_DATE_FORMAT );
+		return in_array( $format, AccountingExport::DATE_FORMATS, true ) ? $format : 'Y-m-d';
+	}
+
 	/** Forget the cached format (tests, locale switches). */
 	public static function reset(): void {
 		self::$format = null;
@@ -97,7 +122,7 @@ final class Csv {
 			return '';
 		}
 		$ts = strtotime( $utc . ' UTC' );
-		return false === $ts ? '' : wp_date( $time ? 'Y-m-d H:i' : 'Y-m-d', $ts );
+		return false === $ts ? '' : wp_date( self::date_format() . ( $time ? ' H:i' : '' ), $ts );
 	}
 
 	/** Neutralises spreadsheet formulas (=, +, -, @, tab, CR at the start); plain numbers stay numbers. */
@@ -115,14 +140,14 @@ final class Csv {
 	 */
 	public static function headers( string $filename ): array {
 		return array(
-			'Content-Type: text/csv; charset=utf-8',
+			'Content-Type: text/csv; charset=' . ( 'windows-1252' === self::charset() ? 'windows-1252' : 'utf-8' ),
 			'Content-Disposition: attachment; filename="' . sanitize_file_name( $filename ) . '"',
 			'X-Content-Type-Options: nosniff',
 		);
 	}
 
 	/**
-	 * Sends the download headers and the BOM.
+	 * Sends the download headers and the BOM (UTF-8 with BOM only, the default).
 	 *
 	 * @return resource Output stream for write().
 	 */
@@ -132,13 +157,23 @@ final class Csv {
 			header( $line );
 		}
 		$out = fopen( 'php://output', 'w' );
-		fwrite( $out, "\xEF\xBB\xBF" ); // phpcs:ignore WordPress.WP.AlternativeFunctions -- UTF-8 BOM for Excel.
+		if ( 'utf-8-bom' === self::charset() ) {
+			fwrite( $out, "\xEF\xBB\xBF" ); // phpcs:ignore WordPress.WP.AlternativeFunctions -- UTF-8 BOM for Excel.
+		}
 		return $out;
 	}
 
 	/** Writes one row (explicit escape parameter: no deprecation notice on PHP 8.4). */
 	public static function write( $out, array $row ): void {
-		fputcsv( $out, self::safe_row( array_values( $row ) ), self::format()['separator'], '"', '' );
+		fputcsv( $out, self::encode_row( self::safe_row( array_values( $row ) ) ), self::format()['separator'], '"', '' );
+	}
+
+	/** SET-VC-20: the texts of a row in the character set of the files (Windows-1252: unknown characters "?"). */
+	public static function encode_row( array $row ): array {
+		if ( 'windows-1252' !== self::charset() || ! function_exists( 'mb_convert_encoding' ) ) {
+			return $row;
+		}
+		return array_map( static fn( $c ) => is_string( $c ) ? (string) mb_convert_encoding( $c, 'Windows-1252', 'UTF-8' ) : $c, $row );
 	}
 
 	/**

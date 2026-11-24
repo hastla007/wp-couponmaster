@@ -389,10 +389,11 @@ final class Ledger {
 	 * @return \Generator<array>
 	 */
 	public function journal_export( string $from, string $to, int $batch = 2000 ): \Generator {
-		yield self::journal_header();
+		$accounts = AccountingExport::journal_accounts(); // SET-VC-20: account columns only when switched on.
+		yield self::journal_header( $accounts );
 		$written = 0;
 		foreach ( $this->journal_all( $from, $to, $batch ) as $row ) {
-			yield self::journal_line( $row );
+			yield self::journal_line( $row, $accounts );
 			++$written;
 		}
 		yield Csv::end_row( $written );
@@ -569,19 +570,30 @@ final class Ledger {
 		}
 	}
 
-	/** Column headers of the journal CSV. */
-	public static function journal_header(): array {
-		return array( __( 'Date', 'voucher-captain' ), __( 'Code', 'voucher-captain' ), __( 'Type', 'voucher-captain' ), __( 'Currency', 'voucher-captain' ), __( 'Booking', 'voucher-captain' ), __( 'Amount', 'voucher-captain' ), __( 'Balance after', 'voucher-captain' ), __( 'Order number', 'voucher-captain' ), __( 'Order ID', 'voucher-captain' ), __( 'Till / branch', 'voucher-captain' ), __( 'Receipt no.', 'voucher-captain' ), __( 'Note', 'voucher-captain' ), __( 'VAT treatment', 'voucher-captain' ), __( 'Order amount', 'voucher-captain' ) );
+	/**
+	 * Column headers of the journal CSV; with $accounts (SET-VC-20) plus "Debit account" and "Credit account".
+	 *
+	 * @param array{liability:string, clearing:string, income:string}|null $accounts AccountingExport::journal_accounts().
+	 */
+	public static function journal_header( ?array $accounts = null ): array {
+		$columns = array( __( 'Date', 'voucher-captain' ), __( 'Code', 'voucher-captain' ), __( 'Type', 'voucher-captain' ), __( 'Currency', 'voucher-captain' ), __( 'Booking', 'voucher-captain' ), __( 'Amount', 'voucher-captain' ), __( 'Balance after', 'voucher-captain' ), __( 'Order number', 'voucher-captain' ), __( 'Order ID', 'voucher-captain' ), __( 'Till / branch', 'voucher-captain' ), __( 'Receipt no.', 'voucher-captain' ), __( 'Note', 'voucher-captain' ), __( 'VAT treatment', 'voucher-captain' ), __( 'Order amount', 'voucher-captain' ) );
+		return null === $accounts ? $columns : array_merge( $columns, AccountingExport::journal_columns() );
 	}
 
-	/** One CSV line of a journal booking. */
-	public static function journal_line( array $r ): array {
+	/**
+	 * One CSV line of a journal booking; with $accounts (SET-VC-20) plus its debit and credit account.
+	 *
+	 * @param array<string, mixed>                                        $r        Journal row.
+	 * @param array{liability:string, clearing:string, income:string}|null $accounts AccountingExport::journal_accounts().
+	 */
+	public static function journal_line( array $r, ?array $accounts = null ): array {
 		static $labels = null, $types = null;
 		$labels   = $labels ?? VoucherRepository::event_labels();
 		$types    = $types ?? Voucher::types();
 		$decimals = API\V1\RedemptionService::decimals( (string) ( $r['currency'] ?: get_option( 'woocommerce_currency' ) ) );
 		$total    = Format::order_total( $r['order_id'] );
-		return array( Csv::date( $r['created_at'] ), $r['code'], $types[ $r['type'] ] ?? $r['type'], $r['currency'], $labels[ $r['event'] ] ?? $r['event'], Csv::number( self::signed_amount( (string) $r['event'], $r['amount'] ), $decimals ), null === $r['balance_after'] ? '' : Csv::number( (float) $r['balance_after'], $decimals ), Format::order_number( $r['order_id'] ), $r['order_id'] ?: '', (string) ( $r['till'] ?? '' ), (string) ( $r['receipt'] ?? '' ), Note::render( (string) $r['note'] ), ProductConfig::treatment_label( self::row_treatment( $r ) ), null === $total ? '' : Csv::number( $total[0], API\V1\RedemptionService::decimals( $total[1] ) ) );
+		$line     = array( Csv::date( $r['created_at'] ), $r['code'], $types[ $r['type'] ] ?? $r['type'], $r['currency'], $labels[ $r['event'] ] ?? $r['event'], Csv::number( self::signed_amount( (string) $r['event'], $r['amount'] ), $decimals ), null === $r['balance_after'] ? '' : Csv::number( (float) $r['balance_after'], $decimals ), Format::order_number( $r['order_id'] ), $r['order_id'] ?: '', (string) ( $r['till'] ?? '' ), (string) ( $r['receipt'] ?? '' ), Note::render( (string) $r['note'] ), ProductConfig::treatment_label( self::row_treatment( $r ) ), null === $total ? '' : Csv::number( $total[0], API\V1\RedemptionService::decimals( $total[1] ) ) );
+		return null === $accounts ? $line : array_merge( $line, AccountingExport::journal_cells( $r, $accounts ) );
 	}
 
 	/**
@@ -626,9 +638,10 @@ final class Ledger {
 	 * @param iterable $journal Bookings of journal() or journal_all().
 	 */
 	public static function journal_csv( iterable $journal ): array {
-		$rows = array( self::journal_header() );
+		$accounts = AccountingExport::journal_accounts();
+		$rows     = array( self::journal_header( $accounts ) );
 		foreach ( $journal as $r ) {
-			$rows[] = self::journal_line( $r );
+			$rows[] = self::journal_line( $r, $accounts );
 		}
 		return $rows;
 	}

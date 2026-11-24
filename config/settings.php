@@ -179,14 +179,26 @@ $vcap_settings = array(
 	'vcap_redemption_max_failures'   => array( 'type' => 'int', 'default' => 10, 'min' => 0, 'section' => 'api' ),
 	// SET-VC-31 (1.12 no. 23): invalid codes per 15 minutes across all API callers (brake); floor as above.
 	'vcap_redemption_site_wide_failures' => array( 'type' => 'int', 'default' => 300, 'min' => 50, 'max' => 10000, 'section' => 'api' ),
-	// M12-69: DATEV export (digits only; DatevExport::config() strips anything else).
-	'vcap_datev_consultant'          => array( 'section' => 'api' ),
-	'vcap_datev_client'              => array( 'section' => 'api' ),
-	'vcap_datev_fy_start'            => array( 'default' => '0101', 'section' => 'api', 'legal' => true ),
-	'vcap_datev_account_length'      => array( 'type' => 'int', 'default' => 4, 'min' => 4, 'max' => 9, 'section' => 'api' ),
+	// SET-VC-20: accounting export, country-neutral (block "Accounting export", AccountingExport). The three accounts
+	// keep their names of 1.2.0 and serve the journal CSV and DATEV (digits only). Defaults = output of 1.2.0.
 	'vcap_datev_liability_account'   => array( 'section' => 'api', 'legal' => true ),
 	'vcap_datev_clearing_account'    => array( 'section' => 'api', 'legal' => true ),
 	'vcap_datev_income_account'      => array( 'section' => 'api', 'legal' => true ),
+	'vcap_journal_account_columns'   => array( 'type' => 'bool', 'default' => 'no', 'section' => 'api', 'legal' => true ),
+	// Start of the financial year (MMDD) for every export; name of 1.2.0 kept, field now in the general block.
+	'vcap_datev_fy_start'            => array( 'default' => '0101', 'section' => 'api', 'legal' => true ),
+	// '' = automatic by the exporting user's language (Csv::format()); the filter vcap_csv_format wins.
+	'vcap_csv_separator'             => array( 'type' => 'select', 'default' => '', 'choices' => array( '', ';', ',', 'tab' ), 'section' => 'api' ),
+	'vcap_csv_decimal'               => array( 'type' => 'select', 'default' => '', 'choices' => array( '', ',', '.' ), 'section' => 'api' ),
+	'vcap_csv_charset'               => array( 'type' => 'select', 'default' => 'utf-8-bom', 'choices' => array( 'utf-8-bom', 'utf-8', 'windows-1252' ), 'section' => 'api' ),
+	'vcap_csv_date_format'           => array( 'type' => 'select', 'default' => 'Y-m-d', 'choices' => array( 'Y-m-d', 'd.m.Y', 'd/m/Y', 'm/d/Y' ), 'section' => 'api' ),
+	// DATEV block: 'auto' = shown for the country profile DE, shops based in Germany and shops with DATEV values
+	// saved (AccountingExport::show_datev()); 'yes' always, 'no' never (values are kept).
+	'vcap_show_datev'                => array( 'type' => 'select', 'default' => 'auto', 'choices' => array( 'auto', 'yes', 'no' ), 'section' => 'api' ),
+	// M12-69: DATEV export (digits only; DatevExport::config() strips anything else). Block shown per vcap_show_datev.
+	'vcap_datev_consultant'          => array( 'section' => 'api' ),
+	'vcap_datev_client'              => array( 'section' => 'api' ),
+	'vcap_datev_account_length'      => array( 'type' => 'int', 'default' => 4, 'min' => 4, 'max' => 9, 'section' => 'api' ),
 	// VOUCH-WF-15: contact read function, off by default.
 	'vcap_contact_read_enabled'      => array( 'type' => 'bool', 'default' => 'no', 'section' => 'api', 'legal' => true ),
 	// SET-VC-33 (1.12 no. 12, 35, 38–40): rules of physical cards and partner plugins; defaults = the fixed values of
