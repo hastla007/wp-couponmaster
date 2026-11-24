@@ -10591,7 +10591,7 @@ msgstr "Wird nur auf Seiten mit Ausgaben von Voucher Captain eingefügt (Einlös
 
 #: src/Settings.php:574
 msgid "Physical gift cards"
-msgstr ""
+msgstr "Physische Geschenkkarten"
 
 #: src/Settings.php:580
 msgid "Activate physical cards at"
@@ -10647,7 +10647,7 @@ msgstr "Regeln für Anbindungen"
 
 #: src/Settings.php:695
 msgid "Rules for partner plugins. A rule is shown only while its plugin is active; its saved value is kept."
-msgstr ""
+msgstr "Regeln für Partner-Plugins. Eine Regel wird nur angezeigt, solange ihr Plugin aktiv ist; ihr gespeicherter Wert bleibt erhalten."
 
 #: src/Settings.php:701
 msgid "Review request only once per voucher"
