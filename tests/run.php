@@ -6195,6 +6195,32 @@ check(
 		&& array() === array_filter( VCAP\LegalInfo::OPTIONS, static fn( $key ) => ! str_contains( $vc11_wpml, '<key name="' . $key . '" />' ) ),
 	wp_json_encode( preg_grep( $vc11_new_tokens, $vc11_used ) )
 );
+// OD-4 (owner decision 24.11.2026): empty contact = the WooCommerce sender address only (never admin_email); the store
+// address always carries the country (also the shop's own).
+$GLOBALS['vcap_test_options'] = array(
+	'woocommerce_default_country'    => 'DE:BE',
+	'woocommerce_store_address'      => 'Musterstraße 1',
+	'woocommerce_store_postcode'     => '10115',
+	'woocommerce_store_city'         => 'Berlin',
+	'woocommerce_email_from_address' => ' gutscheine@shop.test ',
+	'admin_email'                    => 'admin@shop.test',
+);
+$vc11_od4_sender = array( VCAP\LegalInfo::issuer_contact(), VCAP\LegalInfo::issuer() );
+$vc11_od4_field  = array_values( array_filter( VCAP\LegalInfo::settings_fields(), static fn( $f ) => VCAP\LegalInfo::CONTACT_OPTION === ( $f['id'] ?? '' ) ) )[0] ?? array();
+$GLOBALS['vcap_test_options']['vcap_issuer_contact'] = 'Tel. 01 234';
+$vc11_od4_own = VCAP\LegalInfo::issuer_contact();
+unset( $GLOBALS['vcap_test_options']['vcap_issuer_contact'] );
+$GLOBALS['vcap_test_options']['woocommerce_email_from_address'] = '';
+$vc11_od4_empty = array( VCAP\LegalInfo::issuer_contact(), VCAP\LegalInfo::issuer() );
+$GLOBALS['vcap_test_options']['woocommerce_email_from_address'] = 'kein-gueltiger-absender';
+$vc11_od4_bad = VCAP\LegalInfo::issuer_contact();
+check(
+	'OD-4: empty issuer contact = the sender address of the WooCommerce emails (woocommerce_email_from_address, shown as field placeholder), never the WordPress admin email; empty or invalid sender = no contact line; an own contact wins; the address keeps the country',
+	array( 'gutscheine@shop.test', "Café Süß & Co\nMusterstraße 1\n10115 Berlin\nDE\ngutscheine@shop.test" ) === $vc11_od4_sender && 'gutscheine@shop.test' === ( $vc11_od4_field['placeholder'] ?? '' )
+		&& 'Tel. 01 234' === $vc11_od4_own && array( '', "Café Süß & Co\nMusterstraße 1\n10115 Berlin\nDE" ) === $vc11_od4_empty && '' === $vc11_od4_bad
+		&& str_contains( (string) file_get_contents( VCAP_PATH . 'LEGAL_TEXTS.md' ), 'woocommerce_email_from_address' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'API.md' ), 'woocommerce_email_from_address' ),
+	wp_json_encode( array( $vc11_od4_sender, $vc11_od4_field, $vc11_od4_own, $vc11_od4_empty, $vc11_od4_bad ) )
+);
 unset( $GLOBALS['vcap_test_privacy_url'], $GLOBALS['vcap_test_terms_page'] );
 $GLOBALS['vcap_test_options'] = $vc11_saved;
 

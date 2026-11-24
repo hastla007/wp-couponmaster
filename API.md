@@ -704,7 +704,7 @@ the PDF designer list and "Available placeholders" of the email settings):
 
 | Placeholder | Value | Empty setting |
 |---|---|---|
-| `{issuer}` | name, address, contact – one per line | site name; WooCommerce store address with country; no contact |
+| `{issuer}` | name, address, contact – one per line | site name; WooCommerce store address, always with the country; contact = sender address of the WooCommerce emails (`woocommerce_email_from_address`, OD-4), nothing if that is empty (no other address) |
 | `{legal_text}` | free legal text | nothing |
 | `{terms_url}` | terms and conditions link | WooCommerce terms page (`wc_terms_and_conditions_page_id()`) |
 | `{privacy_url}` | privacy policy link | WordPress privacy page (`get_privacy_policy_url()`) |
@@ -713,7 +713,7 @@ the PDF designer list and "Available placeholders" of the email settings):
 The defaults are taken when the voucher is rendered. No default template or email text uses them, so existing vouchers
 and emails stay unchanged. Translation: WPML via `wpml-config.xml` (admin-texts), Polylang via
 `Compat\Multilingual::OPTIONS` (string translation). The texts are not legally checked (LEGAL_TEXTS.md section 1).
-Accessors: `LegalInfo::issuer()`, `issuer_name()`, `issuer_address()`, `issuer_contact()`, `legal_text()`,
+Accessors: `LegalInfo::issuer()`, `issuer_name()`, `issuer_address()`, `issuer_contact()`, `sender_address()`, `legal_text()`,
 `terms_url()`, `privacy_url()`, `withdrawal_url()`, `placeholders()`.
 
 ### Sequential voucher number (SET-VC-13)

@@ -77,8 +77,8 @@ $md .= "| Bedingungen je Produkt | Produkt → Gutschein → „Redemption condi
 // SET-VC-11: issuer and legal texts (block "Issuer and legal texts"; printed only where a template uses the placeholder).
 $legal_info = array(
 	'vcap_issuer_name'    => array( 'Aussteller: Name („Issuer name“)', '`{issuer}` (1. Zeile); leer = Name der Website' ),
-	'vcap_issuer_address' => array( 'Aussteller: Anschrift („Issuer address“)', '`{issuer}`; leer = Shop-Adresse aus WooCommerce (Einstellungen → Allgemein) mit Land' ),
-	'vcap_issuer_contact' => array( 'Aussteller: Kontakt („Issuer contact“)', '`{issuer}` (letzte Zeile); leer = keine Kontaktzeile' ),
+	'vcap_issuer_address' => array( 'Aussteller: Anschrift („Issuer address“)', '`{issuer}`; leer = Shop-Adresse aus WooCommerce (Einstellungen → Allgemein), immer mit Land' ),
+	'vcap_issuer_contact' => array( 'Aussteller: Kontakt („Issuer contact“)', '`{issuer}` (letzte Zeile); leer = Absenderadresse der WooCommerce-E-Mails (`woocommerce_email_from_address`, Inhaber-Entscheidung OD-4), ist auch sie leer: keine Kontaktzeile' ),
 	'vcap_terms_url'      => array( 'Link AGB („Terms and conditions (link)“)', '`{terms_url}`; leer = AGB-Seite von WooCommerce' ),
 	'vcap_privacy_url'    => array( 'Link Datenschutz („Privacy policy (link)“)', '`{privacy_url}`; leer = Datenschutzseite von WordPress' ),
 	'vcap_withdrawal_url' => array( 'Link Widerruf („Right of withdrawal (link)“)', '`{withdrawal_url}`; leer = kein Link' ),

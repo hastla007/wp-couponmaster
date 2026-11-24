@@ -330,7 +330,7 @@ if ( false !== $vc09_applied ) {
 }
 // SET-VC-11: with real WooCommerce the default issuer address is the formatted store address (with the country).
 $vc11_keep = array();
-foreach ( array( 'woocommerce_store_address', 'woocommerce_store_city', 'woocommerce_store_postcode', 'woocommerce_default_country', 'vcap_issuer_address' ) as $vc11_opt ) {
+foreach ( array( 'woocommerce_store_address', 'woocommerce_store_city', 'woocommerce_store_postcode', 'woocommerce_default_country', 'vcap_issuer_address', 'vcap_issuer_contact', 'woocommerce_email_from_address' ) as $vc11_opt ) {
 	$vc11_keep[ $vc11_opt ] = get_option( $vc11_opt, false );
 }
 update_option( 'woocommerce_store_address', 'Musterstraße 1' );
@@ -340,6 +340,12 @@ update_option( 'woocommerce_default_country', 'DE:BE' );
 delete_option( 'vcap_issuer_address' );
 $vc11_address = VCAP\LegalInfo::issuer_address();
 vcap_inst_assert( str_contains( $vc11_address, 'Musterstraße 1' ) && str_contains( $vc11_address, '10115 Berlin' ) && str_contains( $vc11_address, 'Germany' ) && ! str_contains( $vc11_address, '<' ), 'SET-VC-11: the default issuer address is the WooCommerce store address as text lines with the country' );
+// OD-4: empty contact = the WooCommerce sender address, nothing when that is empty.
+delete_option( 'vcap_issuer_contact' );
+update_option( 'woocommerce_email_from_address', 'od4-sender@example.com' );
+$vc11_contact = VCAP\LegalInfo::issuer_contact();
+update_option( 'woocommerce_email_from_address', '' );
+vcap_inst_assert( 'od4-sender@example.com' === $vc11_contact && '' === VCAP\LegalInfo::issuer_contact(), 'OD-4: the default issuer contact is the WooCommerce sender address, nothing when it is empty' );
 foreach ( $vc11_keep as $vc11_opt => $vc11_val ) {
 	false === $vc11_val ? delete_option( $vc11_opt ) : update_option( $vc11_opt, $vc11_val );
 }
