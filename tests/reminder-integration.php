@@ -90,4 +90,33 @@ vcap_rem_assert( ! $b7_failed( $b7_invalid ) && ! in_array( 'expiry_reminder', a
 
 update_option( 'vcap_expiry_reminder_days', 0 );
 remove_filter( 'pre_wp_mail', $catch, 10 );
+// VC-13: workflow event "vcap_voucher_expiring" – once per voucher, lead time (30 / 7) and expiry date, real tables.
+$vc13_seen = array();
+$vc13_cb   = static function ( $voucher, $days, $expires_at ) use ( &$vc13_seen ) {
+	$vc13_seen[] = array( $voucher->id, (int) $days, (string) $expires_at );
+};
+add_action( 'vcap_voucher_expiring', $vc13_cb, 10, 3 );
+$vc13_tag   = strtolower( wp_generate_password( 6, false, false ) );
+$vc13_month = vcap_rem_voucher( "vc13-{$vc13_tag}-a@example.com", 20 );
+$vc13_week  = vcap_rem_voucher( "vc13-{$vc13_tag}-b@example.com", 5 );
+$vc13_empty = vcap_rem_voucher( "vc13-{$vc13_tag}-c@example.com", 5, array( 'balance' => 0 ) );
+$vc13_mine  = static function () use ( &$vc13_seen, $vc13_month, $vc13_week, $vc13_empty ) {
+	return array_values( array_filter( $vc13_seen, static fn( $e ) => in_array( $e[0], array( $vc13_month->id, $vc13_week->id, $vc13_empty->id ), true ) ) );
+};
+vcap()->delivery->report_expiring();
+vcap_rem_assert( array( array( $vc13_month->id, 30, $vc13_month->expires_at ), array( $vc13_week->id, 7, $vc13_week->expires_at ) ) === $vc13_mine(), 'VC-13: one event per voucher with the fitting lead time, none without remaining value' );
+$vc13_seen = array();
+vcap()->delivery->report_expiring();
+vcap_rem_assert( array() === $vc13_mine(), 'VC-13: a second run fires nothing again' );
+$vc13_month->expires_at = gmdate( 'Y-m-d H:i:s', time() + 25 * DAY_IN_SECONDS );
+vcap()->vouchers->update( $vc13_month );
+vcap()->delivery->report_expiring();
+vcap_rem_assert( array( array( $vc13_month->id, 30, $vc13_month->expires_at ) ) === $vc13_mine(), 'VC-13: an extended voucher reports again for its new date' );
+$vc13_never = static fn() => 'never';
+add_filter( 'vcap_expiry_behaviour', $vc13_never );
+$vc13_seen = array();
+vcap_rem_assert( 0 === vcap()->delivery->report_expiring() && array() === $vc13_seen, 'VC-13: nothing with the expiry behaviour "never"' );
+remove_filter( 'vcap_expiry_behaviour', $vc13_never );
+remove_action( 'vcap_voucher_expiring', $vc13_cb, 10 );
+
 echo "Voucher Captain expiry reminder checks passed.\n";

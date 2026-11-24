@@ -169,6 +169,27 @@ ledger (history) id of the booking. Two bookings of the same customer in the sam
 in a workflow event store (suite spec R-7.9a). Register the action with 7 or 5 accepted arguments to get it; existing
 listeners with fewer arguments keep working. `0` when no ledger row was written in this request.
 
+**Voucher expires soon (since contract 1.9.0, VC-13).** `vcap_voucher_expiring( VCAP\Voucher $voucher, int
+$days_before, string $expires_at )` is a workflow event of the daily maintenance (step `expiring`, before the expiry
+reminder emails): a voucher whose printed expiry date comes within a lead time. Payload: `$voucher` – the voucher as
+it was found (status `active`, delivered, no ticket, remaining value: balance above 0 in balance mode, single-use
+vouchers not redeemed); `$days_before` – the lead time it was found for (e.g. `30` or `7`); `$expires_at` – the printed
+expiry date, UTC `Y-m-d H:i:s`. Lead times: filter `vcap_voucher_expiring_days` (default `array( 30, 7 )`, 1–365,
+empty = never), independent of the reminder email (`vcap_expiry_reminder_days`). Each lead time covers the vouchers
+ending within its days and after the next smaller lead time, so a voucher found late (e.g. issued 10 days before its
+expiry) gets only the fitting one (7). Exactly once per voucher, lead time and expiry date (claim
+`expiring:{id}:{days}:{expires_at}`, fired after the claim is committed): a second run reports nothing new, a voucher
+extended later is reported again for its new date. Never with the expiry behaviour "never" (`vcap_expiry_behaviour`,
+SET-VC-06); with a grace period the printed date counts, not the end of the grace days.
+
+```php
+if ( defined( 'VCAP_CONTRACT_VERSION' ) && version_compare( VCAP_CONTRACT_VERSION, '1.9.0', '>=' ) ) {
+    add_action( 'vcap_voucher_expiring', function ( VCAP\Voucher $voucher, int $days_before, string $expires_at ) {
+        my_workflow_trigger( 'voucher_expiring', array( 'voucher_id' => $voucher->id, 'days' => $days_before, 'expires_at' => $expires_at ) );
+    }, 10, 3 );
+}
+```
+
 ## Issuing vouchers without an order (schema 1.8.0)
 
 `vcap()->issuer->issue_standalone( array $args )` issues one voucher without a WooCommerce order – for company orders with a list of recipients (one call per recipient), goodwill vouchers or prizes. It uses the same code generation, WooCommerce coupon, `issued` ledger entry and email delivery as a purchased voucher and returns the `VCAP\Voucher` or a `WP_Error`.

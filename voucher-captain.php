@@ -47,9 +47,10 @@ define( 'VCAP_DB_VERSION', '1.9.0' );
  * plugin 1.3.0 with journal_id in the context of vcap_store_credit_changed and vcap_gift_card_topped_up (VC-12), 1.8.0
  * = plugin 1.3.0 with the settings register and the extension filters of the settings (vcap_settings_registry,
  * vcap_settings_validate_value, vcap_settings_hints, vcap_pro_hints_hidden, vcap_country_profiles …) and the Form
- * Captain hooks vcap_form_captain_* (CONNECTORS.md, section 6; PV-P6-2).
+ * Captain hooks vcap_form_captain_* (CONNECTORS.md, section 6; PV-P6-2), 1.9.0 = plugin 1.3.0 with the workflow
+ * event vcap_voucher_expiring and its lead times vcap_voucher_expiring_days (VC-13; API.md → "Voucher expires soon").
  */
-define( 'VCAP_CONTRACT_VERSION', '1.8.0' );
+define( 'VCAP_CONTRACT_VERSION', '1.9.0' );
 define( 'VCAP_FILE', __FILE__ );
 define( 'VCAP_PATH', plugin_dir_path( __FILE__ ) );
 define( 'VCAP_URL', plugin_dir_url( __FILE__ ) );

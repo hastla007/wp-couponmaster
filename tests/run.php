@@ -5633,9 +5633,9 @@ $pv62_text     = implode( "\n", array_column( $pv62_rows, 2 ) );
 preg_match_all( '/^\| `(vcap_[a-z0-9_]+)` \| 1\.3\.0 \|/m', (string) file_get_contents( VCAP_PATH . 'docs/HOOKS.md' ), $pv62_hooks );
 $pv62_unnamed = array_values( array_filter( $pv62_hooks[1], static fn( string $hook ) => ! str_contains( $pv62_text, '`' . $hook . '`' ) ) );
 check(
-	'PV-P6-2: VCAP_CONTRACT_VERSION is 1.8.0 and the last row of the contract table in CONNECTORS.md; every hook marked 1.3.0 in docs/HOOKS.md is named in a contract row; readme.txt and API.md name contract 1.8.0',
-	'1.8.0' === ( $pv62_const[1] ?? '' ) && $pv62_last === $pv62_const[1] && array() === $pv62_unnamed && count( $pv62_hooks[1] ) > 15
-		&& str_contains( (string) file_get_contents( VCAP_PATH . 'readme.txt' ), 'VCAP_CONTRACT_VERSION 1.8.0' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'API.md' ), "version_compare( VCAP_CONTRACT_VERSION, '1.8.0', '>=' )" ),
+	'PV-P6-2: VCAP_CONTRACT_VERSION is 1.9.0 (VC-13) and the last row of the contract table in CONNECTORS.md; every hook marked 1.3.0 in docs/HOOKS.md is named in a contract row; readme.txt names contract 1.9.0, API.md the settings hooks of contract 1.8.0',
+	'1.9.0' === ( $pv62_const[1] ?? '' ) && $pv62_last === $pv62_const[1] && array() === $pv62_unnamed && count( $pv62_hooks[1] ) > 15
+		&& str_contains( (string) file_get_contents( VCAP_PATH . 'readme.txt' ), 'VCAP_CONTRACT_VERSION 1.9.0' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'API.md' ), "version_compare( VCAP_CONTRACT_VERSION, '1.8.0', '>=' )" ),
 	$pv62_last . ' ' . implode( ', ', $pv62_unnamed )
 );
 
@@ -7328,6 +7328,114 @@ $GLOBALS['vcap_test_filters'] = $vn_saved_filters;
 $GLOBALS['vcap_test_options'] = $vn_saved_opts;
 VCAP\SettingsRegistry::reset();
 
+
+echo "VC-13: workflow event when a voucher expires soon\n";
+$vc13_saved_wpdb    = $GLOBALS['wpdb'] ?? null;
+$vc13_saved_filters = $GLOBALS['vcap_test_filters'];
+$vc13_saved_opts    = $GLOBALS['vcap_test_options'];
+$GLOBALS['vcap_test_options'][ VCAP\Install::STORAGE_OPTION ] = '1.9.0';
+unset( $GLOBALS['vcap_test_options'][ VCAP\Install::LEGACY_OPTION ] );
+VCAP\Db::reset();
+$vc13_at   = static fn( int $days ) => gmdate( 'Y-m-d H:i:s', time() + $days * DAY_IN_SECONDS );
+$vc13_rows = array(
+	1 => array( 'id' => 1, 'type' => 'voucher', 'status' => 'active', 'usage_mode' => 'balance', 'balance' => 25.0, 'expires_at' => $vc13_at( 20 ), 'delivered_at' => '2026-01-01 10:00:00' ), // 30-day window.
+	2 => array( 'id' => 2, 'type' => 'voucher', 'status' => 'active', 'usage_mode' => 'single', 'balance' => 50.0, 'expires_at' => $vc13_at( 5 ), 'delivered_at' => '2026-01-01 10:00:00' ), // Found late: 7 only.
+	3 => array( 'id' => 3, 'type' => 'voucher', 'status' => 'active', 'usage_mode' => 'balance', 'balance' => 0.0, 'expires_at' => $vc13_at( 5 ), 'delivered_at' => '2026-01-01 10:00:00' ), // No remaining value.
+	4 => array( 'id' => 4, 'type' => 'voucher', 'status' => 'redeemed', 'usage_mode' => 'single', 'balance' => 50.0, 'expires_at' => $vc13_at( 5 ), 'delivered_at' => '2026-01-01 10:00:00' ), // Spent.
+	5 => array( 'id' => 5, 'type' => 'ticket', 'status' => 'active', 'usage_mode' => 'single', 'balance' => 0.0, 'expires_at' => $vc13_at( 5 ), 'delivered_at' => '2026-01-01 10:00:00' ), // Ticket.
+	6 => array( 'id' => 6, 'type' => 'voucher', 'status' => 'active', 'usage_mode' => 'balance', 'balance' => 10.0, 'expires_at' => $vc13_at( 90 ), 'delivered_at' => '2026-01-01 10:00:00' ), // Not yet.
+	7 => array( 'id' => 7, 'type' => 'voucher', 'status' => 'active', 'usage_mode' => 'balance', 'balance' => 10.0, 'expires_at' => $vc13_at( 5 ), 'delivered_at' => null ), // Not delivered.
+);
+$vc13_claims = array();
+/** In-memory stand-in for the voucher query of VoucherRepository::due_for_expiring_event() and the claims table. */
+$vc13_select = static function ( string $q ) use ( &$vc13_rows ) {
+	preg_match_all( "/'(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)'/", $q, $dates );
+	preg_match( '/LIMIT (\d+)/', $q, $limit );
+	preg_match( '/v\.id > (\d+)/', $q, $after_id );
+	$from = $dates[1][0];
+	$to   = $dates[1][1];
+	$out  = array();
+	foreach ( $vc13_rows as $row ) {
+		if ( 'active' !== $row['status'] || null === $row['delivered_at'] || 'ticket' === $row['type'] || ( 'balance' === $row['usage_mode'] && $row['balance'] <= 0 ) ) {
+			continue;
+		}
+		if ( ! ( $row['expires_at'] > $from && $row['expires_at'] <= $to ) ) {
+			continue;
+		}
+		if ( isset( $dates[1][2] ) && ! ( $row['expires_at'] > $dates[1][2] || ( $row['expires_at'] === $dates[1][2] && $row['id'] > (int) $after_id[1] ) ) ) {
+			continue;
+		}
+		$out[] = $row;
+	}
+	usort( $out, static fn( $a, $b ) => array( $a['expires_at'], $a['id'] ) <=> array( $b['expires_at'], $b['id'] ) );
+	return array_slice( $out, 0, (int) $limit[1] );
+};
+$GLOBALS['wpdb']          = new VCAP_Test_Wpdb();
+$GLOBALS['wpdb']->answers = array(
+	'/^SELECT v\.\* FROM wp_vcap_vouchers v/'   => $vc13_select,
+	'/^INSERT IGNORE INTO wp_vcap_claims/'      => static function ( string $q ) use ( &$vc13_claims ) {
+		preg_match( "/VALUES \('([0-9a-f]+)', '([a-z0-9_-]+)'/", $q, $m );
+		$GLOBALS['wpdb']->rows_affected = isset( $vc13_claims[ $m[1] ] ) ? 0 : 1;
+		$vc13_claims[ $m[1] ]           = $m[2];
+		return $GLOBALS['wpdb']->rows_affected;
+	},
+	'/^SELECT created_at FROM wp_vcap_claims/' => static function ( string $q ) use ( &$vc13_claims ) {
+		preg_match( "/claim_key = '([0-9a-f]+)'/", $q, $m );
+		return isset( $vc13_claims[ $m[1] ] ) ? '2026-11-24 00:00:00' : null;
+	},
+);
+$vc13_events = array();
+add_action(
+	'vcap_voucher_expiring',
+	static function ( $voucher, $days, $expires_at ) use ( &$vc13_events ) {
+		$vc13_events[] = array( $voucher instanceof Voucher ? $voucher->id : 0, $days, $expires_at );
+	},
+	10,
+	3
+);
+$vc13_delivery = ( new ReflectionClass( Delivery::class ) )->newInstanceWithoutConstructor();
+( new ReflectionProperty( Delivery::class, 'repo' ) )->setValue( $vc13_delivery, new VCAP\VoucherRepository() );
+
+$vc13_fired = $vc13_delivery->report_expiring( 0.0, $vc13_finished );
+sort( $vc13_events );
+check(
+	'VC-13: fired once per voucher with the lead time that fits (30 days: ends in 20; 7 days: ends in 5 – found late, gets only 7), payload Voucher, days, printed expiry date UTC; claim kind "expiring"',
+	2 === $vc13_fired && true === $vc13_finished && array( array( 1, 30, $vc13_rows[1]['expires_at'] ), array( 2, 7, $vc13_rows[2]['expires_at'] ) ) === $vc13_events
+		&& array( 'expiring' ) === array_values( array_unique( $vc13_claims ) ) && isset( $vc13_claims[ substr( md5( 'expiring:2:7:' . $vc13_rows[2]['expires_at'] ), 0, 24 ) ] ),
+	wp_json_encode( $vc13_events )
+);
+check( 'VC-13: no remaining value, spent, ticket, undelivered or outside every window = no event', ! array_intersect( array( 3, 4, 5, 6, 7 ), array_column( $vc13_events, 0 ) ) );
+check( 'VC-13: the default lead times are 30 and 7 days; the filter vcap_voucher_expiring_days sets them (1–365, no duplicates, largest first), independent of vcap_expiry_reminder_days', array( 30, 7 ) === Delivery::expiring_days() );
+
+$vc13_events = array();
+$vc13_again  = $vc13_delivery->report_expiring();
+check( 'VC-13: a second run fires nothing again (claim per voucher, lead time and date)', 0 === $vc13_again && array() === $vc13_events, wp_json_encode( $vc13_events ) );
+
+$vc13_rows[1]['expires_at'] = $vc13_at( 4 ); // Ends sooner: now in the 7-day window.
+$vc13_rows[2]['expires_at'] = $vc13_at( 25 ); // Extended: reported again for the new date (30-day window).
+$vc13_events                = array();
+$vc13_delivery->report_expiring();
+sort( $vc13_events );
+check( 'VC-13: a voucher extended later reports again for its new date (a shortened one in the lead time that fits now)', array( array( 1, 7, $vc13_rows[1]['expires_at'] ), array( 2, 30, $vc13_rows[2]['expires_at'] ) ) === $vc13_events, wp_json_encode( $vc13_events ) );
+
+$vc13_rows[8] = array( 'id' => 8, 'type' => 'voucher', 'status' => 'active', 'usage_mode' => 'balance', 'balance' => 5.0, 'expires_at' => $vc13_at( 3 ), 'delivered_at' => '2026-01-01 10:00:00' );
+add_filter( 'vcap_expiry_behaviour', static fn() => 'never' );
+$vc13_events = array();
+$vc13_log    = count( $GLOBALS['wpdb']->log );
+$vc13_never  = $vc13_delivery->report_expiring();
+check( 'VC-13: never with the expiry behaviour "never" (no query, no claim, no event)', 0 === $vc13_never && array() === $vc13_events && count( $GLOBALS['wpdb']->log ) === $vc13_log );
+$GLOBALS['vcap_test_filters']['vcap_expiry_behaviour'] = array( array( static fn() => 'grace', 1 ) );
+$GLOBALS['vcap_test_filters']['vcap_voucher_expiring_days'] = array( array( static fn() => array( '7', 7, 0, 400, 'x', 14 ), 1 ) );
+$vc13_events = array();
+$vc13_delivery->report_expiring();
+check( 'VC-13: with a grace period the printed date counts (voucher 8 ends in 3 days → lead time 7); the filter is cleaned (14, 7)', array( 14, 7 ) === Delivery::expiring_days() && array( array( 8, 7, $vc13_rows[8]['expires_at'] ) ) === $vc13_events, wp_json_encode( $vc13_events ) );
+$GLOBALS['vcap_test_filters']['vcap_voucher_expiring_days'] = array( array( static fn() => array(), 1 ) );
+check( 'VC-13: an empty lead time list fires nothing', 0 === $vc13_delivery->report_expiring() );
+check( 'VC-13: the step "expiring" runs in the daily maintenance before the reminder emails', array_search( 'expiring', Delivery::MAINTENANCE_STEPS, true ) === count( Delivery::MAINTENANCE_STEPS ) - 2 );
+$GLOBALS['wpdb']              = $vc13_saved_wpdb;
+$GLOBALS['vcap_test_filters'] = $vc13_saved_filters;
+$GLOBALS['vcap_test_options'] = $vc13_saved_opts;
+VCAP\Db::reset();
 
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );
