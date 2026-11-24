@@ -1353,7 +1353,7 @@ msgstr "Neuer Gutschein"
 
 #: src/Admin/IssueVoucher.php:127
 msgid "Issue a voucher or gift card without an order, e.g. as goodwill, a prize or for a sale at the till. It gets a code, a WooCommerce coupon and a history like a purchased one, and is marked as not sold (no payment received)."
-msgstr "Stellen Sie einen Gutschein oder eine Geschenkkarte ohne Bestellung aus, z. B. aus Kulanz, als Gewinn oder für einen Verkauf an der Kasse. Er erhält wie ein gekaufter Gutschein einen Code, einen WooCommerce-Code und einen Verlauf und wird als nicht verkauft markiert (keine Zahlung erhalten)."
+msgstr "Stellen Sie einen Gutschein oder eine Geschenkkarte ohne Bestellung aus, z. B. aus Kulanz, als Gewinn oder für einen Verkauf an der Kassa. Er erhält wie ein gekaufter Gutschein einen Code, einen WooCommerce-Code und einen Verlauf und wird als nicht verkauft markiert (keine Zahlung erhalten)."
 
 #: src/Admin/IssueVoucher.php:134 src/Admin/ReportsAdmin.php:221 src/Admin/Scanner.php:66 src/Admin/VoucherAdmin.php:177 src/Admin/VoucherAdmin.php:1345 src/Admin/VoucherRequestsAdmin.php:176
 msgid "Product"
@@ -2007,7 +2007,7 @@ msgstr "Bestellung"
 
 #: src/Admin/ReportsAdmin.php:336 src/Admin/ReportsAdmin.php:379 src/Admin/ReportsAdmin.php:406 src/Admin/Scanner.php:113 src/Ledger.php:511 src/Ledger.php:587
 msgid "Till / branch"
-msgstr "Kasse / Filiale"
+msgstr "Kassa / Filiale"
 
 #: src/Admin/ReportsAdmin.php:337 src/Admin/Scanner.php:54 src/Ledger.php:587
 msgid "Receipt no."
@@ -2027,7 +2027,7 @@ msgstr "Mitarbeiter"
 
 #: src/Admin/ReportsAdmin.php:381
 msgid "Till and staff member"
-msgstr "Kasse und Mitarbeiter"
+msgstr "Kassa und Mitarbeiter"
 
 #: src/Admin/ReportsAdmin.php:392
 msgid "Group by"
@@ -2035,7 +2035,7 @@ msgstr "Gruppieren nach"
 
 #: src/Admin/ReportsAdmin.php:402
 msgid "Redemptions at the counter (scanner and \"Mark as redeemed (store)\") with the till/branch set on the device, per currency. Cancellations count at the till of the redemption they cancel. Amounts include gift cards and value vouchers; percentage, ticket and reusable vouchers count only as redemptions."
-msgstr "Einlösungen an der Kasse (Scanner und „Als eingelöst markieren (Geschäft)“) mit der am Gerät eingestellten Kasse/Filiale, je Währung. Stornierungen zählen bei der Kasse der stornierten Einlösung. Beträge umfassen Geschenkkarten und Wertgutscheine; Prozent-, Ticket- und Mehrfachgutscheine zählen nur als Einlösungen."
+msgstr "Einlösungen an der Kassa (Scanner und „Als eingelöst markieren (Geschäft)“) mit der am Gerät eingestellten Kassa/Filiale, je Währung. Stornierungen zählen bei der Kassa der stornierten Einlösung. Beträge umfassen Geschenkkarten und Wertgutscheine; Prozent-, Ticket- und Mehrfachgutscheine zählen nur als Einlösungen."
 
 #: src/Admin/ReportsAdmin.php:412 src/Ledger.php:516
 msgid "Redemptions"
@@ -2059,11 +2059,11 @@ msgstr "Nettobetrag"
 
 #: src/Admin/ReportsAdmin.php:420
 msgid "No counter redemptions in this period."
-msgstr "Keine Einlösungen an der Kasse in diesem Zeitraum."
+msgstr "Keine Einlösungen an der Kassa in diesem Zeitraum."
 
 #: src/Admin/ReportsAdmin.php:425 src/Counter.php:461 src/Ledger.php:523
 msgid "(no till set)"
-msgstr "(keine Kasse eingestellt)"
+msgstr "(keine Kassa eingestellt)"
 
 #: src/Admin/ReportsAdmin.php:441
 msgid "Unknown codes looked up in the scanner"
@@ -2389,7 +2389,7 @@ msgstr "Nicht eingelöst: Bitte geben Sie die Belegnummer des Kassenbons ein."
 
 #: src/Admin/Scanner.php:104 src/Counter.php:221
 msgid "Please choose the till/branch of this device from the list."
-msgstr "Bitte wählen Sie die Kasse/Filiale dieses Geräts aus der Liste."
+msgstr "Bitte wählen Sie die Kassa/Filiale dieses Geräts aus der Liste."
 
 #: src/Admin/Scanner.php:105
 msgid "VAT"
@@ -2455,7 +2455,7 @@ msgstr "Tickets nach dem Scan automatisch einchecken"
 
 #: src/Admin/Scanner.php:146
 msgid "Till / branch of this device"
-msgstr "Kasse / Filiale dieses Geräts"
+msgstr "Kassa / Filiale dieses Geräts"
 
 #: src/Admin/Scanner.php:149
 msgid "— choose —"
@@ -4049,7 +4049,7 @@ msgstr "Kundenguthaben verwenden"
 
 #: src/Channels.php:23
 msgid "Shop (cart and checkout)"
-msgstr "Shop (Warenkorb und Kasse)"
+msgstr "Shop (Warenkorb und Kassa)"
 
 #: src/Channels.php:24
 msgid "External redemption (API, connected plugins)"
@@ -4063,13 +4063,13 @@ msgstr "Vor Ort (Scanner)"
 #: src/Channels.php:70
 #, php-format
 msgid "Enter the code in the cart or at checkout on %s, or show this voucher at the counter."
-msgstr "Geben Sie den Code bei %s im Warenkorb oder an der Kasse ein, oder zeigen Sie diesen Gutschein vor Ort vor."
+msgstr "Geben Sie den Code bei %s im Warenkorb oder an der Kassa ein, oder zeigen Sie diesen Gutschein vor Ort vor."
 
 #. translators: %s: shop name
 #: src/Channels.php:72
 #, php-format
 msgid "Enter the code in the cart or at checkout on %s to redeem it."
-msgstr "Geben Sie den Code im Warenkorb oder an der Kasse auf %s ein, um ihn einzulösen."
+msgstr "Geben Sie den Code im Warenkorb oder an der Kassa auf %s ein, um ihn einzulösen."
 
 #. translators: %s: shop name
 #: src/Channels.php:75
@@ -4185,7 +4185,7 @@ msgstr "Pass Captain öffnen"
 
 #: src/Compat/PassCaptain.php:86
 msgid "Pass Captain (ticket checkout)"
-msgstr "Pass Captain (Ticket-Kasse)"
+msgstr "Pass Captain (Ticket-Kassa)"
 
 #. translators: %s: URL of the voucher redemption page
 #: src/Compat/PassCaptain/ChannelRules.php:41
@@ -4203,7 +4203,7 @@ msgstr "Ticket-Gutschein – kein Ticket. Zuerst in Tickets umwandeln (Einlöses
 
 #: src/Compat/PassCaptain/ChannelRules.php:59
 msgid "Ticket vouchers cannot be redeemed at the counter. Exchange them for tickets first."
-msgstr "Ticket-Gutscheine können nicht an der Kasse eingelöst werden. Bitte zuerst in Tickets umwandeln."
+msgstr "Ticket-Gutscheine können nicht an der Kassa eingelöst werden. Bitte zuerst in Tickets umwandeln."
 
 #: src/Compat/PassCaptain/Customer.php:28
 msgid "Open the redeem page with the button below – your code is already filled in."
@@ -4933,39 +4933,39 @@ msgstr "Beleg %s"
 #: src/Counter.php:112 src/Tickets.php:1233
 #, php-format
 msgid "Till %s"
-msgstr "Kasse %s"
+msgstr "Kassa %s"
 
 #: src/Counter.php:194
 msgid "No till/branch of the list is active, so nothing can be booked. Ask an administrator to activate a till under WooCommerce → Settings → Vouchers → Counter & locations."
-msgstr "Keine Kasse/Filiale der Liste ist aktiv, daher kann nichts gebucht werden. Bitten Sie eine Administratorin oder einen Administrator, unter WooCommerce → Einstellungen → Gutscheine → Kasse & Standorte eine Kasse zu aktivieren."
+msgstr "Keine Kassa/Filiale der Liste ist aktiv, daher kann nichts gebucht werden. Bitten Sie eine Administratorin oder einen Administrator, unter WooCommerce → Einstellungen → Gutscheine → Kassa & Standorte eine Kassa zu aktivieren."
 
 #: src/Counter.php:416
 msgid "Not redeemed: another redemption at this till or by you is being booked right now. Please try again in a moment."
-msgstr "Nicht eingelöst: Eine andere Einlösung an dieser Kasse oder durch Sie wird gerade gebucht. Bitte versuchen Sie es gleich noch einmal."
+msgstr "Nicht eingelöst: Eine andere Einlösung an dieser Kassa oder durch Sie wird gerade gebucht. Bitte versuchen Sie es gleich noch einmal."
 
 #. translators: 1: till or branch, 2: redemptions allowed per day, 3: redemptions today, 4: redemptions left
 #: src/Counter.php:464
 #, php-format
 msgid "Not redeemed: the daily limit of till \"%1$s\" is %2$d counter redemptions. Redeemed there today: %3$d – left: %4$d."
-msgstr "Nicht eingelöst: Das Tageslimit der Kasse „%1$s“ beträgt %2$d Einlösungen. Heute dort eingelöst: %3$d – übrig: %4$d."
+msgstr "Nicht eingelöst: Das Tageslimit der Kassa „%1$s“ beträgt %2$d Einlösungen. Heute dort eingelöst: %3$d – übrig: %4$d."
 
 #. translators: 1: till or branch, 2: amount allowed per day, 3: amount redeemed today, 4: amount left
 #: src/Counter.php:467
 #, php-format
 msgid "Not redeemed: the daily limit of till \"%1$s\" is %2$s. Redeemed there today: %3$s – still available: %4$s."
-msgstr "Nicht eingelöst: Das Tageslimit der Kasse „%1$s“ beträgt %2$s. Heute dort eingelöst: %3$s – noch verfügbar: %4$s."
+msgstr "Nicht eingelöst: Das Tageslimit der Kassa „%1$s“ beträgt %2$s. Heute dort eingelöst: %3$s – noch verfügbar: %4$s."
 
 #. translators: 1: redemptions allowed per day, 2: redemptions today, 3: redemptions left
 #: src/Counter.php:471
 #, php-format
 msgid "Not redeemed: your daily limit is %1$d counter redemptions. Redeemed by you today: %2$d – left: %3$d."
-msgstr "Nicht eingelöst: Ihr Tageslimit beträgt %1$d Einlösungen an der Kasse. Heute von Ihnen eingelöst: %2$d – übrig: %3$d."
+msgstr "Nicht eingelöst: Ihr Tageslimit beträgt %1$d Einlösungen an der Kassa. Heute von Ihnen eingelöst: %2$d – übrig: %3$d."
 
 #. translators: 1: amount allowed per day, 2: amount redeemed today, 3: amount left
 #: src/Counter.php:474
 #, php-format
 msgid "Not redeemed: your daily limit for counter redemptions is %1$s. Redeemed by you today: %2$s – still available: %3$s."
-msgstr "Nicht eingelöst: Ihr Tageslimit für Einlösungen an der Kasse beträgt %1$s. Heute von Ihnen eingelöst: %2$s – noch verfügbar: %3$s."
+msgstr "Nicht eingelöst: Ihr Tageslimit für Einlösungen an der Kassa beträgt %1$s. Heute von Ihnen eingelöst: %2$s – noch verfügbar: %3$s."
 
 #: src/Counter.php:494
 msgid "Voucher scanner: daily limits"
@@ -4985,7 +4985,7 @@ msgstr "Einlösungen pro Tag"
 
 #: src/Counter.php:507
 msgid "Fixed till / branch"
-msgstr "Feste Kasse / Filiale"
+msgstr "Feste Kassa / Filiale"
 
 #: src/Counter.php:509
 msgid "— chosen on the device —"
@@ -4993,7 +4993,7 @@ msgstr "— am Gerät gewählt —"
 
 #: src/Counter.php:514
 msgid "The scanner of this staff member always books at this till/branch."
-msgstr "Der Scanner dieses Mitarbeiters bucht immer an dieser Kasse/Filiale."
+msgstr "Der Scanner dieses Mitarbeiters bucht immer an dieser Kassa/Filiale."
 
 #: src/CounterLocations.php:58
 msgid "Identifier"
@@ -5005,7 +5005,7 @@ msgstr "Kassen / Filialen"
 
 #: src/CounterLocations.php:276
 msgid "One till or branch per row; empty rows are ignored, clear the name to remove a till. When the list has an active till, the scanner offers the active ones instead of a free text field, and a staff member can be fixed to one on their user profile. The identifier is a short key for other systems (filled from the name when empty). The scanner works online only: without a connection nothing is booked (on purpose – an offline scanner could redeem the same code twice)."
-msgstr "Eine Kasse oder Filiale je Zeile; leere Zeilen werden ignoriert, zum Entfernen leeren Sie den Namen. Enthält die Liste eine aktive Kasse, bietet der Scanner die aktiven statt eines Freitextfelds an, und im Benutzerprofil können Sie Mitarbeitende fest einer Kasse zuordnen. Die Kennung ist ein kurzer Schlüssel für andere Systeme (leer = aus dem Namen gebildet). Der Scanner arbeitet nur online: Ohne Verbindung wird nichts gebucht (Absicht – ein Offline-Scanner könnte denselben Code zweimal einlösen)."
+msgstr "Eine Kassa oder Filiale je Zeile; leere Zeilen werden ignoriert, zum Entfernen leeren Sie den Namen. Enthält die Liste eine aktive Kassa, bietet der Scanner die aktiven statt eines Freitextfelds an, und im Benutzerprofil können Sie Mitarbeitende fest einer Kassa zuordnen. Die Kennung ist ein kurzer Schlüssel für andere Systeme (leer = aus dem Namen gebildet). Der Scanner arbeitet nur online: Ohne Verbindung wird nichts gebucht (Absicht – ein Offline-Scanner könnte denselben Code zweimal einlösen)."
 
 #: src/CounterLocations.php:299 src/Settings.php:1730
 msgid "Tills and branches"
@@ -6057,7 +6057,7 @@ msgstr "Nutzungen pro Kunde"
 
 #: src/Discounts/Admin.php:216
 msgid "An order counts once it is paid or on hold and is given back when it is cancelled or fails. Customers are recognised by account and billing email; guests without an email are checked at checkout."
-msgstr "Eine Bestellung zählt, sobald sie bezahlt oder in Wartestellung ist, und wird bei Stornierung oder Fehlschlag wieder freigegeben. Kunden werden über Konto und Rechnungs-E-Mail erkannt; Gäste ohne E-Mail werden an der Kasse geprüft."
+msgstr "Eine Bestellung zählt, sobald sie bezahlt oder in Wartestellung ist, und wird bei Stornierung oder Fehlschlag wieder freigegeben. Kunden werden über Konto und Rechnungs-E-Mail erkannt; Gäste ohne E-Mail werden an der Kassa geprüft."
 
 #: src/Discounts/Admin.php:220
 msgid "Combination"
@@ -9003,7 +9003,7 @@ msgstr "Gutscheine nicht verkaufen mit"
 
 #: src/PaymentMethods.php:184
 msgid "These payment methods are not offered in the classic and the block checkout (nor when an existing order is paid) while the cart contains a voucher product. Orders without vouchers keep every payment method. Empty = vouchers can be paid with every payment method."
-msgstr "Diese Zahlungsarten werden in der klassischen und der Block-Kasse (und beim Bezahlen einer bestehenden Bestellung) nicht angeboten, solange ein Gutscheinprodukt im Warenkorb liegt. Bestellungen ohne Gutscheine behalten alle Zahlungsarten. Leer = Gutscheine können mit jeder Zahlungsart bezahlt werden."
+msgstr "Diese Zahlungsarten werden in der klassischen und der Block-Kassa (und beim Bezahlen einer bestehenden Bestellung) nicht angeboten, solange ein Gutscheinprodukt im Warenkorb liegt. Bestellungen ohne Gutscheine behalten alle Zahlungsarten. Leer = Gutscheine können mit jeder Zahlungsart bezahlt werden."
 
 #: src/PaymentMethods.php:190
 msgid "Payment methods paid later"
@@ -9457,7 +9457,7 @@ msgstr "Freunde werben: Wenn Sie teilnehmen, speichern wir Ihren persönlichen E
 
 #: src/Privacy.php:491
 msgid "When a voucher is redeemed outside the shop checkout, for example by a booking or ticket system on this website that is connected to our vouchers, we record the redemption with the connected service, the amount, the date, your customer account and the details that service passes on (for example its order or booking number)."
-msgstr "Wird ein Gutschein außerhalb der Shop-Kasse eingelöst, zum Beispiel über ein mit unseren Gutscheinen verbundenes Buchungs- oder Ticketsystem auf dieser Website, speichern wir die Einlösung mit dem angebundenen Dienst, dem Betrag, dem Datum, Ihrem Kundenkonto und den Angaben, die dieser Dienst übermittelt (zum Beispiel seine Bestell- oder Buchungsnummer)."
+msgstr "Wird ein Gutschein außerhalb der Shop-Kassa eingelöst, zum Beispiel über ein mit unseren Gutscheinen verbundenes Buchungs- oder Ticketsystem auf dieser Website, speichern wir die Einlösung mit dem angebundenen Dienst, dem Betrag, dem Datum, Ihrem Kundenkonto und den Angaben, die dieser Dienst übermittelt (zum Beispiel seine Bestell- oder Buchungsnummer)."
 
 #: src/Privacy.php:492
 msgid "Tickets: when you exchange a ticket voucher for tickets or pay for tickets with a gift card, the voucher code, the amount, your name and email address and the attendee names you enter are passed to the ticket system on this website (Pass Captain), which issues and sends the tickets. Its privacy information applies to the tickets."
@@ -9473,7 +9473,7 @@ msgstr "Bewertungseinladungen: Wird ein Gutschein für eine Leistung (zum Beispi
 
 #: src/Privacy.php:495
 msgid "At the entrance or the counter, our staff may scan the code of your voucher or ticket. We record the time, the staff member and the result (redeemed, checked in or refused) in the voucher history."
-msgstr "Am Einlass oder an der Kasse kann unser Personal den Code Ihres Gutscheins oder Tickets scannen. Wir speichern die Uhrzeit, die Mitarbeiterin bzw. den Mitarbeiter und das Ergebnis (eingelöst, eingecheckt oder abgelehnt) im Verlauf des Gutscheins."
+msgstr "Am Einlass oder an der Kassa kann unser Personal den Code Ihres Gutscheins oder Tickets scannen. Wir speichern die Uhrzeit, die Mitarbeiterin bzw. den Mitarbeiter und das Ergebnis (eingelöst, eingecheckt oder abgelehnt) im Verlauf des Gutscheins."
 
 #: src/Privacy.php:496
 msgid "Promotion limits per customer: when a promotion may be used only a limited number of times per customer, we record each use with your customer account or, for guest orders, with a keyed hash of your email address (not the address itself), so that the limit also applies to later orders. These records are deleted together with the promotion."
@@ -9969,7 +9969,7 @@ msgstr "Einlösung bestätigt eine Leistung (für Bewertungseinladungen)"
 
 #: src/ProductSettings.php:412
 msgid "For experience or service vouchers: a redemption at the counter then confirms that the service was provided, and a review plugin (e.g. Review Captain) may invite the customer afterwards. Voucher Captain sends no invitation itself. Purchases, issuing, top-ups, discount codes and store credit never count."
-msgstr "Für Erlebnis- oder Leistungsgutscheine: Eine Einlösung an der Kasse bestätigt dann, dass die Leistung erbracht wurde, und ein Bewertungs-Plugin (z. B. Review Captain) darf den Kunden danach einladen. Voucher Captain versendet selbst keine Einladung. Kauf, Ausgabe, Aufladung, Rabattcodes und Kundenguthaben zählen nie."
+msgstr "Für Erlebnis- oder Leistungsgutscheine: Eine Einlösung an der Kassa bestätigt dann, dass die Leistung erbracht wurde, und ein Bewertungs-Plugin (z. B. Review Captain) darf den Kunden danach einladen. Voucher Captain versendet selbst keine Einladung. Kauf, Ausgabe, Aufladung, Rabattcodes und Kundenguthaben zählen nie."
 
 #: src/ProductSettings.php:422
 msgid "Shop default (WooCommerce → Settings → Vouchers)"
@@ -10387,7 +10387,7 @@ msgstr "Zustellung & Downloads"
 
 #: src/Settings.php:248
 msgid "Counter & locations"
-msgstr "Kasse & Standorte"
+msgstr "Kassa & Standorte"
 
 #: src/Settings.php:249 src/Settings.php:729
 msgid "Privacy & advanced"
@@ -11001,7 +11001,7 @@ msgstr "Maximaler Gutscheinwert pro Kunde und 24 Stunden"
 
 #: src/Settings.php:1163
 msgid "Checked at checkout: vouchers in the cart plus vouchers ordered in the last 24 hours by the same account or billing email (shop currency). 0 = no limit."
-msgstr "Wird an der Kasse geprüft: Gutscheine im Warenkorb plus Gutscheine, die in den letzten 24 Stunden über dasselbe Konto oder dieselbe Rechnungs-E-Mail bestellt wurden (Shopwährung). 0 = keine Grenze."
+msgstr "Wird an der Kassa geprüft: Gutscheine im Warenkorb plus Gutscheine, die in den letzten 24 Stunden über dasselbe Konto oder dieselbe Rechnungs-E-Mail bestellt wurden (Shopwährung). 0 = keine Grenze."
 
 #: src/Settings.php:1169
 msgid "Hold vouchers of new customers above"
@@ -11237,7 +11237,7 @@ msgstr "Geschenkkarten-Feld"
 
 #: src/Settings.php:1439
 msgid "Show a separate \"Redeem a gift card\" field in the cart and at checkout (classic pages and blocks). Gift cards and store credit are applied without reloading the page."
-msgstr "Ein separates Feld „Geschenkkarte einlösen“ im Warenkorb und an der Kasse anzeigen (klassische Seiten und Blöcke). Geschenkkarten und Kundenguthaben werden ohne Neuladen der Seite angewendet."
+msgstr "Ein separates Feld „Geschenkkarte einlösen“ im Warenkorb und an der Kassa anzeigen (klassische Seiten und Blöcke). Geschenkkarten und Kundenguthaben werden ohne Neuladen der Seite angewendet."
 
 #: src/Settings.php:1445
 msgid "Balance in the mini cart"
@@ -11425,7 +11425,7 @@ msgstr "Kassenlimits (Scanner)"
 
 #: src/Settings.php:1671
 msgid "Daily limits for redemptions at the counter, per shop day (shop time zone). 0 = unlimited. Staff who manage vouchers are not limited; a staff member can get own limits on their user profile. The amount counts gift cards and value vouchers in the currency of the voucher being redeemed."
-msgstr "Tageslimits für Einlösungen an der Kasse, je Shop-Tag (Zeitzone des Shops). 0 = unbegrenzt. Personal, das Gutscheine verwaltet, ist nicht begrenzt; einzelne Mitarbeiter können in ihrem Benutzerprofil eigene Limits erhalten. Der Betrag zählt Geschenkkarten und Wertgutscheine in der Währung des eingelösten Gutscheins."
+msgstr "Tageslimits für Einlösungen an der Kassa, je Shop-Tag (Zeitzone des Shops). 0 = unbegrenzt. Personal, das Gutscheine verwaltet, ist nicht begrenzt; einzelne Mitarbeiter können in ihrem Benutzerprofil eigene Limits erhalten. Der Betrag zählt Geschenkkarten und Wertgutscheine in der Währung des eingelösten Gutscheins."
 
 #: src/Settings.php:1677
 msgid "Amount per staff member and day"
@@ -11445,15 +11445,15 @@ msgstr "Höchstzahl der Einlösungen an der Kassa je Mitarbeiter und Shop-Tag. 0
 
 #: src/Settings.php:1697
 msgid "Amount per till/branch and day"
-msgstr "Betrag pro Kasse/Filiale und Tag"
+msgstr "Betrag pro Kassa/Filiale und Tag"
 
 #: src/Settings.php:1701
 msgid "Counts by the till/branch set on the scanner device; devices without one share one limit."
-msgstr "Zählt nach der am Scanner-Gerät eingestellten Kasse/Filiale; Geräte ohne Kasse teilen sich ein Limit."
+msgstr "Zählt nach der am Scanner-Gerät eingestellten Kassa/Filiale; Geräte ohne Kassa teilen sich ein Limit."
 
 #: src/Settings.php:1707
 msgid "Redemptions per till/branch and day"
-msgstr "Einlösungen pro Kasse/Filiale und Tag"
+msgstr "Einlösungen pro Kassa/Filiale und Tag"
 
 #: src/Settings.php:1711
 msgid "Highest number of counter redemptions per till/branch and shop day; devices without a till share one limit. 0 = unlimited."
@@ -11461,7 +11461,7 @@ msgstr "Höchstzahl der Einlösungen an der Kassa je Kassa/Filiale und Shop-Tag;
 
 #: src/Settings.php:1724
 msgid "A counter redemption is only booked with the receipt number of the till receipt for the goods (checked on the server)."
-msgstr "Eine Einlösung an der Kasse wird nur mit der Belegnummer des Kassenbons für die Ware gebucht (serverseitig geprüft)."
+msgstr "Eine Einlösung an der Kassa wird nur mit der Belegnummer des Kassenbons für die Ware gebucht (serverseitig geprüft)."
 
 #: src/Settings.php:1780
 msgid "Off (default): deleting the plugin keeps all data. On: deleting the plugin removes the voucher tables (including the redemption journal), templates, field groups, promotions, the voucher settings of products, the private PDF folder and all settings. The WooCommerce coupons of the vouchers are moved to the trash (restorable there), other coupons are kept."
@@ -11773,7 +11773,7 @@ msgstr "REST-API"
 
 #: src/Source.php:49
 msgid "Checkout"
-msgstr "Kasse"
+msgstr "Kassa"
 
 #: src/Source.php:50
 msgid "WP-CLI"
@@ -13363,4 +13363,4 @@ msgstr "Voucher Captain benötigt WooCommerce 11.2.2 oder neuer (installiert: %s
 
 #: voucher-captain.php:117
 msgid "Until then, gift cards and store credit are refused at checkout, because their balance cannot be deducted."
-msgstr "Bis dahin werden Geschenkkarten und Kundenguthaben an der Kasse abgelehnt, weil ihr Restwert nicht abgebucht werden kann."
+msgstr "Bis dahin werden Geschenkkarten und Kundenguthaben an der Kassa abgelehnt, weil ihr Restwert nicht abgebucht werden kann."

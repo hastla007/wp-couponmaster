@@ -131,7 +131,7 @@ Abschnitt 3).
 
 | Englisch (Quelltext) | Deutsch (DE, du) | Deutsch (DE, Sie) | Deutsch (AT) | Fundstelle | Freigabe |
 |---|---|---|---|---|---|
-| Enter the code in the cart or at checkout on %s to redeem it. | Gib den Code im Warenkorb oder an der Kasse auf %s ein, um ihn einzulösen. | Geben Sie den Code im Warenkorb oder an der Kasse auf %s ein, um ihn einzulösen. | Geben Sie den Code im Warenkorb oder an der Kasse auf %s ein, um ihn einzulösen. | src/Channels.php:72 | ☐ |
+| Enter the code in the cart or at checkout on %s to redeem it. | Gib den Code im Warenkorb oder an der Kasse auf %s ein, um ihn einzulösen. | Geben Sie den Code im Warenkorb oder an der Kasse auf %s ein, um ihn einzulösen. | Geben Sie den Code im Warenkorb oder an der Kassa auf %s ein, um ihn einzulösen. | src/Channels.php:72 | ☐ |
 | This voucher has already been fully redeemed. | Dieser Gutschein wurde bereits vollständig eingelöst. | Dieser Gutschein wurde bereits vollständig eingelöst. | Dieser Gutschein wurde bereits vollständig eingelöst. | src/Coupons/CartCoupons.php:82 | ☐ |
 
 ## 6. Freigabe
