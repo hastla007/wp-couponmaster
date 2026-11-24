@@ -4994,9 +4994,9 @@ add_filter( 'vcap_settings_partner_active', static fn( $active, $partner ) => 'a
 $s33_some = $s33_ids();
 unset( $GLOBALS['vcap_test_filters']['vcap_settings_partner_active'] );
 check(
-	'SET-VC-33: block "Integration rules" on Integrations (API) – physical cards always, each partner rule only while its partner plugin is active; defaults are those of 1.2.0',
-	in_array( VCAP\PhysicalCards::STATUSES_OPTION, $s33_off, true ) && array() === array_intersect( $s33_rules, $s33_off ) && array( VCAP\Compat\AffiliateCaptain::COMMISSION_OPTION, VCAP\Compat\Subscriptions::SWITCH_OPTION ) === array_values( array_intersect( $s33_rules, $s33_some ) )
-		&& array( 'completed' ) === VCAP\SettingsRegistry::default( VCAP\PhysicalCards::STATUSES_OPTION ) && array( 'yes', 'yes', 'yes', 'no' ) === array_map( array( VCAP\SettingsRegistry::class, 'default' ), $s33_rules ) && array() === array_filter( array_merge( $s33_rules, array( VCAP\PhysicalCards::STATUSES_OPTION ) ), static fn( $k ) => 'api' !== VCAP\SettingsRegistry::get( $k )['section'] ),
+	'SET-VC-33: block "Integration rules" on Integrations (API) – each partner rule only while its partner plugin is active; physical cards always under "Delivery & downloads" (own function, table 1.12 no. 12); defaults are those of 1.2.0',
+	! in_array( VCAP\PhysicalCards::STATUSES_OPTION, $s33_off, true ) && in_array( VCAP\PhysicalCards::STATUSES_OPTION, array_column( ( new VCAP\Settings() )->fields( 'delivery' ), 'id' ), true ) && 'delivery' === VCAP\SettingsRegistry::get( VCAP\PhysicalCards::STATUSES_OPTION )['section'] && array() === array_intersect( $s33_rules, $s33_off ) && array( VCAP\Compat\AffiliateCaptain::COMMISSION_OPTION, VCAP\Compat\Subscriptions::SWITCH_OPTION ) === array_values( array_intersect( $s33_rules, $s33_some ) )
+		&& array( 'completed' ) === VCAP\SettingsRegistry::default( VCAP\PhysicalCards::STATUSES_OPTION ) && array( 'yes', 'yes', 'yes', 'no' ) === array_map( array( VCAP\SettingsRegistry::class, 'default' ), $s33_rules ) && array() === array_filter( $s33_rules, static fn( $k ) => 'api' !== VCAP\SettingsRegistry::get( $k )['section'] ),
 	wp_json_encode( array( $s33_off, $s33_some ) )
 );
 // No. 12: activation statuses of physical cards.

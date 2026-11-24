@@ -568,6 +568,26 @@ final class Settings {
 			),
 			array( 'type' => 'sectionend', 'id' => 'vcap_custom_css_block' ),
 		);
+		// Physical gift cards are an own function (product switch "Physical card"), not a partner rule (table 1.12 no. 12).
+		$fields[] = array(
+			'type'  => 'title',
+			'title' => __( 'Physical gift cards', 'voucher-captain' ),
+			'id'    => 'vcap_physical_cards',
+		);
+		$fields[] = SettingsRegistry::field(
+				PhysicalCards::STATUSES_OPTION,
+				array(
+					'title'   => __( 'Activate physical cards at', 'voucher-captain' ),
+					'type'    => 'multiselect',
+					'class'   => 'wc-enhanced-select',
+					'options' => PhysicalCards::status_choices(),
+					'desc'    => __( 'Physical gift cards stay inactive until their order reaches one of these statuses (default: Completed, i.e. shipped). Only paid statuses can be chosen; empty = Completed.', 'voucher-captain' ),
+				)
+			);
+		$fields[] = array(
+			'type' => 'sectionend',
+			'id'   => 'vcap_physical_cards',
+		);
 		return $fields;
 	}
 
@@ -672,17 +692,7 @@ final class Settings {
 				'type'  => 'title',
 				'title' => __( 'Integration rules', 'voucher-captain' ),
 				'id'    => 'vcap_integration_rules',
-				'desc'  => __( 'Rules for physical gift cards and for partner plugins. A rule of a partner plugin is shown only while that plugin is active; its saved value is kept.', 'voucher-captain' ),
-			),
-			SettingsRegistry::field(
-				PhysicalCards::STATUSES_OPTION,
-				array(
-					'title'   => __( 'Activate physical cards at', 'voucher-captain' ),
-					'type'    => 'multiselect',
-					'class'   => 'wc-enhanced-select',
-					'options' => PhysicalCards::status_choices(),
-					'desc'    => __( 'Physical gift cards stay inactive until their order reaches one of these statuses (default: Completed, i.e. shipped). Only paid statuses can be chosen; empty = Completed.', 'voucher-captain' ),
-				)
+				'desc'  => __( 'Rules for partner plugins. A rule is shown only while its plugin is active; its saved value is kept.', 'voucher-captain' ),
 			),
 		);
 		$partner = array(
