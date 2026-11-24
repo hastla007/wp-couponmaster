@@ -6699,20 +6699,6 @@ $x6_db = new class( $x6_fixtures ) {
 	public array $inserts     = array();
 	private array $expired    = array();
 	public function __construct( private array $rows ) {}
-echo "Sequential voucher number (SET-VC-13)\n";
-/** Database of the voucher number tests: one counter store shared by "connections" (each with its own LAST_INSERT_ID). */
-final class VCAP_VN13_Wpdb {
-	public static array $counters = array();
-	public string $prefix      = 'wp_';
-	public string $options     = 'wp_options';
-	public string $last_error  = '';
-	public array $log          = array();
-	public array $numbers      = array();
-	public int $last_id        = 0;
-	public bool $refuse_number = false;
-	/** @var callable|null Runs right after this connection incremented a counter (another request "in between"). */
-	public $after_increment = null;
-	private ?array $snapshot = null;
 	public function prepare( $query, ...$args ) {
 		$args = isset( $args[0] ) && is_array( $args[0] ) ? $args[0] : $args;
 		return vsprintf( str_replace( array( '%d', '%s', '%i' ), array( '%d', "'%s'", '%s' ), $query ), $args );
@@ -6874,6 +6860,26 @@ check(
 );
 $GLOBALS['vcap_test_options'] = $x6_opts;
 $GLOBALS['vcap_test_filters'] = $x6_filters;
+VCAP\SettingsRegistry::reset();
+
+echo "Sequential voucher number (SET-VC-13)\n";
+/** Database of the voucher number tests: one counter store shared by "connections" (each with its own LAST_INSERT_ID). */
+final class VCAP_VN13_Wpdb {
+	public static array $counters = array();
+	public string $prefix      = 'wp_';
+	public string $options     = 'wp_options';
+	public string $last_error  = '';
+	public array $log          = array();
+	public array $numbers      = array();
+	public int $last_id        = 0;
+	public bool $refuse_number = false;
+	/** @var callable|null Runs right after this connection incremented a counter (another request "in between"). */
+	public $after_increment = null;
+	private ?array $snapshot = null;
+	public function prepare( $query, ...$args ) {
+		$args = isset( $args[0] ) && is_array( $args[0] ) ? $args[0] : $args;
+		return vsprintf( str_replace( array( '%d', '%s', '%i' ), array( '%d', "'%s'", '%s' ), $query ), $args );
+	}
 	public function suppress_errors( $s = true ) { return false; }
 	public function query( $q ) {
 		$this->log[] = $q;
@@ -7137,6 +7143,7 @@ check(
 $GLOBALS['vcap_test_filters'] = $vn_saved_filters;
 $GLOBALS['vcap_test_options'] = $vn_saved_opts;
 VCAP\SettingsRegistry::reset();
+
 
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );
