@@ -827,6 +827,90 @@ final class Settings {
 		);
 	}
 
+	/**
+	 * SET-VC-05: block "Refund & cancellation" of the section "Redemption & balance" – one field per rule (1.12 no. 1–7).
+	 * Defaults = the fixed values of 1.2.0; the filter of the same name gets the setting and wins (API.md). Legal and tax
+	 * weight: the help says the rule is not legally checked.
+	 *
+	 * @return array<int, array<string, mixed>>
+	 */
+	public static function refund_rule_fields(): array {
+		$note = ' ' . __( 'Not legally checked: have the rule checked for your country (tax and consumer law).', 'voucher-captain' );
+		$box  = static function ( string $key, string $title, string $help ) use ( $note ): array {
+			return SettingsRegistry::field(
+				$key,
+				array(
+					'title' => $title,
+					'type'  => 'checkbox',
+					'desc'  => $help . $note,
+				)
+			);
+		};
+		return array(
+			array(
+				'type'  => 'title',
+				'title' => __( 'Refund & cancellation', 'voucher-captain' ),
+				'desc'  => __( 'What happens to vouchers, gift cards and bonus vouchers when an order is refunded or cancelled. The defaults protect against paying out value that was already spent.', 'voucher-captain' ),
+				'id'    => 'vcap_refund_rules',
+			),
+			$box(
+				'vcap_allow_refund_of_spent_vouchers',
+				__( 'Refund spent voucher value', 'voucher-captain' ),
+				__( 'Allow refunding a voucher purchase above "order total minus value already spent". Off (default): such a refund is refused with the maximum amount; unused vouchers are voided.', 'voucher-captain' )
+			),
+			$box(
+				'vcap_allow_refund_of_spent_top_ups',
+				__( 'Refund spent top-ups', 'voucher-captain' ),
+				__( 'Allow refunding a gift card top-up whose value was already spent from the card. Off (default): at most what is still on the card can be refunded.', 'voucher-captain' )
+			),
+			$box(
+				'vcap_allow_refund_of_used_bonus',
+				__( 'Refund below a used bonus', 'voucher-captain' ),
+				__( 'Allow a refund that takes an order below a promotion\'s threshold while its bonus voucher was already used. Off (default): at most "order rest minus used bonus" can be refunded.', 'voucher-captain' )
+			),
+			$box(
+				'vcap_refund_guest_as_gift_card',
+				__( 'Refund guest orders as gift card', 'voucher-captain' ),
+				__( '"Refund as store credit" on a guest order creates a new gift card for the billing email address (default on). Off: guest orders can only be refunded as money.', 'voucher-captain' )
+			),
+			$box(
+				'vcap_keep_status_on_partial_return',
+				__( 'Keep the status after a partial return', 'voucher-captain' ),
+				__( 'An order paid partly with vouchers keeps its status when all its money is refunded but refundable items are left, so the voucher part is not booked back automatically (default on). Off: WooCommerce sets it to "Refunded" and the whole voucher charge is booked back.', 'voucher-captain' )
+			),
+			SettingsRegistry::field(
+				'vcap_restore_extension_days',
+				array(
+					'title'             => __( 'Extend expired vouchers on booking back (days)', 'voucher-captain' ),
+					'type'              => 'number',
+					'custom_attributes' => array( 'step' => 1 ),
+					'desc'              => __( 'When a cancellation books value back onto a voucher that has expired, its validity is extended by this many days from today. 0 (default) = not extended; the order gets a note and the shop a notice instead. Cancelled vouchers are never extended.', 'voucher-captain' ) . $note,
+				)
+			),
+			SettingsRegistry::field(
+				Coupons\Settlement::DEDUCT_OPTION,
+				array(
+					'title'   => __( 'Charge balances at', 'voucher-captain' ),
+					'type'    => 'multiselect',
+					'class'   => 'wc-enhanced-select',
+					'options' => Coupons\Settlement::deduct_choices(),
+					'desc'    => __( 'Gift card and store credit balances used in an order are charged when the order reaches one of these statuses (default: Processing, Completed). Only paid statuses can be chosen; empty = the default.', 'voucher-captain' ) . $note,
+				)
+			),
+			SettingsRegistry::field(
+				Coupons\Settlement::RESTORE_OPTION,
+				array(
+					'title'   => __( 'Book balances back at', 'voucher-captain' ),
+					'type'    => 'multiselect',
+					'class'   => 'wc-enhanced-select',
+					'options' => Coupons\Settlement::restore_choices(),
+					'desc'    => __( 'Balances charged by an order are booked back (if "Restore balance on cancellation" is on) and reservations released when it reaches one of these statuses (default: all three). Empty = all three.', 'voucher-captain' ) . $note,
+				)
+			),
+			array( 'type' => 'sectionend', 'id' => 'vcap_refund_rules' ),
+		);
+	}
+
 	/* ---- M12-90: sections of the former "General" page. ---------------------------------------------------- */
 
 	/** Blocks of general_fields() shown on their own section (other blocks stay on "General"). */
@@ -834,6 +918,7 @@ final class Settings {
 		'vcap_codes'    => 'codes',
 		'vcap_redeem'         => 'redemption',
 		'vcap_redeem_windows' => 'redemption',
+		'vcap_refund_rules'   => 'redemption',
 		'vcap_guessing'       => 'redemption',
 		'vcap_referral' => 'promotions',
 	);
@@ -1274,6 +1359,7 @@ final class Settings {
 				)
 			),
 			array( 'type' => 'sectionend', 'id' => 'vcap_redeem_windows' ),
+			...self::refund_rule_fields(), // SET-VC-05.
 
 			// SET-VC-31 (1.12 no. 22, 24): limits against guessing codes; the register's floor keeps them switched on.
 			array(

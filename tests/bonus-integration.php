@@ -139,8 +139,17 @@ $refused = wc_create_refund( array( 'order_id' => $used_order->get_id(), 'amount
 vcap_bonus_assert( is_wp_error( $refused ) && str_contains( $refused->get_error_message(), 'bonus voucher' ) && str_contains( html_entity_decode( $refused->get_error_message() ), '55' ), 'V5: a refund below the threshold while the bonus is used is reduced by the used bonus (at most 55 of 60)' );
 $allowed = wc_create_refund( array( 'order_id' => $used_order->get_id(), 'amount' => 55, 'reason' => 'test' ) );
 vcap_bonus_assert( $allowed instanceof WC_Order_Refund && 'publish' === get_post_status( $used_bonus->get_id() ), 'V5: the reduced refund goes through; the used bonus stays' );
+// SET-VC-05: the setting "Refund below a used bonus" allows it (2 of the remaining 5); the filter wins over it.
+update_option( 'vcap_allow_refund_of_used_bonus', 'yes' );
+add_filter( 'vcap_allow_refund_of_used_bonus', '__return_false' );
+$s05_blocked = wc_create_refund( array( 'order_id' => $used_order->get_id(), 'amount' => 2, 'reason' => 'test' ) );
+remove_filter( 'vcap_allow_refund_of_used_bonus', '__return_false' );
+vcap_bonus_assert( is_wp_error( $s05_blocked ), 'SET-VC-05: setting on, but the filter (false) wins: refused' );
+$s05_allowed = wc_create_refund( array( 'order_id' => $used_order->get_id(), 'amount' => 2, 'reason' => 'test' ) );
+delete_option( 'vcap_allow_refund_of_used_bonus' );
+vcap_bonus_assert( $s05_allowed instanceof WC_Order_Refund, 'SET-VC-05: the setting "Refund below a used bonus" allows the refund' );
 add_filter( 'vcap_allow_refund_of_used_bonus', '__return_true' );
-$forced = wc_create_refund( array( 'order_id' => $used_order->get_id(), 'amount' => 5, 'reason' => 'test' ) );
+$forced = wc_create_refund( array( 'order_id' => $used_order->get_id(), 'amount' => 3, 'reason' => 'test' ) );
 remove_filter( 'vcap_allow_refund_of_used_bonus', '__return_true' );
 vcap_bonus_assert( $forced instanceof WC_Order_Refund, 'V5: the filter allows the full refund' );
 

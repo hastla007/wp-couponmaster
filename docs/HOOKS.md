@@ -151,7 +151,7 @@ with a public API contract, the contract starts with 1.1.0). Add-ons check the c
 | `vcap_issue_requires_payment` | 1.2.0 | `src/Delivery.php`, `src/Issuer.php` | – |
 | `vcap_issue_retry_delay` | 1.2.0 | `src/Issuer.php` | – |
 | `vcap_job_step_seconds` | 1.2.0 | `src/Jobs.php` | Seconds one background action works on a bulk job (code generation, import) before it queues the next. |
-| `vcap_keep_status_on_partial_return` | 1.2.0 | `src/OrderReturn.php` | Whether an order paid partly with vouchers keeps its status after a refund of all its money (default true). |
+| `vcap_keep_status_on_partial_return` | 1.2.0 | `src/OrderReturn.php` | Whether an order paid partly with vouchers keeps its status after a refund of all its money (default: the setting, on; SET-VC-05). |
 | `vcap_ledger_money_events` | 1.2.0 | `src/Ledger.php` | – |
 | `vcap_legacy_claim_retention_days` | 1.2.0 | `src/Claim.php` | – |
 | `vcap_line_snapshot` | 1.1.0 | `src/Issuer.php` | Extra snapshot keys of connectors (e.g. the ticket a voucher is exchanged for); core keys always win. |
@@ -219,7 +219,7 @@ with a public API contract, the contract starts with 1.1.0). Add-ons check the c
 | `vcap_referral_code_prefix` | 1.1.0 | `src/Referrals.php` | – |
 | `vcap_referral_min_spend` | 1.2.0 | `src/Referrals.php` | Minimum order value of referral codes (V3). |
 | `vcap_referral_same_address` | 1.2.0 | `src/Referrals.php` | – |
-| `vcap_refund_guest_as_gift_card` | 1.2.0 | `src/StoreCredit.php` | Whether a guest order can be refunded as a new gift card instead of store credit (default true). |
+| `vcap_refund_guest_as_gift_card` | 1.2.0 | `src/StoreCredit.php` | Whether a guest order can be refunded as a new gift card instead of store credit (default: the setting, on; SET-VC-05). |
 | `vcap_render_template_id` | 1.0.0 | `src/PdfRenderer.php` | The PDF template a voucher is printed with (args: template id, Voucher), e.g. a translation of the template. |
 | `vcap_report_group` | 1.1.0 | `src/Reports.php` | Group of a coupon code in the campaign report (args: array{type, name}, code, coupon id), e.g. an add-on's own source. |
 | `vcap_report_statuses` | 1.1.0 | `src/Reports.php` | Order statuses (without "wc-") whose orders count in the campaign report (default: WooCommerce's paid statuses and refunded). |

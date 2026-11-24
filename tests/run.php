@@ -6306,5 +6306,132 @@ $GLOBALS['vcap_test_options'] = $mc_saved_opts;
 VCAP\SettingsRegistry::reset_flags();
 VCAP\CountryProfiles::reset();
 
+// SET-VC-05: refund and cancellation rules (1.12 no. 1–7) as settings in block "Refund & cancellation" of
+// "Redemption & balance"; defaults = the fixed filter defaults of 1.2.0, each filter gets the setting and wins.
+echo "SET-VC-05 refund and cancellation rules\n";
+VCAP\SettingsRegistry::reset();
+$v05_saved_opts    = $GLOBALS['vcap_test_options'];
+$v05_saved_filters = $GLOBALS['vcap_test_filters'];
+$v05_keys          = array( 'vcap_allow_refund_of_spent_vouchers', 'vcap_allow_refund_of_spent_top_ups', 'vcap_allow_refund_of_used_bonus', 'vcap_refund_guest_as_gift_card', 'vcap_keep_status_on_partial_return', 'vcap_restore_extension_days', 'vcap_balance_deduct_statuses', 'vcap_balance_restore_statuses' );
+foreach ( $v05_keys as $v05_k ) {
+	unset( $GLOBALS['vcap_test_options'][ $v05_k ], $GLOBALS['vcap_test_filters'][ $v05_k ] );
+}
+$v05_def    = VCAP\Settings::defaults();
+$v05_fields = array();
+foreach ( VCAP\Settings::refund_rule_fields() as $v05_f ) {
+	if ( isset( $v05_f['id'] ) && VCAP\SettingsRegistry::has( (string) $v05_f['id'] ) ) {
+		$v05_fields[ $v05_f['id'] ] = $v05_f;
+	}
+}
+check(
+	'SET-VC-05: defaults are the behaviour of 1.2.0 (no refund of spent value, guest refund as gift card, keep status, no extension, charge at processing/completed, book back at cancelled/refunded/failed); one field per setting in "Redemption & balance", legal weight, visible "not legally checked" help',
+	'no' === $v05_def['vcap_allow_refund_of_spent_vouchers'] && 'no' === $v05_def['vcap_allow_refund_of_spent_top_ups'] && 'no' === $v05_def['vcap_allow_refund_of_used_bonus'] && 'yes' === $v05_def['vcap_refund_guest_as_gift_card'] && 'yes' === $v05_def['vcap_keep_status_on_partial_return'] && 0 === $v05_def['vcap_restore_extension_days']
+		&& array( 'processing', 'completed' ) === $v05_def['vcap_balance_deduct_statuses'] && array( 'cancelled', 'refunded', 'failed' ) === $v05_def['vcap_balance_restore_statuses']
+		&& $v05_keys === array_keys( $v05_fields ) && array() === array_filter( $v05_keys, static fn( $k ) => 'redemption' !== VCAP\SettingsRegistry::get( $k )['section'] || ! VCAP\SettingsRegistry::get( $k )['legal'] )
+		&& array() === array_filter( $v05_fields, static fn( $f ) => array_key_exists( 'desc_tip', $f ) || ! str_contains( (string) $f['desc'], 'Not legally checked' ) )
+		&& 'redemption' === VCAP\Settings::general_section_of( 'vcap_refund_rules', 'vcap_restore_extension_days' ),
+	wp_json_encode( array_keys( $v05_fields ) )
+);
+$v05_src = static fn( string $file ): string => (string) file_get_contents( VCAP_PATH . $file );
+// No. 1: refund of spent voucher value (Issuer::guard_refund(), both call sites).
+$v05_issuer = $v05_src( 'src/Issuer.php' );
+$v05_call1  = "apply_filters( 'vcap_allow_refund_of_spent_vouchers', \$this->settings->yes( 'vcap_allow_refund_of_spent_vouchers' ), \$order, \$amount, \$spent )";
+$v05_r1     = array( ( new VCAP\Settings() )->yes( 'vcap_allow_refund_of_spent_vouchers' ) );
+$GLOBALS['vcap_test_options']['vcap_allow_refund_of_spent_vouchers'] = 'yes';
+$v05_r1[] = ( new VCAP\Settings() )->yes( 'vcap_allow_refund_of_spent_vouchers' );
+check( 'SET-VC-05: no. 1 refund of spent voucher value – setting takes effect (off by default, "yes" is the default of filter vcap_allow_refund_of_spent_vouchers at both call sites of Issuer::guard_refund())', array( false, true ) === $v05_r1 && 2 === substr_count( $v05_issuer, $v05_call1 ) && 2 === substr_count( $v05_issuer, "'vcap_allow_refund_of_spent_vouchers'," ) );
+check( 'SET-VC-05: no. 1 refund of spent voucher value – filter wins (its result alone lets the refund through; integration test acceptance "SET-VC-05: …")', str_contains( $v05_issuer, "<= \$max_base + \$tolerance || " . $v05_call1 . ' ) {' ) && str_contains( $v05_issuer, 'if ( ' . $v05_call1 . ' ) {' ) && str_contains( $v05_src( 'tests/acceptance-integration.php' ), 'SET-VC-05:' ) );
+// No. 2: refund of spent top-ups (TopUp::guard_refund()).
+$v05_topup = $v05_src( 'src/TopUp.php' );
+$v05_call2 = "apply_filters( 'vcap_allow_refund_of_spent_top_ups', 'yes' === Settings::value( 'vcap_allow_refund_of_spent_top_ups' ), \$order, \$amount, \$over + \$lost )";
+$v05_r2    = array( VCAP\Settings::value( 'vcap_allow_refund_of_spent_top_ups' ) );
+$GLOBALS['vcap_test_options']['vcap_allow_refund_of_spent_top_ups'] = 'yes';
+$v05_r2[] = VCAP\Settings::value( 'vcap_allow_refund_of_spent_top_ups' );
+check( 'SET-VC-05: no. 2 refund of spent top-ups – setting takes effect (off by default, "yes" is the default of filter vcap_allow_refund_of_spent_top_ups in TopUp::guard_refund())', array( 'no', 'yes' ) === $v05_r2 && 1 === substr_count( $v05_topup, "'vcap_allow_refund_of_spent_top_ups'," ) && str_contains( $v05_topup, $v05_call2 ) );
+check( 'SET-VC-05: no. 2 refund of spent top-ups – filter wins (its result alone lets the refund through; integration test topup "SET-VC-05: …")', str_contains( $v05_topup, '( ! $codes && ! $unknown ) || ' . $v05_call2 . ' ) {' ) && str_contains( $v05_src( 'tests/topup-integration.php' ), 'SET-VC-05:' ) );
+// No. 3: refund below a used bonus (Discounts\Bonus::guard_refund()).
+$v05_bonus = $v05_src( 'src/Discounts/Bonus.php' );
+$v05_call3 = "apply_filters( 'vcap_allow_refund_of_used_bonus', 'yes' === \\VCAP\\Settings::value( 'vcap_allow_refund_of_used_bonus' ), \$order, \$amount, \$used )";
+$v05_r3    = array( VCAP\Settings::value( 'vcap_allow_refund_of_used_bonus' ) );
+$GLOBALS['vcap_test_options']['vcap_allow_refund_of_used_bonus'] = 'yes';
+$v05_r3[] = VCAP\Settings::value( 'vcap_allow_refund_of_used_bonus' );
+check( 'SET-VC-05: no. 3 refund below a used bonus – setting takes effect (off by default, "yes" is the default of filter vcap_allow_refund_of_used_bonus in Bonus::guard_refund())', array( 'no', 'yes' ) === $v05_r3 && 1 === substr_count( $v05_bonus, "'vcap_allow_refund_of_used_bonus'," ) && str_contains( $v05_bonus, $v05_call3 ) );
+check( 'SET-VC-05: no. 3 refund below a used bonus – filter wins (its result alone lets the refund through; integration test bonus "SET-VC-05: …")', str_contains( $v05_bonus, '$amount <= $max + 0.00001 || ' . $v05_call3 . ' ) {' ) && str_contains( $v05_src( 'tests/bonus-integration.php' ), 'SET-VC-05:' ) );
+// No. 4: guest orders refunded as a new gift card (StoreCredit::guest_gift_card_email()).
+$v05_guest = new class() extends WC_Order {
+	public function get_billing_email() { return 'guest05@example.com'; }
+};
+$v05_r4 = array( VCAP\StoreCredit::guest_gift_card_email( $v05_guest ) );
+$GLOBALS['vcap_test_options']['vcap_refund_guest_as_gift_card'] = 'no';
+$v05_r4[]  = VCAP\StoreCredit::guest_gift_card_email( $v05_guest );
+$v05_seen4 = null;
+add_filter( 'vcap_refund_guest_as_gift_card', static function ( $allowed ) use ( &$v05_seen4 ) { $v05_seen4 = $allowed; return true; } );
+$v05_r4[] = VCAP\StoreCredit::guest_gift_card_email( $v05_guest );
+unset( $GLOBALS['vcap_test_filters']['vcap_refund_guest_as_gift_card'] );
+check( 'SET-VC-05: no. 4 guest refund as gift card – setting takes effect (on by default; "no" = no gift card address)', 'guest05@example.com' === $v05_r4[0] && '' === $v05_r4[1] );
+check( 'SET-VC-05: no. 4 guest refund as gift card – filter vcap_refund_guest_as_gift_card gets the setting (false) and wins', false === $v05_seen4 && 'guest05@example.com' === $v05_r4[2] );
+// No. 5: keep the order status after a partial return (OrderReturn::keep_status_on_partial_return()).
+$v05_return = $v05_src( 'src/OrderReturn.php' );
+$v05_call5  = "apply_filters( 'vcap_keep_status_on_partial_return', 'yes' === Settings::value( 'vcap_keep_status_on_partial_return' ), \$order, (int) \$refund_id )";
+$v05_r5     = array( VCAP\Settings::value( 'vcap_keep_status_on_partial_return' ) );
+$GLOBALS['vcap_test_options']['vcap_keep_status_on_partial_return'] = 'no';
+$v05_r5[] = VCAP\Settings::value( 'vcap_keep_status_on_partial_return' );
+check( 'SET-VC-05: no. 5 keep the status after a partial return – setting takes effect (on by default, "no" is the default of filter vcap_keep_status_on_partial_return; integration test refund-lifecycle "SET-VC-05: …")', array( 'yes', 'no' ) === $v05_r5 && str_contains( $v05_return, 'if ( ! ' . $v05_call5 . ' ) {' ) && str_contains( $v05_src( 'tests/refund-lifecycle-integration.php' ), 'SET-VC-05: setting off' ) );
+check( 'SET-VC-05: no. 5 keep the status after a partial return – filter wins (its result alone decides; integration test refund-lifecycle "SET-VC-05: … the filter wins")', 1 === substr_count( $v05_return, "'vcap_keep_status_on_partial_return'," ) && str_contains( $v05_src( 'tests/refund-lifecycle-integration.php' ), 'SET-VC-05: setting off, filter' ) );
+// No. 6: extend an expired voucher when value is booked back (Coupons\BookBack::check_restored_card()).
+$v05_saved_wpdb  = $GLOBALS['wpdb'] ?? null;
+$GLOBALS['wpdb'] = new VCAP_Test_Wpdb();
+$v05_order       = new class() extends WC_Order {
+	public array $notes = array();
+	public function get_id() { return 505; }
+	public function get_order_number() { return '505'; }
+	public function add_order_note( $note, $is_customer = 0, $added_by_user = false ) { $this->notes[] = (string) $note; return 1; }
+};
+$v05_card             = new Voucher();
+$v05_card->id         = 505;
+$v05_card->code       = 'GIFT-SET05';
+$v05_card->status     = Voucher::STATUS_EXPIRED;
+$v05_card->currency   = 'EUR';
+$v05_card->expires_at = gmdate( 'Y-m-d H:i:s', time() - DAY_IN_SECONDS );
+$v05_seen6            = array();
+add_filter( 'vcap_restore_extension_days', static function ( $days ) use ( &$v05_seen6 ) { $v05_seen6[] = $days; return 0; } );
+VCAP\Coupons\BookBack::check_restored_card( new VCAP\VoucherRepository(), $v05_order, $v05_card, 10.0 );
+$GLOBALS['vcap_test_options']['vcap_restore_extension_days'] = '30';
+VCAP\Coupons\BookBack::check_restored_card( new VCAP\VoucherRepository(), $v05_order, $v05_card, 10.0 );
+$GLOBALS['vcap_test_options']['vcap_restore_extension_days'] = '99999';
+VCAP\Coupons\BookBack::check_restored_card( new VCAP\VoucherRepository(), $v05_order, $v05_card, 10.0 );
+unset( $GLOBALS['vcap_test_filters']['vcap_restore_extension_days'] );
+$GLOBALS['wpdb'] = $v05_saved_wpdb;
+check( 'SET-VC-05: no. 6 extension of expired vouchers on booking back – setting takes effect (0 by default, 30, at most 3650) as the default of filter vcap_restore_extension_days', array( 0, 30, 3650 ) === $v05_seen6, wp_json_encode( $v05_seen6 ) );
+check( 'SET-VC-05: no. 6 extension – filter wins: with the setting at 30 the filter\'s 0 extends nothing; the order gets the "expired" note instead', 3 === count( $v05_order->notes ) && str_contains( $v05_order->notes[1], 'it has expired' ) && Voucher::STATUS_EXPIRED === $v05_card->status, wp_json_encode( $v05_order->notes ) );
+// No. 7: order statuses that charge and book back balances (Coupons\Settlement).
+$v05_r7 = array( VCAP\Coupons\Settlement::deduct_statuses(), VCAP\Coupons\Settlement::restore_statuses() );
+$GLOBALS['vcap_test_options']['vcap_balance_deduct_statuses']  = array( 'wc-completed', 'on-hold', 'pending', 'completed' );
+$GLOBALS['vcap_test_options']['vcap_balance_restore_statuses'] = array( 'cancelled', 'processing' );
+$v05_r7[] = VCAP\Coupons\Settlement::deduct_statuses();
+$v05_r7[] = VCAP\Coupons\Settlement::restore_statuses();
+$GLOBALS['vcap_test_options']['vcap_balance_deduct_statuses']  = '';
+$GLOBALS['vcap_test_options']['vcap_balance_restore_statuses'] = array( 'processing' );
+$v05_r7[] = VCAP\Coupons\Settlement::deduct_statuses();
+$v05_r7[] = VCAP\Coupons\Settlement::restore_statuses();
+check(
+	'SET-VC-05: no. 7 statuses that charge and book back balances – setting takes effect (charge: paid statuses only, empty = processing/completed; book back: cancelled/refunded/failed only, empty = all three)',
+	array( array( 'processing', 'completed' ), array( 'cancelled', 'refunded', 'failed' ), array( 'completed' ), array( 'cancelled' ), array( 'processing', 'completed' ), array( 'cancelled', 'refunded', 'failed' ) ) === $v05_r7
+		&& ! isset( VCAP\Coupons\Settlement::deduct_choices()['pending'] ) && array( 'cancelled', 'refunded', 'failed' ) === array_keys( VCAP\Coupons\Settlement::restore_choices() )
+		&& str_contains( $v05_src( 'src/Coupons/Settlement.php' ), '$restore_statuses = self::restore_statuses();' ),
+	wp_json_encode( $v05_r7 )
+);
+$GLOBALS['vcap_test_options']['vcap_balance_deduct_statuses']  = array( 'completed' );
+$GLOBALS['vcap_test_options']['vcap_balance_restore_statuses'] = array( 'cancelled' );
+$v05_seen7 = array();
+add_filter( 'vcap_balance_deduct_statuses', static function ( $s ) use ( &$v05_seen7 ) { $v05_seen7[] = $s; return array( 'shipped' ); } );
+add_filter( 'vcap_balance_restore_statuses', static function ( $s ) use ( &$v05_seen7 ) { $v05_seen7[] = $s; return array( 'failed' ); } );
+$v05_f7 = array( VCAP\Coupons\Settlement::deduct_statuses(), VCAP\Coupons\Settlement::restore_statuses() );
+check( 'SET-VC-05: no. 7 statuses – filters vcap_balance_deduct_statuses and vcap_balance_restore_statuses get the setting and win', array( array( 'completed' ), array( 'cancelled' ) ) === $v05_seen7 && array( array( 'shipped' ), array( 'failed' ) ) === $v05_f7 );
+check( 'SET-VC-05: TAX.md section 5 describes the refund and cancellation settings (descriptive, to be checked)', str_contains( $v05_src( 'TAX.md' ), '### 5.3 Einstellungen „Erstattung & Storno“ (SET-VC-05) – zu prüfen' ) );
+$GLOBALS['vcap_test_filters'] = $v05_saved_filters;
+$GLOBALS['vcap_test_options'] = $v05_saved_opts;
+VCAP\SettingsRegistry::reset();
+
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );

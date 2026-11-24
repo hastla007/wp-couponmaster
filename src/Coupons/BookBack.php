@@ -92,7 +92,7 @@ final class BookBack {
 		if ( ! $void && ! $card->is_expired() && Voucher::STATUS_EXPIRED !== $card->status ) {
 			return;
 		}
-		$days = $void ? 0 : max( 0, (int) apply_filters( 'vcap_restore_extension_days', 0, $card, $order ) );
+		$days = $void ? 0 : max( 0, (int) apply_filters( 'vcap_restore_extension_days', \VCAP\SettingsRegistry::bounded_int( 'vcap_restore_extension_days' ), $card, $order ) );
 		/* translators: %s: order number */
 		if ( $days > 0 && TopUp::extend_validity( $repo, $card, gmdate( 'Y-m-d H:i:s', time() + $days * DAY_IN_SECONDS ), sprintf( __( 'Balance of order #%s booked back', 'voucher-captain' ), $order->get_order_number() ), $order->get_id() ) ) {
 			/* translators: 1: voucher code, 2: expiry date */

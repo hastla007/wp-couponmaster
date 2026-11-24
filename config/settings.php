@@ -98,6 +98,17 @@ $vcap_settings = array(
 	'vcap_code_attempts_site_wide'   => array( 'type' => 'int', 'default' => 300, 'min' => 50, 'max' => 10000, 'section' => 'redemption' ),
 	'vcap_email_confirm_per_hour'    => array( 'type' => 'int', 'default' => 3, 'min' => 1, 'max' => 10, 'section' => 'redemption' ),
 	'vcap_email_confirm_link_hours'  => array( 'type' => 'int', 'default' => 48, 'min' => 1, 'max' => 168, 'section' => 'redemption' ),
+	// SET-VC-05 (1.12 no. 1–7): refund and cancellation rules; defaults = the fixed filter defaults of 1.2.0, the
+	// filters of the same name get the setting and win. Legal/tax weight: help texts not legally checked.
+	'vcap_allow_refund_of_spent_vouchers' => array( 'type' => 'bool', 'default' => 'no', 'section' => 'redemption', 'legal' => true ),
+	'vcap_allow_refund_of_spent_top_ups'  => array( 'type' => 'bool', 'default' => 'no', 'section' => 'redemption', 'legal' => true ),
+	'vcap_allow_refund_of_used_bonus'     => array( 'type' => 'bool', 'default' => 'no', 'section' => 'redemption', 'legal' => true ),
+	'vcap_refund_guest_as_gift_card'      => array( 'type' => 'bool', 'default' => 'yes', 'section' => 'redemption', 'legal' => true ),
+	'vcap_keep_status_on_partial_return'  => array( 'type' => 'bool', 'default' => 'yes', 'section' => 'redemption', 'legal' => true ),
+	'vcap_restore_extension_days'         => array( 'type' => 'int', 'default' => 0, 'min' => 0, 'max' => 3650, 'section' => 'redemption', 'legal' => true ),
+	// Paid statuses only (empty = default), resp. cancelled/refunded/failed only (empty = all three): Coupons\Settlement.
+	'vcap_balance_deduct_statuses'        => array( 'type' => 'list', 'default' => array( 'processing', 'completed' ), 'section' => 'redemption', 'legal' => true ),
+	'vcap_balance_restore_statuses'       => array( 'type' => 'list', 'default' => array( 'cancelled', 'refunded', 'failed' ), 'section' => 'redemption', 'legal' => true ),
 
 	/* ---- Promotions & refer a friend ---- */
 	'vcap_campaigns_enabled'         => array( 'type' => 'bool', 'default' => 'no', 'section' => 'promotions' ),

@@ -128,13 +128,18 @@ $none = vcap_topup_refund( $order, 1 );
 vcap_topup_assert( is_wp_error( $none ), 'nothing of a fully spent top-up can be refunded (not even 1 as an amount)' );
 $none_line = vcap_topup_refund( wc_get_order( $order->get_id() ), 5, array( $line => array( 'qty' => 0, 'refund_total' => 5 ) ) );
 vcap_topup_assert( is_wp_error( $none_line ), 'nothing of a fully spent top-up can be refunded on its line' );
-add_filter( 'vcap_allow_refund_of_spent_vouchers', '__return_true' );
-add_filter( 'vcap_allow_refund_of_spent_top_ups', '__return_true' );
+// SET-VC-05: the settings "Refund spent voucher value" and "Refund spent top-ups" allow it; the filter wins over them.
+update_option( 'vcap_allow_refund_of_spent_vouchers', 'yes' );
+update_option( 'vcap_allow_refund_of_spent_top_ups', 'yes' );
+add_filter( 'vcap_allow_refund_of_spent_top_ups', '__return_false' );
+$s05_refused = vcap_topup_refund( wc_get_order( $order->get_id() ), 50, array( $line => array( 'qty' => 1, 'refund_total' => 50 ) ) );
+remove_filter( 'vcap_allow_refund_of_spent_top_ups', '__return_false' );
+vcap_topup_assert( is_wp_error( $s05_refused ), 'SET-VC-05: setting "Refund spent top-ups" on, but the filter (false) wins: still refused' );
 $knowingly = vcap_topup_refund( wc_get_order( $order->get_id() ), 50, array( $line => array( 'qty' => 1, 'refund_total' => 50 ) ) );
-remove_filter( 'vcap_allow_refund_of_spent_vouchers', '__return_true' );
-remove_filter( 'vcap_allow_refund_of_spent_top_ups', '__return_true' );
+delete_option( 'vcap_allow_refund_of_spent_vouchers' );
+delete_option( 'vcap_allow_refund_of_spent_top_ups' );
 $notes = implode( ' | ', wp_list_pluck( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ), 'content' ) );
-vcap_topup_assert( ! is_wp_error( $knowingly ) && 0.0 === vcap_topup_balance( $card ) && false !== strpos( $notes, 'already been spent' ), 'a refund allowed knowingly (filters) takes back nothing and notes that the top-up was spent', $notes );
+vcap_topup_assert( ! is_wp_error( $knowingly ) && 0.0 === vcap_topup_balance( $card ) && false !== strpos( $notes, 'already been spent' ), 'SET-VC-05: a refund allowed knowingly (settings; before 1.3.0 only the filters) takes back nothing and notes that the top-up was spent', $notes );
 
 /* ---- 4. Top-up and other goods: an amount refund pays back the goods first --------------------------- */
 

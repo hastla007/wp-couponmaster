@@ -43,8 +43,8 @@ final class OrderReturn {
 		if ( ! $this->charged_vouchers( $order ) || $order->get_remaining_refund_items() <= 0 ) {
 			return $status;
 		}
-		/** Whether an order paid partly with vouchers keeps its status after a refund of all its money (default true). */
-		if ( ! apply_filters( 'vcap_keep_status_on_partial_return', true, $order, (int) $refund_id ) ) {
+		/** Whether an order paid partly with vouchers keeps its status after a refund of all its money (default: the setting, on; SET-VC-05). */
+		if ( ! apply_filters( 'vcap_keep_status_on_partial_return', 'yes' === Settings::value( 'vcap_keep_status_on_partial_return' ), $order, (int) $refund_id ) ) {
 			return $status;
 		}
 		$text = __( 'The money of this order was refunded completely, but vouchers paid the rest and refundable items are left: the order was not set to "Refunded", so the voucher charge was not booked back. Book the returned part back with "Book back onto voucher", or set the order to "Refunded" or "Cancelled" by hand if everything was returned.', 'voucher-captain' );

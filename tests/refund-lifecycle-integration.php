@@ -122,6 +122,15 @@ $m02_order  = wc_get_order( $m02_order->get_id() );
 vcap_rl_assert( ! is_wp_error( $m02_refund ) && ! $m02_order->has_status( 'refunded' ), 'M12-02: returning one item refunds all the money, but the order is not set to "Refunded"', $m02_order->get_status() );
 vcap_rl_assert( 0.0 === vcap_rl_balance( $m02_card ), 'M12-02: 80 card + 20 money, partial return – the card balance stays unchanged (no +80)', vcap_rl_balance( $m02_card ) );
 vcap_rl_assert( Attention::has( $m02_order->get_id(), 'partial-return' ) && str_contains( vcap_rl_notes( $m02_order->get_id() ), 'Book back onto voucher' ), 'M12-02: an order note and a notice point to "Book back onto voucher"' );
+// SET-VC-05: setting "Keep the status after a partial return" off – WooCommerce may set "Refunded"; the filter wins.
+update_option( 'vcap_keep_status_on_partial_return', 'no' );
+$s05_status = apply_filters( 'woocommerce_order_fully_refunded_status', 'refunded', $m02_order->get_id(), $m02_refund->get_id() );
+vcap_rl_assert( 'refunded' === $s05_status, 'SET-VC-05: setting off – the order may become "Refunded"', $s05_status );
+add_filter( 'vcap_keep_status_on_partial_return', '__return_true' );
+$s05_kept = apply_filters( 'woocommerce_order_fully_refunded_status', 'refunded', $m02_order->get_id(), $m02_refund->get_id() );
+remove_filter( 'vcap_keep_status_on_partial_return', '__return_true' );
+delete_option( 'vcap_keep_status_on_partial_return' );
+vcap_rl_assert( false === $s05_kept, 'SET-VC-05: setting off, filter (true) – the filter wins and the status is kept', $s05_kept );
 $m02_order->update_status( 'refunded' );
 vcap_rl_assert( 80.0 === vcap_rl_balance( $m02_card ), 'M12-02: set to "Refunded" by hand (everything returned) the card gets its 80 back', vcap_rl_balance( $m02_card ) );
 

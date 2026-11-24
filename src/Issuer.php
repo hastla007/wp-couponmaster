@@ -1371,7 +1371,7 @@ final class Issuer {
 		$remaining_base = $to_base( $remaining );
 		if ( null === $remaining_base || null === $to_base( $amount ) ) {
 			// Foreign currency without exchange rate: the spent base-currency value cannot be compared (never 1:1).
-			if ( apply_filters( 'vcap_allow_refund_of_spent_vouchers', false, $order, $amount, $spent ) ) {
+			if ( apply_filters( 'vcap_allow_refund_of_spent_vouchers', $this->settings->yes( 'vcap_allow_refund_of_spent_vouchers' ), $order, $amount, $spent ) ) {
 				return;
 			}
 			throw new \Exception(
@@ -1386,7 +1386,7 @@ final class Issuer {
 		$max_base       = $remaining_base - $spent;
 		$decimals       = API\V1\RedemptionService::decimals( (string) $order->get_currency() );
 		$tolerance      = 0.5 / ( 10 ** $decimals );
-		if ( $to_base( $amount ) <= $max_base + $tolerance || apply_filters( 'vcap_allow_refund_of_spent_vouchers', false, $order, $amount, $spent ) ) {
+		if ( $to_base( $amount ) <= $max_base + $tolerance || apply_filters( 'vcap_allow_refund_of_spent_vouchers', $this->settings->yes( 'vcap_allow_refund_of_spent_vouchers' ), $order, $amount, $spent ) ) {
 			return;
 		}
 		$max   = $remaining_base > 0 ? round( $remaining * max( 0.0, $max_base ) / $remaining_base, $decimals ) : 0.0;
