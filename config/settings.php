@@ -63,6 +63,8 @@ $vcap_settings = array(
 	'vcap_privacy_url'               => array( 'section' => '', 'legal' => true ),
 	'vcap_withdrawal_url'            => array( 'section' => '', 'legal' => true ),
 	'vcap_legal_text'                => array( 'type' => 'text', 'section' => '', 'legal' => true ),
+	/* ---- General: currencies (SET-VC-32; filter vcap_vouchers_shop_currency_only wins) ---- */
+	'vcap_vouchers_shop_currency_only' => array( 'type' => 'bool', 'default' => 'no', 'section' => '' ),
 
 	/* ---- Codes ---- */
 	'vcap_code_prefix'               => array( 'section' => 'codes' ),

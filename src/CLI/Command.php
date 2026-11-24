@@ -601,6 +601,10 @@ final class Command {
 			self::error( 'Use "wp vcap data-removal on|off" for this setting.' );
 			return;
 		}
+		if ( SettingsRegistry::locked( $key ) ) {
+			self::error( SettingsRegistry::locked_message( $key ) . ' Nothing was changed.' ); // SET-VC-34.
+			return;
+		}
 		$entry = SettingsRegistry::get( $key );
 		$input = $value;
 		if ( null !== $entry && ( ( in_array( $entry['type'], array( 'table', 'list' ), true ) && str_starts_with( ltrim( $value ), '[' ) ) || ( 'map' === $entry['type'] && str_starts_with( ltrim( $value ), '{' ) ) ) ) {
@@ -683,6 +687,10 @@ final class Command {
 		if ( false === $section ) {
 			self::error( 'Usage: wp vcap settings reset <section>|all [--dry-run] [--yes]' );
 			return;
+		}
+		$locked = SettingsTransfer::locked_resettable( $section );
+		if ( $locked ) {
+			self::warning( 'Set by the network administrator, not reset: ' . implode( ', ', $locked ) ); // SET-VC-34.
 		}
 		// PV-P1-3: back to the register default (what an existing shop runs on), shown as current -> default first.
 		$diff = SettingsTransfer::reset_preview( $section );

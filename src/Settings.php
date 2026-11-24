@@ -271,6 +271,7 @@ final class Settings {
 	public function save(): void {
 		global $current_section;
 		SettingsRegistry::hook_number_checks(); // SET-VC-01: every number is checked on the server, too.
+		SettingsRegistry::hook_lock_checks(); // SET-VC-34: a locked setting keeps its stored value.
 		\WC_Admin_Settings::save_fields( $this->fields( (string) $current_section ) );
 		update_option( 'vcap_flush_rewrite', 'yes' ); // The My Account tab may have been toggled.
 	}
@@ -1432,6 +1433,7 @@ final class Settings {
 		// SET-VC-02: the country profile comes first – it suggests values for the blocks below.
 		// SET-VC-19: block "Payment methods for vouchers"; SET-VC-11: block "Issuer and legal texts".
 		return array_merge( Admin\CountryProfilesAdmin::fields(), $fields, PaymentMethods::settings_fields(), LegalInfo::settings_fields() );
+		return array_merge( Admin\CountryProfilesAdmin::fields(), $fields, PaymentMethods::settings_fields(), VoucherCurrency::settings_fields() ); // SET-VC-19, SET-VC-32: blocks on "General".
 	}
 
 	/**

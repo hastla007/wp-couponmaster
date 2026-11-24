@@ -6147,5 +6147,162 @@ check(
 unset( $GLOBALS['vcap_test_privacy_url'], $GLOBALS['vcap_test_terms_page'] );
 $GLOBALS['vcap_test_options'] = $vc11_saved;
 
+
+echo "Multi-currency status and setting locks (SET-VC-32, SET-VC-34)\n";
+$mc_saved_opts    = $GLOBALS['vcap_test_options'];
+$mc_saved_filters = $GLOBALS['vcap_test_filters'];
+if ( ! function_exists( 'wc_add_notice' ) ) {
+	function wc_add_notice( $message, $type = 'success' ) { $GLOBALS['vcap_test_notices'][] = array( $type, (string) $message ); }
+}
+if ( ! class_exists( 'WC_Product' ) ) {
+	// Minimal product for the add-to-cart check (declared only here, after every other test).
+	class WC_Product {
+		public function __construct( private array $meta = array() ) {}
+		public function get_meta( $k ) { return $this->meta[ $k ] ?? ''; }
+		public function is_type( $t ) { return 'simple' === $t; }
+		public function get_id() { return 1; }
+	}
+}
+// A stubbed second currency plugin (WOOCS-like): lists USD with a rate; the active currency is switched by its filter.
+final class VCAP_Test_Woocs {
+	public function get_currencies() { return array( 'EUR' => array( 'rate' => 1 ), 'USD' => array( 'rate' => 1.08 ) ); }
+}
+$GLOBALS['vcap_test_options'] = array( 'woocommerce_currency' => 'EUR' );
+$GLOBALS['vcap_test_notices'] = array();
+$mc_voucher                   = new WC_Product( array( '_vcap_enabled' => 'yes' ) );
+$mc_other                     = new WC_Product( array() );
+$mc_status_none               = array_values( VCAP\VoucherCurrency::status() );
+check(
+	'SET-VC-32: register – "Sell vouchers only in the shop currency" is a bool on "General", default no (as before); General has the block "Currencies" with a display-only status line (is_option false) and the checkbox',
+	'no' === VCAP\SettingsRegistry::default( VCAP\VoucherCurrency::OPTION ) && 'bool' === VCAP\SettingsRegistry::get( VCAP\VoucherCurrency::OPTION )['type'] && '' === VCAP\SettingsRegistry::get( VCAP\VoucherCurrency::OPTION )['section']
+		&& ( static function (): bool {
+			$by_id = array_column( VCAP\VoucherCurrency::settings_fields(), null, 'id' );
+			return false === ( $by_id['vcap_currency_status']['is_option'] ?? null ) && VCAP\VoucherCurrency::FIELD_TYPE === $by_id['vcap_currency_status']['type'] && 'checkbox' === $by_id[ VCAP\VoucherCurrency::OPTION ]['type'] && 'no' === $by_id[ VCAP\VoucherCurrency::OPTION ]['default'];
+		} )()
+		&& str_contains( (string) file_get_contents( VCAP_PATH . 'src/Settings.php' ), 'VoucherCurrency::settings_fields()' )
+);
+check(
+	'SET-VC-32: status without a currency switcher – none detected, leading currency EUR, automatic commands limited to 100 EUR',
+	str_starts_with( $mc_status_none[0], 'None detected' ) && str_starts_with( $mc_status_none[1], 'EUR (shop base currency)' ) && str_contains( $mc_status_none[2], 'at most 100 EUR' ),
+	json_encode( $mc_status_none )
+);
+check(
+	'SET-VC-32: the commands hint follows F-05a (CommandLimits, no rule of its own) – CHF/USD/GBP the same number 100, SEK needs an own maximum, with an own maximum in SEK that one applies',
+	str_contains( VCAP\VoucherCurrency::commands_hint( 'CHF' ), 'at most 100 CHF' ) && str_contains( VCAP\VoucherCurrency::commands_hint( 'USD' ), 'same number as in EUR' )
+		&& ( static function (): bool {
+			$GLOBALS['vcap_test_options']['woocommerce_currency'] = 'SEK';
+			$without = VCAP\VoucherCurrency::commands_hint( 'SEK' );
+			$GLOBALS['vcap_test_options'][ VCAP\API\V1\CommandLimits::option( 'voucher.issue', 'max_amount' ) ]          = '900';
+			$GLOBALS['vcap_test_options'][ VCAP\API\V1\CommandLimits::option( 'voucher.issue', 'max_amount_currency' ) ] = 'SEK';
+			$with                         = VCAP\VoucherCurrency::commands_hint( 'SEK' );
+			$GLOBALS['vcap_test_options'] = array( 'woocommerce_currency' => 'EUR' );
+			return str_contains( $without, 'enter your own maximum amount' ) && str_contains( $with, 'Your own maximum amount in SEK applies' );
+		} )()
+);
+// Second currency plugin active, the customer switched to USD.
+$GLOBALS['WOOCS'] = new VCAP_Test_Woocs(); // phpcs:ignore WordPress.NamingConventions.ValidVariableName
+$GLOBALS['vcap_test_filters']['woocommerce_currency'] = array( array( static fn() => 'USD', 1 ) );
+$mc_status_woocs = array_values( VCAP\VoucherCurrency::status() );
+$mc_default      = array( VCAP\VoucherCurrency::refused(), VCAP\VoucherCurrency::allow_product( true, $mc_voucher ), $GLOBALS['vcap_test_notices'] );
+check(
+	'SET-VC-32: with a second currency plugin (stubbed WOOCS) the status names it as supported; with the default (off) a voucher can be bought in USD as before',
+	str_starts_with( $mc_status_woocs[0], 'WOOCS (supported' ) && 'USD' === VCAP\VoucherCurrency::active_currency() && 'EUR' === VCAP\VoucherCurrency::base_currency()
+		&& false === $mc_default[0] && true === $mc_default[1] && array() === $mc_default[2],
+	json_encode( $mc_status_woocs )
+);
+$GLOBALS['vcap_test_options'][ VCAP\VoucherCurrency::OPTION ] = 'yes';
+$mc_refused = array( VCAP\VoucherCurrency::refused(), VCAP\VoucherCurrency::allow_product( true, $mc_voucher ), VCAP\VoucherCurrency::allow_product( true, $mc_other ), VCAP\VoucherCurrency::allow_product( false, $mc_voucher ), $GLOBALS['vcap_test_notices'] );
+check(
+	'SET-VC-32: setting on and USD active – adding a voucher product is refused with an error notice naming both currencies; other products and an already refused add stay as they are',
+	true === $mc_refused[0] && false === $mc_refused[1] && true === $mc_refused[2] && false === $mc_refused[3]
+		&& 1 === count( $mc_refused[4] ) && 'error' === $mc_refused[4][0][0] && str_contains( $mc_refused[4][0][1], 'only be bought in EUR' ) && str_contains( $mc_refused[4][0][1], 'from USD to EUR' ),
+	json_encode( $mc_refused )
+);
+$GLOBALS['vcap_test_filters']['woocommerce_currency'] = array( array( static fn() => 'EUR', 1 ) );
+$mc_base = array( VCAP\VoucherCurrency::refused(), VCAP\VoucherCurrency::allow_product( true, $mc_voucher ) );
+$GLOBALS['vcap_test_filters']['woocommerce_currency']             = array( array( static fn() => 'USD', 1 ) );
+$GLOBALS['vcap_test_filters']['vcap_vouchers_shop_currency_only'] = array( array( static fn() => false, 1 ) );
+$mc_filter = VCAP\VoucherCurrency::refused();
+$mc_src    = (string) file_get_contents( VCAP_PATH . 'src/VoucherCurrency.php' );
+check(
+	'SET-VC-32: back in the shop currency the voucher can be bought; the filter vcap_vouchers_shop_currency_only wins over the setting; checkout (classic and block) is refused through woocommerce_check_cart_items',
+	false === $mc_base[0] && true === $mc_base[1] && false === $mc_filter
+		&& str_contains( $mc_src, "add_action( 'woocommerce_check_cart_items', array( self::class, 'check_cart' ) )" ) && str_contains( $mc_src, "add_filter( 'woocommerce_add_to_cart_validation'" )
+		&& str_contains( (string) file_get_contents( VCAP_PATH . 'src/Plugin.php' ), '( new VoucherCurrency() )->register();' )
+);
+unset( $GLOBALS['WOOCS'] );
+$GLOBALS['vcap_test_filters'] = $mc_saved_filters;
+
+// SET-VC-34: a multisite-like simulation – the "network" locks settings per site through vcap_setting_locked.
+$GLOBALS['vcap_test_filters']['vcap_setting_locked'] = array(
+	array(
+		static fn( $locked, $option ) => 2 === get_current_blog_id() && in_array( $option, array( 'vcap_code_length', 'vcap_attach_pdf', 'vcap_retention_days', VCAP\Markets::EXPIRY_OPTION ), true ) ? true : $locked,
+		2,
+	),
+);
+VCAP\SettingsRegistry::reset_flags();
+$GLOBALS['vcap_test_blog_id'] = 1;
+$GLOBALS['vcap_test_options'] = array( 'vcap_code_length' => '14' );
+$lk_site1_field               = VCAP\SettingsRegistry::field( 'vcap_code_length', array( 'title' => 'Code length', 'type' => 'number', 'desc_tip' => 'Help.' ) );
+$lk_site1_save                = VCAP\SettingsRegistry::sanitize_locked( '20', array( 'id' => 'vcap_code_length' ) );
+$GLOBALS['vcap_test_blog_id'] = 2;
+$lk_field                     = VCAP\SettingsRegistry::field( 'vcap_code_length', array( 'title' => 'Code length', 'type' => 'number', 'desc_tip' => 'Help.' ) );
+$lk_check                     = VCAP\SettingsRegistry::field( 'vcap_attach_pdf', array( 'title' => 'PDF', 'type' => 'checkbox', 'desc' => 'Attach the PDF' ) );
+$lk_save                      = VCAP\SettingsRegistry::sanitize_locked( '20', array( 'id' => 'vcap_code_length' ) );
+check(
+	'SET-VC-34: the core locks nothing (filter default false); on the locked site a field is disabled and read-only, not saved (is_option false) and says "Set by the network administrator."; the other site keeps an ordinary field',
+	! VCAP\SettingsRegistry::locked( 'vcap_code_prefix' ) && VCAP\SettingsRegistry::locked( 'vcap_code_length' )
+		&& 'disabled' === ( $lk_field['custom_attributes']['disabled'] ?? '' ) && 'readonly' === ( $lk_field['custom_attributes']['readonly'] ?? '' ) && false === $lk_field['is_option'] && str_contains( $lk_field['desc'], 'Set by the network administrator.' ) && 'Help.' === $lk_field['desc_tip'] && '8' === (string) ( $lk_field['custom_attributes']['min'] ?? '' )
+		&& 'disabled' === ( $lk_check['custom_attributes']['disabled'] ?? '' ) && str_starts_with( $lk_check['desc'], 'Attach the PDF ' )
+		&& ! isset( $lk_site1_field['custom_attributes']['disabled'] ) && ! isset( $lk_site1_field['is_option'] ) && '20' === $lk_site1_save && null === $lk_save,
+	json_encode( array( $lk_field, $lk_site1_field ) )
+);
+check(
+	'SET-VC-34: saving the tab hooks the lock check after every other sanitizer (null = WooCommerce keeps the stored value), also for fields an add-on built without field()',
+	str_contains( (string) file_get_contents( VCAP_PATH . 'src/Settings.php' ), 'SettingsRegistry::hook_lock_checks();' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'src/SettingsRegistry.php' ), "array( self::class, 'sanitize_locked' ), PHP_INT_MAX, 2" )
+);
+// Import on the locked site: the locked values are skipped with a message, the rest is imported.
+$GLOBALS['vcap_test_options'] = array( 'vcap_code_length' => '14', 'vcap_attach_pdf' => 'yes' );
+$lk_parsed  = VCAP\SettingsTransfer::parse( (string) json_encode( array( 'format' => 'voucher-captain-settings', 'version' => 1, 'settings' => array( 'vcap_code_length' => '20', 'vcap_attach_pdf' => 'no', 'vcap_code_prefix' => 'GS' ) ) ) );
+$lk_changed = is_array( $lk_parsed ) ? VCAP\SettingsTransfer::apply( $lk_parsed['settings'], VCAP\SettingsLog::VIA_IMPORT ) : array();
+$lk_forced  = VCAP\SettingsTransfer::apply( array( 'vcap_code_length' => '30' ), VCAP\SettingsLog::VIA_CLI );
+check(
+	'SET-VC-34: import – locked settings are not imported (warning "set by the network administrator"), the others are; SettingsTransfer::apply() never stores a locked value',
+	is_array( $lk_parsed ) && array( 'vcap_code_prefix' => 'GS' ) === $lk_parsed['settings'] && 2 === count( array_filter( $lk_parsed['warnings'], static fn( $w ) => str_contains( $w, 'is set by the network administrator' ) ) )
+		&& array( 'vcap_code_prefix' ) === $lk_changed && array() === $lk_forced && '14' === get_option( 'vcap_code_length' ) && 'yes' === get_option( 'vcap_attach_pdf' ) && 'GS' === get_option( 'vcap_code_prefix' ),
+	json_encode( $lk_parsed )
+);
+$lk_reset_preview = VCAP\SettingsTransfer::reset_preview( 'codes' );
+$lk_reset         = VCAP\SettingsTransfer::reset( 'codes' );
+$lk_cli           = (string) file_get_contents( VCAP_PATH . 'src/CLI/Command.php' );
+check(
+	'SET-VC-34: reset leaves a locked setting alone (and lists it); WP-CLI "settings set" refuses it with the message, "settings reset" names the locked ones',
+	! isset( $lk_reset_preview['vcap_code_length'] ) && isset( $lk_reset_preview['vcap_code_prefix'] ) && '14' === get_option( 'vcap_code_length' ) && false === get_option( 'vcap_code_prefix' ) && in_array( 'vcap_code_prefix', $lk_reset['changed'], true )
+		&& in_array( 'vcap_code_length', VCAP\SettingsTransfer::locked_resettable( 'codes' ), true ) && ! in_array( 'vcap_code_length', VCAP\SettingsTransfer::resettable( 'codes' ), true )
+		&& preg_match( '/if \( SettingsRegistry::locked\( \$key \) \) \{\s*self::error\( SettingsRegistry::locked_message\( \$key \)/', $lk_cli ) && str_contains( $lk_cli, "'Set by the network administrator, not reset: '" ),
+	json_encode( array_keys( $lk_reset_preview ) )
+);
+VCAP\CountryProfiles::reset();
+$lk_profile = VCAP\CountryProfiles::preview( 'DE' );
+$lk_apply   = VCAP\CountryProfiles::apply( 'DE', array( 'vcap_retention_days' ) );
+check(
+	'SET-VC-34: country profile – a locked value is shown with the message, never preselected, and applying it is refused (nothing changes)',
+	is_array( $lk_profile ) && str_contains( $lk_profile['vcap_retention_days']['error'], 'set by the network administrator' ) && ! $lk_profile['vcap_retention_days']['preselected'] && ! $lk_profile['vcap_retention_days']['changed']
+		&& str_contains( $lk_profile['expiry_row']['error'], 'set by the network administrator' ) && ! $lk_profile['expiry_row']['preselected']
+		&& is_wp_error( $lk_apply ) && false === get_option( 'vcap_retention_days' ),
+	json_encode( $lk_profile )
+);
+$GLOBALS['vcap_test_blog_id'] = 1;
+$lk_site1_profile             = VCAP\CountryProfiles::preview( 'DE' );
+check(
+	'SET-VC-34: the same network on site 1 (nothing locked there) – the profile value is offered as usual',
+	is_array( $lk_site1_profile ) && '' === $lk_site1_profile['vcap_retention_days']['error'] && $lk_site1_profile['vcap_retention_days']['preselected']
+);
+unset( $GLOBALS['vcap_test_blog_id'] );
+$GLOBALS['vcap_test_filters'] = $mc_saved_filters;
+$GLOBALS['vcap_test_options'] = $mc_saved_opts;
+VCAP\SettingsRegistry::reset_flags();
+VCAP\CountryProfiles::reset();
+
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );

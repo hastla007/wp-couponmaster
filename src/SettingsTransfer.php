@@ -189,6 +189,11 @@ final class SettingsTransfer {
 				$errors[] = sprintf( __( '%s is never part of a settings export.', 'voucher-captain' ), $key );
 				continue;
 			}
+			if ( SettingsRegistry::locked( $key ) ) {
+				// SET-VC-34: a setting locked on this site is not imported; the rest of the file is.
+				$warnings[] = SettingsRegistry::locked_message( $key ) . ' ' . __( 'It is not imported.', 'voucher-captain' );
+				continue;
+			}
 			$value = self::legacy( $key, $entry, $value, $warnings );
 			if ( null === $value ) {
 				continue;
@@ -489,7 +494,8 @@ final class SettingsTransfer {
 	 * @return string[] Option names that changed.
 	 */
 	public static function apply( array $settings, string $via ): array {
-		$changes = self::diff( $settings );
+		// SET-VC-34: a locked setting is never stored, whatever the caller checked before.
+		$changes = array_diff_key( self::diff( $settings ), array_flip( SettingsRegistry::locked_keys( array_keys( $settings ) ) ) );
 		SettingsLog::with(
 			$via,
 			static function () use ( $changes ): void {
@@ -506,13 +512,25 @@ final class SettingsTransfer {
 
 	/**
 	 * Settings a reset changes: the exportable settings of a section (or of all sections) – a secret, a setting that
-	 * is never exported (e.g. "Remove all data") and database state are never reset.
+	 * is never exported (e.g. "Remove all data"), a setting locked on this site (SET-VC-34) and database state are
+	 * never reset.
 	 *
 	 * @param string|null $section Section id ('' = General), null = all.
 	 * @return string[]
 	 */
 	public static function resettable( ?string $section = null ): array {
-		return array_values( array_filter( self::exportable( $section ), static fn( string $key ) => SettingsRegistry::HIDDEN !== SettingsRegistry::get( $key )['section'] ) );
+		// SET-VC-34: a setting locked on this site is not reset either.
+		return array_values( array_filter( self::exportable( $section ), static fn( string $key ) => SettingsRegistry::HIDDEN !== SettingsRegistry::get( $key )['section'] && ! SettingsRegistry::locked( $key ) ) );
+	}
+
+	/**
+	 * SET-VC-34: settings a reset of the section would change if they were not locked on this site.
+	 *
+	 * @param string|null $section Section id ('' = General), null = all.
+	 * @return string[]
+	 */
+	public static function locked_resettable( ?string $section = null ): array {
+		return SettingsRegistry::locked_keys( array_filter( self::exportable( $section ), static fn( string $key ) => SettingsRegistry::HIDDEN !== SettingsRegistry::get( $key )['section'] ) );
 	}
 
 	/**

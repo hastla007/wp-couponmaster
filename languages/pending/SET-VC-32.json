@@ -1,0 +1,77 @@
+{
+	"Vouchers can only be bought in %1$s. Please switch the currency from %2$s to %1$s to buy a voucher.": {
+		"du": "Gutscheine können nur in %1$s gekauft werden. Bitte wechsle die Währung von %2$s auf %1$s, um einen Gutschein zu kaufen.",
+		"sie": "Gutscheine können nur in %1$s gekauft werden. Bitte wechseln Sie die Währung von %2$s auf %1$s, um einen Gutschein zu kaufen.",
+		"at": "Gutscheine können nur in %1$s gekauft werden. Bitte wechseln Sie die Währung von %2$s auf %1$s, um einen Gutschein zu kaufen."
+	},
+	"%s (supported: amounts paid in another currency are converted with the exchange rate of the sale).": {
+		"du": "%s (unterstützt: Beträge in einer anderen Währung werden mit dem Wechselkurs des Verkaufs umgerechnet).",
+		"sie": "%s (unterstützt: Beträge in einer anderen Währung werden mit dem Wechselkurs des Verkaufs umgerechnet).",
+		"at": "%s (unterstützt: Beträge in einer anderen Währung werden mit dem Wechselkurs des Verkaufs umgerechnet)."
+	},
+	"%s – not supported: voucher sales in another currency are held until an exchange rate is known (filter vcap_amount_to_base_currency).": {
+		"du": "%s – nicht unterstützt: Gutscheinverkäufe in einer anderen Währung werden angehalten, bis ein Wechselkurs bekannt ist (Filter vcap_amount_to_base_currency).",
+		"sie": "%s – nicht unterstützt: Gutscheinverkäufe in einer anderen Währung werden angehalten, bis ein Wechselkurs bekannt ist (Filter vcap_amount_to_base_currency).",
+		"at": "%s – nicht unterstützt: Gutscheinverkäufe in einer anderen Währung werden angehalten, bis ein Wechselkurs bekannt ist (Filter vcap_amount_to_base_currency)."
+	},
+	"None detected – the shop sells in one currency.": {
+		"du": "Keines erkannt – der Shop verkauft in einer Währung.",
+		"sie": "Keines erkannt – der Shop verkauft in einer Währung.",
+		"at": "Keines erkannt – der Shop verkauft in einer Währung."
+	},
+	"%s (shop base currency): every voucher value and balance is stored and redeemed in it.": {
+		"du": "%s (Basiswährung des Shops): Jeder Gutscheinwert und Restwert wird in ihr gespeichert und eingelöst.",
+		"sie": "%s (Basiswährung des Shops): Jeder Gutscheinwert und Restwert wird in ihr gespeichert und eingelöst.",
+		"at": "%s (Basiswährung des Shops): Jeder Gutscheinwert und Restwert wird in ihr gespeichert und eingelöst."
+	},
+	"Currency switcher": {
+		"du": "Währungsumschalter",
+		"sie": "Währungsumschalter",
+		"at": "Währungsumschalter"
+	},
+	"Leading currency of vouchers": {
+		"du": "Führungswährung der Gutscheine",
+		"sie": "Führungswährung der Gutscheine",
+		"at": "Führungswährung der Gutscheine"
+	},
+	"Amounts are limited to at most %1$s %2$s per voucher (fixed ceiling, can only be lowered).": {
+		"du": "Beträge sind auf höchstens %1$s %2$s je Gutschein begrenzt (feste Obergrenze, nur senkbar).",
+		"sie": "Beträge sind auf höchstens %1$s %2$s je Gutschein begrenzt (feste Obergrenze, nur senkbar).",
+		"at": "Beträge sind auf höchstens %1$s %2$s je Gutschein begrenzt (feste Obergrenze, nur senkbar)."
+	},
+	"The ceiling is the same number as in %3$s: at most %1$s %2$s per voucher (no exchange rate, can only be lowered).": {
+		"du": "Die Obergrenze ist dieselbe Zahl wie in %3$s: höchstens %1$s %2$s je Gutschein (kein Wechselkurs, nur senkbar).",
+		"sie": "Die Obergrenze ist dieselbe Zahl wie in %3$s: höchstens %1$s %2$s je Gutschein (kein Wechselkurs, nur senkbar).",
+		"at": "Die Obergrenze ist dieselbe Zahl wie in %3$s: höchstens %1$s %2$s je Gutschein (kein Wechselkurs, nur senkbar)."
+	},
+	"Your own maximum amount in %1$s applies (the fixed ceiling is set in %2$s; the plugin uses no exchange rate).": {
+		"du": "Dein eigener Höchstbetrag in %1$s gilt (die feste Obergrenze ist in %2$s festgelegt; das Plugin verwendet keinen Wechselkurs).",
+		"sie": "Ihr eigener Höchstbetrag in %1$s gilt (die feste Obergrenze ist in %2$s festgelegt; das Plugin verwendet keinen Wechselkurs).",
+		"at": "Ihr eigener Höchstbetrag in %1$s gilt (die feste Obergrenze ist in %2$s festgelegt; das Plugin verwendet keinen Wechselkurs)."
+	},
+	"The fixed ceiling is set in %2$s. For %1$s enter your own maximum amount under Integrations (API) → Automatic voucher commands; until then issuing and redeeming amounts are refused.": {
+		"du": "Die feste Obergrenze ist in %2$s festgelegt. Trage für %1$s unter Integrationen (API) → Automatische Gutschein-Befehle deinen eigenen Höchstbetrag ein; bis dahin werden Beträge beim Ausstellen und Einlösen abgelehnt.",
+		"sie": "Die feste Obergrenze ist in %2$s festgelegt. Tragen Sie für %1$s unter Integrationen (API) → Automatische Gutschein-Befehle Ihren eigenen Höchstbetrag ein; bis dahin werden Beträge beim Ausstellen und Einlösen abgelehnt.",
+		"at": "Die feste Obergrenze ist in %2$s festgelegt. Tragen Sie für %1$s unter Integrationen (API) → Automatische Gutschein-Befehle Ihren eigenen Höchstbetrag ein; bis dahin werden Beträge beim Ausstellen und Einlösen abgelehnt."
+	},
+	"Currencies": {
+		"du": "Währungen",
+		"sie": "Währungen",
+		"at": "Währungen"
+	},
+	"Multi-currency status": {
+		"du": "Mehrwährungsstatus",
+		"sie": "Mehrwährungsstatus",
+		"at": "Mehrwährungsstatus"
+	},
+	"Sell vouchers only in the shop currency": {
+		"du": "Gutscheine nur in der Shop-Währung verkaufen",
+		"sie": "Gutscheine nur in der Shop-Währung verkaufen",
+		"at": "Gutscheine nur in der Shop-Währung verkaufen"
+	},
+	"Voucher products cannot be added to the cart or checked out while the customer has another currency active (a notice asks to switch). Off = vouchers can be bought in every currency of the currency switcher.": {
+		"du": "Gutscheinprodukte können nicht in den Warenkorb gelegt oder bestellt werden, solange der Kunde eine andere Währung gewählt hat (ein Hinweis bittet um den Wechsel). Aus = Gutscheine können in jeder Währung des Währungsumschalters gekauft werden.",
+		"sie": "Gutscheinprodukte können nicht in den Warenkorb gelegt oder bestellt werden, solange der Kunde eine andere Währung gewählt hat (ein Hinweis bittet um den Wechsel). Aus = Gutscheine können in jeder Währung des Währungsumschalters gekauft werden.",
+		"at": "Gutscheinprodukte können nicht in den Warenkorb gelegt oder bestellt werden, solange der Kunde eine andere Währung gewählt hat (ein Hinweis bittet um den Wechsel). Aus = Gutscheine können in jeder Währung des Währungsumschalters gekauft werden."
+	}
+}

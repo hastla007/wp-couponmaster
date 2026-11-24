@@ -297,6 +297,9 @@ final class SettingsRegistry {
 		if ( isset( self::$flagged[ $key ] ) ) {
 			$field = self::mark_invalid( $field, self::$flagged[ $key ] );
 		}
+		if ( self::locked( $key ) ) {
+			$field = self::mark_locked( $field );
+		}
 		if ( 'number' === ( $field['type'] ?? '' ) ) {
 			$bounds = array_filter(
 				array(
@@ -308,6 +311,92 @@ final class SettingsRegistry {
 			$field['custom_attributes'] = $bounds + (array) ( $field['custom_attributes'] ?? array() );
 		}
 		return $field;
+	}
+
+	/**
+	 * SET-VC-34: whether a setting is locked on this site (e.g. set network-wide by the network administrator of a
+	 * multisite, which an add-on decides). A locked setting is shown read-only on the settings page, its save is ignored
+	 * (the stored value stays), and import, WP-CLI "settings set", reset and country profiles leave it alone.
+	 */
+	public static function locked( string $key ): bool {
+		if ( '' === $key ) {
+			return false;
+		}
+		/**
+		 * Whether a setting is locked on this site (shown read-only, never changed by the settings page, an import,
+		 * WP-CLI, a reset or a country profile). The core locks nothing; network-wide defaults and locks come from an
+		 * add-on.
+		 *
+		 * @since 1.3.0
+		 * @param bool   $locked Whether the setting is locked (default false).
+		 * @param string $option Option name.
+		 */
+		return true === (bool) apply_filters( 'vcap_setting_locked', false, $key );
+	}
+
+	/**
+	 * SET-VC-34: option names of the given ones that are locked (see locked()).
+	 *
+	 * @param string[] $keys Option names.
+	 * @return string[]
+	 */
+	public static function locked_keys( array $keys ): array {
+		return array_values( array_filter( array_map( 'strval', $keys ), array( self::class, 'locked' ) ) );
+	}
+
+	/** SET-VC-34: why a locked setting was not changed (names the option). */
+	public static function locked_message( string $key ): string {
+		/* translators: %s: option name */
+		return sprintf( __( '%s is set by the network administrator and cannot be changed on this site.', 'voucher-captain' ), $key );
+	}
+
+	/**
+	 * SET-VC-34: a locked field – disabled and read-only (a disabled field is not posted), the note "Set by the network
+	 * administrator." first in its visible description, and no option of the save (is_option false: WooCommerce skips
+	 * it, so the stored value stays; sanitize_locked() covers fields built without field()).
+	 *
+	 * @param array<string, mixed> $field Settings field.
+	 * @return array<string, mixed>
+	 */
+	private static function mark_locked( array $field ): array {
+		$field['custom_attributes'] = array(
+			'disabled'      => 'disabled',
+			'readonly'      => 'readonly',
+			'aria-readonly' => 'true',
+		) + (array) ( $field['custom_attributes'] ?? array() );
+		$field['is_option']         = false;
+		$field['vcap_locked']       = true;
+		$desc = trim( (string) ( $field['desc'] ?? '' ) );
+		if ( true === ( $field['desc_tip'] ?? null ) ) {
+			$field['desc_tip'] = '' !== $desc ? $desc : false;
+			$desc              = '';
+		}
+		$note          = '<em class="vcap-field-locked">' . esc_html__( 'Set by the network administrator.', 'voucher-captain' ) . '</em>';
+		$field['desc'] = 'checkbox' === ( $field['type'] ?? '' ) && '' !== $desc ? $desc . ' ' . $note : $note . ( '' !== $desc ? '<br>' . $desc : '' );
+		return $field;
+	}
+
+	/**
+	 * SET-VC-34: hooks the lock check for every registered setting while the "Vouchers" tab is saved (Settings::save()),
+	 * after every other sanitizer – so a locked field an add-on built without field() is not saved either.
+	 */
+	public static function hook_lock_checks(): void {
+		foreach ( array_keys( self::all() ) as $key ) {
+			add_filter( 'woocommerce_admin_settings_sanitize_option_' . $key, array( self::class, 'sanitize_locked' ), PHP_INT_MAX, 2 );
+		}
+	}
+
+	/**
+	 * WooCommerce filter "woocommerce_admin_settings_sanitize_option_{option}": null (WooCommerce keeps the stored
+	 * value) for a locked setting, else the value unchanged.
+	 *
+	 * @param mixed                $value  Sanitized value.
+	 * @param array<string, mixed> $option Settings field.
+	 * @return mixed
+	 */
+	public static function sanitize_locked( $value, $option = array() ) {
+		$key = is_array( $option ) ? (string) ( $option['id'] ?? '' ) : '';
+		return '' !== $key && self::locked( $key ) ? null : $value;
 	}
 
 	/**

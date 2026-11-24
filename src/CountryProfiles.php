@@ -319,7 +319,7 @@ final class CountryProfiles {
 			}
 			$valid   = SettingsTransfer::validate( $key, $value );
 			$current = SettingsTransfer::stored( $key );
-			$error   = is_wp_error( $valid ) ? wp_strip_all_tags( $valid->get_error_message() ) : '';
+			$error   = SettingsRegistry::locked( $key ) ? SettingsRegistry::locked_message( $key ) : ( is_wp_error( $valid ) ? wp_strip_all_tags( $valid->get_error_message() ) : '' ); // SET-VC-34: skipped.
 			// An unsaved validity rule is compared by the rule that applies (ProductConfig::default_expiry_rule()).
 			$compare = 'vcap_default_expiry_rule' === $key && '' === (string) $current ? ProductConfig::default_expiry_rule() : $current;
 			$changed = '' === $error && ! SettingsTransfer::same( $compare, $valid );
@@ -357,7 +357,7 @@ final class CountryProfiles {
 			}
 			$table   = self::rows_with( $row );
 			$valid   = SettingsTransfer::validate( Markets::EXPIRY_OPTION, $table );
-			$error   = is_wp_error( $valid ) ? wp_strip_all_tags( $valid->get_error_message() ) : '';
+			$error   = SettingsRegistry::locked( Markets::EXPIRY_OPTION ) ? SettingsRegistry::locked_message( Markets::EXPIRY_OPTION ) : ( is_wp_error( $valid ) ? wp_strip_all_tags( $valid->get_error_message() ) : '' );
 			$changed = '' === $error && ( null === $current || $current !== $row );
 
 			$items[ self::EXPIRY_ITEM ] = array(

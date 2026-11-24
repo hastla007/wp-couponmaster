@@ -1,0 +1,17 @@
+{
+	"%s is set by the network administrator and cannot be changed on this site.": {
+		"du": "%s ist vom Netzwerk-Administrator festgelegt und kann auf dieser Website nicht geändert werden.",
+		"sie": "%s ist vom Netzwerk-Administrator festgelegt und kann auf dieser Website nicht geändert werden.",
+		"at": "%s ist vom Netzwerk-Administrator festgelegt und kann auf dieser Website nicht geändert werden."
+	},
+	"Set by the network administrator.": {
+		"du": "Vom Netzwerk-Administrator festgelegt.",
+		"sie": "Vom Netzwerk-Administrator festgelegt.",
+		"at": "Vom Netzwerk-Administrator festgelegt."
+	},
+	"It is not imported.": {
+		"du": "Der Wert wird nicht importiert.",
+		"sie": "Der Wert wird nicht importiert.",
+		"at": "Der Wert wird nicht importiert."
+	}
+}

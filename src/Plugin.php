@@ -124,6 +124,7 @@ final class Plugin {
 		( new CouponLink( $this->settings ) )->register();
 		( new VoucherPurchaseRules( $this->settings ) )->register();
 		( new PaymentMethods() )->register(); // SET-VC-19: payment methods not offered for vouchers.
+		( new VoucherCurrency() )->register(); // SET-VC-32: multi-currency status, vouchers in the shop currency only.
 		( new FirstOrderCoupons() )->register();
 		( new CouponSkuRules() )->register();
 		$referrals = new Referrals( $this->settings, $this->store_credit );

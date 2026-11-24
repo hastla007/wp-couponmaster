@@ -249,6 +249,7 @@ with a public API contract, the contract starts with 1.1.0). Add-ons check the c
 | `vcap_sells_ticket_vouchers` | 1.2.0 | `src/Compat/PassCaptain/TicketContract.php` | – |
 | `vcap_send_expiry_reminder` | 1.1.0 | `src/Delivery.php` | – |
 | `vcap_setting_` | 1.0.0 | `src/Settings.php` | – |
+| `vcap_setting_locked` | 1.3.0 | `src/SettingsRegistry.php` | Whether a setting is locked on this site (shown read-only, never changed by the settings page, an import, WP-CLI, a reset or a country profile). The core locks nothing; network-wide defaults and locks come from an add-on. |
 | `vcap_settings_fields` | 1.0.0 | `src/Settings.php` | Fields of a section of the "Vouchers" settings tab (args: WooCommerce settings fields, section id – '' is "General"). Add-ons add fields to a core section or fill their own section from "vcap_settings_sections". |
 | `vcap_settings_hints` | 1.3.0 | `src/Admin/ProHints.php` | Hint lines for add-on functions (args: list of {id, section, title, text, link}). Text only; a line is dropped when its id, title or text is empty or its link is not https. |
 | `vcap_settings_partner_active` | 1.3.0 | `src/Settings.php` | Whether the settings of a partner plugin are shown (Settings → Vouchers → Integrations (API) → "Integration rules"). Args: bool, partner id ('review', 'affiliate', 'passcaptain', 'subscriptions'). |
@@ -289,3 +290,4 @@ with a public API contract, the contract starts with 1.1.0). Add-ons check the c
 | `vcap_voucher_tax_treatment` | 1.1.0 | `src/ProductConfig.php` | – |
 | `vcap_voucher_types` | 1.1.0 | `src/Voucher.php` | Extra voucher types of connectors and add-ons (arg: array of type key => label). Core types cannot be replaced; see API.md → Extension points. |
 | `vcap_vouchers_per_item` | 1.0.0 | `src/Issuer.php` | – |
+| `vcap_vouchers_shop_currency_only` | 1.3.0 | `src/VoucherCurrency.php` | Whether voucher products can be bought only while the shop base currency is active. Default: the setting "Sell vouchers only in the shop currency" (off). The filter wins over the setting. |
