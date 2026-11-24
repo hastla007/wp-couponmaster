@@ -967,6 +967,8 @@ final class Issuer {
 				$this->coupons->set_coupon_enabled( $voucher, false );
 			}
 		}
+		// SET-VC-13: the sequential voucher number (when switched on) – only now, so an undone slot never uses one.
+		VoucherNumber::assign( $voucher );
 		// M12-29: the VAT treatment at issue is kept with the "issued" entry (journal column, never changed later).
 		$treatment = ProductConfig::tax_treatment( $voucher );
 		ProductConfig::remember_sold( $voucher, true, $treatment );
@@ -1116,6 +1118,8 @@ final class Issuer {
 			}
 			return $voucher;
 		}
+		// SET-VC-13: the sequential voucher number (when switched on), also for imports and admin issues.
+		VoucherNumber::assign( $voucher );
 		// M12-42/M12-29: whether it was sold and its VAT treatment at issue, kept with the "issued" entry.
 		$treatment = ProductConfig::tax_treatment( $voucher );
 		ProductConfig::remember_sold( $voucher, $sold, $treatment );

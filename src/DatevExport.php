@@ -79,7 +79,7 @@ final class DatevExport {
 	/**
 	 * Settings of the export.
 	 *
-	 * @return array{consultant:string, client:string, fy_start:string, length:int, liability:string, clearing:string, income:string}
+	 * @return array{consultant:string, client:string, fy_start:string, length:int, voucher_number:bool, liability:string, clearing:string, income:string}
 	 */
 	public static function config(): array {
 		$digits = static fn( string $option ): string => preg_replace( '/\D/', '', (string) get_option( $option, '' ) ) ?? '';
@@ -89,6 +89,8 @@ final class DatevExport {
 			'client'     => $digits( self::OPTION_CLIENT ),
 			'fy_start'   => AccountingExport::fy_start(),
 			'length'     => max( 4, min( 9, (int) get_option( self::OPTION_LENGTH, SettingsRegistry::default( self::OPTION_LENGTH ) ) ) ),
+			// SET-VC-13: voucher number in "Belegfeld 2" (read once per export).
+			'voucher_number' => VoucherNumber::enabled(),
 		) + AccountingExport::accounts();
 	}
 
@@ -97,6 +99,9 @@ final class DatevExport {
 		$c = self::config();
 		return '' !== $c['consultant'] && '' !== $c['client'] && '' !== $c['liability'] && '' !== $c['clearing'] && '' !== $c['income'];
 	}
+
+	/** Length of "Belegfeld 2" in the DATEV format (SET-VC-13: the voucher number, cut to it). */
+	public const DOC2_LENGTH = 12;
 
 	/** Start of the financial year that contains $date (Y-m-d) as YYYYMMDD. */
 	public static function financial_year_start( string $date, string $fy_start ): string {
@@ -121,6 +126,9 @@ final class DatevExport {
 		$labels  = VoucherRepository::event_labels();
 		$ts      = strtotime( (string) $r['created_at'] . ' UTC' );
 		$doc     = (int) ( $r['order_id'] ?? 0 ) > 0 ? Format::order_number( $r['order_id'] ) : (string) $r['code'];
+		// SET-VC-13: "Belegfeld 2" (free until now, 12 characters in DATEV) holds the voucher number – only while the
+		// numbers are switched on (the file stays exactly as before otherwise).
+		$doc2    = ( $config['voucher_number'] ?? VoucherNumber::enabled() ) ? (string) ( $r['voucher_number'] ?? '' ) : '';
 		$text    = ( $labels[ (string) $r['event'] ] ?? (string) $r['event'] ) . ' ' . Mask::code( (string) $r['code'] );
 		$decimal = API\V1\RedemptionService::decimals( $currency );
 		return array(
@@ -135,7 +143,7 @@ final class DatevExport {
 			'',
 			false === $ts ? '' : wp_date( 'dm', $ts ),
 			self::field( preg_replace( '/[^A-Za-z0-9$&%*+\-\/]/', '', $doc ) ?? '', 36 ),
-			'',
+			self::field( preg_replace( '/[^A-Za-z0-9$&%*+\-\/]/', '', $doc2 ) ?? '', self::DOC2_LENGTH ),
 			'',
 			self::field( $text, 60 ),
 		);

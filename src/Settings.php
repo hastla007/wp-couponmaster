@@ -126,6 +126,8 @@ final class Settings {
 		( new Admin\CountryProfilesAdmin() )->register();
 		// SET-VC-11: links of "Issuer and legal texts" only http(s), address and legal text as plain text.
 		LegalInfo::register_sanitizers();
+		// SET-VC-13: pattern and prefix of the voucher numbers are kept only when valid.
+		VoucherNumber::register_sanitizers();
 		// M12-84: "30, 7, 1" is stored normalised (largest first), anything else as 0 (no reminders).
 		add_filter(
 			'woocommerce_admin_settings_sanitize_option_vcap_expiry_reminder_days',
@@ -134,6 +136,11 @@ final class Settings {
 				return $days ? implode( ', ', $days ) : '0';
 			}
 		);
+	}
+
+	/** SET-VC-13: the next voucher number for the help text ('' while the schema has no number column yet). */
+	private static function voucher_number_preview(): string {
+		return Install::voucher_number_ready() ? VoucherNumber::preview() : VoucherNumber::format( 1, VoucherNumber::year_of( null ), VoucherNumber::config() );
 	}
 
 	/**
@@ -922,6 +929,7 @@ final class Settings {
 	/** Blocks of general_fields() shown on their own section (other blocks stay on "General"). */
 	private const GENERAL_BLOCKS = array(
 		'vcap_codes'    => 'codes',
+		'vcap_voucher_numbers' => 'codes',
 		'vcap_redeem'         => 'redemption',
 		'vcap_redeem_windows' => 'redemption',
 		'vcap_refund_rules'   => 'redemption',
@@ -1238,6 +1246,64 @@ final class Settings {
 				)
 			),
 			array( 'type' => 'sectionend', 'id' => 'vcap_codes' ),
+
+			// SET-VC-13: sequential voucher number in addition to the random code (off by default, E9 a).
+			array(
+				'type'  => 'title',
+				'title' => __( 'Voucher numbers', 'voucher-captain' ),
+				'desc'  => __( 'A readable, sequential number in addition to the random code, e.g. for bookkeeping and the till. Given once to every new voucher (orders, issued by hand, imported) without gaps, per site; existing vouchers keep having none. Shown as {voucher_number} in PDFs and emails, in the voucher list and the redemption journal, and in "Belegfeld 2" of the DATEV export.', 'voucher-captain' ),
+				'id'    => 'vcap_voucher_numbers',
+			),
+			SettingsRegistry::field(
+				'vcap_voucher_number_enabled',
+				array(
+					'title' => __( 'Voucher numbers', 'voucher-captain' ),
+					'type'  => 'checkbox',
+					'desc'  => __( 'Give new vouchers a sequential voucher number. Whether numbered vouchers are required in your country has not been legally checked.', 'voucher-captain' ),
+				)
+			),
+			SettingsRegistry::field(
+				'vcap_voucher_number_pattern',
+				array(
+					'title'             => __( 'Pattern', 'voucher-captain' ),
+					'type'              => 'text',
+					/* translators: %s: example of the next voucher number */
+					'desc'              => sprintf( __( '{number} is the counter, {year} the year of issue, {prefix} the prefix (put in front when missing). Letters, digits and . _ - / #, up to 40 characters. With a yearly restart the year is put in front when the pattern has no {year}. Next number: %s', 'voucher-captain' ), self::voucher_number_preview() ),
+					'custom_attributes' => array( 'maxlength' => VoucherNumber::PATTERN_LENGTH ),
+				)
+			),
+			SettingsRegistry::field(
+				'vcap_voucher_number_prefix',
+				array(
+					'title'             => __( 'Prefix', 'voucher-captain' ),
+					'type'              => 'text',
+					'desc_tip'          => __( 'Optional, e.g. "GS-". Letters, digits and . _ - / #, up to 20 characters.', 'voucher-captain' ),
+					'custom_attributes' => array( 'maxlength' => VoucherNumber::PREFIX_LENGTH, 'pattern' => '[A-Za-z0-9._\\-\\/#]*' ),
+				)
+			),
+			SettingsRegistry::field(
+				'vcap_voucher_number_digits',
+				array(
+					'title'             => __( 'Digits', 'voucher-captain' ),
+					'type'              => 'number',
+					'css'               => 'width:70px',
+					'desc_tip'          => __( 'Minimum digits of {number}, filled with leading zeros (5 = 00042).', 'voucher-captain' ),
+					'custom_attributes' => array( 'step' => 1 ),
+				)
+			),
+			SettingsRegistry::field(
+				'vcap_voucher_number_reset',
+				array(
+					'title'    => __( 'Start again at 1', 'voucher-captain' ),
+					'type'     => 'select',
+					'options'  => array(
+						'yearly' => __( 'Every year (1 January, site time zone)', 'voucher-captain' ),
+						'never'  => __( 'Never', 'voucher-captain' ),
+					),
+					'desc_tip' => __( 'Numbers given are never changed or reused; changing this only affects new vouchers.', 'voucher-captain' ),
+				)
+			),
+			array( 'type' => 'sectionend', 'id' => 'vcap_voucher_numbers' ),
 
 			array( 'type' => 'title', 'title' => __( 'Redemption', 'voucher-captain' ), 'id' => 'vcap_redeem' ),
 			SettingsRegistry::field(

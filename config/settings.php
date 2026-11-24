@@ -83,6 +83,12 @@ $vcap_settings = array(
 	'vcap_code_charset'              => array( 'type' => 'select', 'default' => 'alnum_upper', 'choices' => array( 'alnum_upper', 'alpha_upper', 'numeric', 'alnum' ), 'section' => 'codes' ),
 	'vcap_code_separator'            => array( 'default' => '-', 'section' => 'codes' ),
 	'vcap_code_order_ref'            => array( 'type' => 'bool', 'default' => 'no', 'section' => 'codes' ),
+	/* ---- Codes: sequential voucher number (SET-VC-13, E9 a: off by default; filter vcap_voucher_number_enabled wins) ---- */
+	'vcap_voucher_number_enabled'    => array( 'type' => 'bool', 'default' => 'no', 'section' => 'codes', 'legal' => true ),
+	'vcap_voucher_number_pattern'    => array( 'default' => '{year}-{number}', 'section' => 'codes' ),
+	'vcap_voucher_number_prefix'     => array( 'section' => 'codes' ),
+	'vcap_voucher_number_digits'     => array( 'type' => 'int', 'default' => 5, 'min' => 1, 'max' => 12, 'section' => 'codes' ),
+	'vcap_voucher_number_reset'      => array( 'type' => 'select', 'default' => 'yearly', 'choices' => array( 'yearly', 'never' ), 'section' => 'codes' ),
 
 	/* ---- Redemption & balance ---- */
 	'vcap_redeem_page_id'            => array( 'type' => 'post', 'section' => 'redemption', 'export' => false ),
@@ -337,6 +343,8 @@ return array(
 		// SET-VC-14/15/16: automatic backups of the settings and the change log (never autoloaded).
 		'vcap_settings_backups',
 		'vcap_settings_log',
+		// SET-VC-13: counter of the sequential voucher numbers (restart "never"; per year: prefix below).
+		'vcap_voucher_number_seq',
 	),
 	'internal_prefixes' => array(
 		'vcap_cmd_count_',
@@ -352,5 +360,6 @@ return array(
 		'vcap_pin_',
 		'vcap_job_',
 		'vcap_rl_',
+		'vcap_voucher_number_seq_',
 	),
 );

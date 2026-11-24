@@ -716,6 +716,37 @@ and emails stay unchanged. Translation: WPML via `wpml-config.xml` (admin-texts)
 Accessors: `LegalInfo::issuer()`, `issuer_name()`, `issuer_address()`, `issuer_contact()`, `legal_text()`,
 `terms_url()`, `privacy_url()`, `withdrawal_url()`, `placeholders()`.
 
+### Sequential voucher number (SET-VC-13)
+
+`VCAP\VoucherNumber` – block "Voucher numbers" in *Settings → Vouchers → Codes*, **off by default** (owner decision E9,
+recommendation a: free core, off from the factory; whether numbered vouchers are required in a country is not legally
+checked). A readable number in addition to the random code, e.g. `GS-2026-00042`. Settings (register, section Codes):
+`vcap_voucher_number_enabled` (bool, `no`, `legal` = true), `vcap_voucher_number_pattern` (`{year}-{number}`; tokens
+`{number}` (required), `{year}` (year of issue, site time zone), `{prefix}`; letters, digits and `. _ - / #`, up to 40
+characters – checked on the page and on import/WP-CLI), `vcap_voucher_number_prefix` (`''`, put in front when the
+pattern has no `{prefix}`), `vcap_voucher_number_digits` (5, 1–12, leading zeros), `vcap_voucher_number_reset`
+(`yearly` | `never`; with `yearly` a pattern without `{year}` gets the year in front).
+
+- **Assignment:** every new voucher that is kept – orders (`Issuer::create_voucher()`, after its row and WooCommerce
+  coupon exist), `issue_standalone()` (admin "Issue voucher", card import, store credit to card, connectors) – gets the
+  next number of its site; store credit accounts get none, existing vouchers keep having none. Filter
+  `vcap_voucher_number_enabled` (bool) wins over the setting; `vcap_voucher_number` (`$number`, `$sequence`, `$year`,
+  `Voucher`) may change the finished number (keep it unique, '' = no number).
+- **Never twice, no gaps:** the counter is one options row per period (`vcap_voucher_number_seq` or
+  `vcap_voucher_number_seq_{year}`, internal state, never exported or reset), incremented with a single
+  `UPDATE … SET option_value = LAST_INSERT_ID(option_value + 1)` and read back with `SELECT LAST_INSERT_ID()` on the
+  same connection – the row lock serialises concurrent orders. The increment and the write onto the voucher
+  (`UPDATE … SET voucher_number = … WHERE id = … AND voucher_number = ''`) run in one transaction; if the write fails the
+  increment is rolled back. (A gap remains possible only if `wp_options` is not InnoDB.)
+- **Storage:** column `voucher_number` of the voucher table (schema 1.9.0, indexed), property `Voucher::$voucher_number`.
+  `Voucher::to_row()` never writes it (saving a voucher cannot change a number); before the schema step nothing is
+  assigned (`Install::voucher_number_ready()`).
+- **Output:** placeholder `{voucher_number}` (PDF templates, emails; '' without a number), column "Voucher no." in the
+  voucher list (search finds the exact number) and – only while switched on – in the redemption journal (page and CSV,
+  after "Code") and "Belegfeld 2" of the DATEV export (DATEV length 12, longer numbers are cut; "Belegfeld 1" keeps the
+  order number or code). Switched off, journal CSV and DATEV file are byte-identical to before.
+- Helpers: `VoucherNumber::enabled()`, `config()`, `format( $sequence, $year, $config )`, `preview()`, `assign( $voucher )`.
+
 ### Country profiles (SET-VC-02)
 
 `VCAP\CountryProfiles` reads `config/country-profiles.php` (filter `vcap_country_profiles`). A profile only suggests

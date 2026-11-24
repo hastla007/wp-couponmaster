@@ -344,6 +344,58 @@ foreach ( $vc11_keep as $vc11_opt => $vc11_val ) {
 	false === $vc11_val ? delete_option( $vc11_opt ) : update_option( $vc11_opt, $vc11_val );
 }
 
+// SET-VC-13: sequential voucher numbers with the real database – schema 1.9.0 column, numbers for issue_standalone()
+// (admin issue, import), and no number twice while a second connection increments the same counter in between.
+$vc13_keep = array();
+foreach ( array( 'vcap_voucher_number_enabled', 'vcap_voucher_number_prefix', 'vcap_voucher_number_reset' ) as $vc13_opt ) {
+	$vc13_keep[ $vc13_opt ] = get_option( $vc13_opt, false );
+}
+vcap_inst_assert( VCAP\Install::voucher_number_ready() && (bool) $wpdb->get_var( $wpdb->prepare( 'SHOW INDEX FROM %i WHERE Key_name = %s', $tables['vouchers'], 'voucher_number' ) ), 'SET-VC-13: schema 1.9.0 has the voucher column voucher_number with its index' );
+$vc13_off = vcap()->issuer->issue_standalone( array( 'amount' => 10, 'send' => false, 'source' => 'vc13-test' ) );
+update_option( 'vcap_voucher_number_enabled', 'yes' );
+update_option( 'vcap_voucher_number_prefix', 'IT' . wp_rand( 100, 999 ) . '-' );
+update_option( 'vcap_voucher_number_reset', 'never' );
+$vc13_vouchers = array();
+for ( $vc13_i = 0; $vc13_i < 3; $vc13_i++ ) {
+	$vc13_vouchers[] = vcap()->issuer->issue_standalone( array( 'amount' => 10, 'send' => false, 'source' => 'vc13-test' ) );
+}
+$vc13_numbers = array_map( static fn( $v ) => $v instanceof VCAP\Voucher ? $v->voucher_number : '', $vc13_vouchers );
+$vc13_stored  = array_map( static fn( $v ) => $v instanceof VCAP\Voucher ? (string) vcap()->vouchers->get( $v->id )->voucher_number : '', $vc13_vouchers );
+$vc13_seq     = array_map( static fn( $n ) => (int) substr( (string) strrchr( $n, '-' ), 1 ), $vc13_numbers );
+vcap_inst_assert(
+	$vc13_off instanceof VCAP\Voucher && '' === vcap()->vouchers->get( $vc13_off->id )->voucher_number
+		&& $vc13_numbers === $vc13_stored && 3 === count( array_unique( array_filter( $vc13_numbers ) ) )
+		&& $vc13_seq[1] === $vc13_seq[0] + 1 && $vc13_seq[2] === $vc13_seq[1] + 1,
+	'SET-VC-13: switched off issue_standalone() gives no number; switched on each voucher gets the next number of the site, stored on the voucher'
+);
+// A second database connection increments the same counter between our vouchers (another PHP request).
+$vc13_host = explode( ':', DB_HOST );
+$vc13_conn = mysqli_connect( $vc13_host[0], DB_USER, DB_PASSWORD, DB_NAME, isset( $vc13_host[1] ) && is_numeric( $vc13_host[1] ) ? (int) $vc13_host[1] : 3306 );
+$vc13_seen = $vc13_numbers;
+$vc13_peer = array();
+for ( $vc13_i = 0; $vc13_i < 5; $vc13_i++ ) {
+	mysqli_query( $vc13_conn, "UPDATE {$wpdb->options} SET option_value = LAST_INSERT_ID(CAST(option_value AS UNSIGNED) + 1) WHERE option_name = '" . VCAP\VoucherNumber::SEQUENCE_OPTION . "'" );
+	$vc13_peer[] = (int) mysqli_fetch_row( mysqli_query( $vc13_conn, 'SELECT LAST_INSERT_ID()' ) )[0];
+	$vc13_v      = vcap()->issuer->issue_standalone( array( 'amount' => 10, 'send' => false, 'source' => 'vc13-test' ) );
+	$vc13_seen[] = $vc13_v instanceof VCAP\Voucher ? $vc13_v->voucher_number : '';
+	$vc13_vouchers[] = $vc13_v;
+}
+mysqli_close( $vc13_conn );
+$vc13_own = array_map( static fn( $n ) => (int) substr( (string) strrchr( $n, '-' ), 1 ), array_slice( $vc13_seen, 3 ) );
+vcap_inst_assert(
+	count( $vc13_seen ) === count( array_unique( array_filter( $vc13_seen ) ) ) && array() === array_intersect( $vc13_own, $vc13_peer ),
+	'SET-VC-13: with a second connection taking counter values in between, no voucher number is given twice'
+);
+foreach ( array_merge( array( $vc13_off ), $vc13_vouchers ) as $vc13_v ) {
+	if ( $vc13_v instanceof VCAP\Voucher ) {
+		$vc13_v->coupon_id && wp_delete_post( $vc13_v->coupon_id, true );
+		vcap()->vouchers->delete( $vc13_v->id );
+	}
+}
+foreach ( $vc13_keep as $vc13_opt => $vc13_val ) {
+	false === $vc13_val ? delete_option( $vc13_opt ) : update_option( $vc13_opt, $vc13_val );
+}
+
 // A voucher coupon without its voucher (row deleted, data removed) is never redeemed as an ordinary coupon.
 $u_refused = 0;
 try {

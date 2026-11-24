@@ -31,7 +31,7 @@ if ( version_compare( PHP_VERSION, '8.5', '<' ) ) {
 }
 
 define( 'VCAP_VERSION', '1.3.0' );
-define( 'VCAP_DB_VERSION', '1.8.0' );
+define( 'VCAP_DB_VERSION', '1.9.0' );
 /*
  * Version of the public extension contract (hooks, vcap()->api_v1, vcap()->redemptions, REST vcap/v1,
  * VCAP\Contracts\*) – independent of the plugin version. Major = API generation (1 = v1), minor rises with every

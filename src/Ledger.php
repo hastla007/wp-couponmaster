@@ -337,6 +337,8 @@ final class Ledger {
 		$value_vouchers = self::VALUE_VOUCHERS;
 		// R6: till/branch and receipt number of counter bookings (columns of schema 1.8.0; '' before).
 		$till = Install::event_till_ready() ? 'e.till, e.receipt' : "'' AS till, '' AS receipt";
+		// SET-VC-13: the sequential voucher number (column of schema 1.9.0; '' before).
+		$till .= Install::voucher_number_ready() ? ', v.voucher_number' : ", '' AS voucher_number";
 		// M12-29: the voucher columns for its VAT treatment and the "issued" entry that holds the treatment at issue.
 		return $wpdb->get_results( $wpdb->prepare( "SELECT e.id, e.created_at, e.event, e.amount, e.balance_after, e.order_id, e.note, {$till}, v.code, v.type, v.currency, v.id AS voucher_id, v.product_id, v.variation_id, v.order_id AS voucher_order_id, v.order_item_id, v.usage_mode, v.discount_type, v.initial_amount, ( SELECT i.note FROM {$tables['events']} i WHERE i.voucher_id = v.id AND i.event = 'issued' ORDER BY i.id LIMIT 1 ) AS issued_note FROM {$tables['events']} e INNER JOIN {$tables['vouchers']} v ON v.id = e.voucher_id WHERE e.id > %d AND e.id <= %d AND e.created_at BETWEEN %s AND %s AND e.event IN ({$events}) AND e.amount IS NOT NULL AND {$value_vouchers} ORDER BY e.id LIMIT %d", max( $lo - 1, $after_id, 0 ), $hi, $start, $end, max( 1, $limit ) ), ARRAY_A ) ?: array(); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 	}
@@ -392,10 +394,11 @@ final class Ledger {
 	 */
 	public function journal_export( string $from, string $to, int $batch = 2000 ): \Generator {
 		$accounts = AccountingExport::journal_accounts(); // SET-VC-20: account columns only when switched on.
-		yield self::journal_header( $accounts );
+		$number   = VoucherNumber::enabled(); // SET-VC-13: voucher number column only when switched on.
+		yield self::journal_header( $accounts, $number );
 		$written = 0;
 		foreach ( $this->journal_all( $from, $to, $batch ) as $row ) {
-			yield self::journal_line( $row, $accounts );
+			yield self::journal_line( $row, $accounts, $number );
 			++$written;
 		}
 		yield Csv::end_row( $written );
@@ -573,28 +576,36 @@ final class Ledger {
 	}
 
 	/**
-	 * Column headers of the journal CSV; with $accounts (SET-VC-20) plus "Debit account" and "Credit account".
+	 * Column headers of the journal CSV; with $accounts (SET-VC-20) plus "Debit account" and "Credit account"; with
+	 * voucher numbers switched on (SET-VC-13) plus "Voucher no." after "Code".
 	 *
 	 * @param array{liability:string, clearing:string, income:string}|null $accounts AccountingExport::journal_accounts().
+	 * @param bool|null                                                    $number   Voucher number column (null: VoucherNumber::enabled()).
 	 */
-	public static function journal_header( ?array $accounts = null ): array {
-		$columns = array( __( 'Date', 'voucher-captain' ), __( 'Code', 'voucher-captain' ), __( 'Type', 'voucher-captain' ), __( 'Currency', 'voucher-captain' ), __( 'Booking', 'voucher-captain' ), __( 'Amount', 'voucher-captain' ), __( 'Balance after', 'voucher-captain' ), __( 'Order number', 'voucher-captain' ), __( 'Order ID', 'voucher-captain' ), __( 'Till / branch', 'voucher-captain' ), __( 'Receipt no.', 'voucher-captain' ), __( 'Note', 'voucher-captain' ), __( 'VAT treatment', 'voucher-captain' ), __( 'Order amount', 'voucher-captain' ) );
+	public static function journal_header( ?array $accounts = null, ?bool $number = null ): array {
+		$numbers = ( $number ?? VoucherNumber::enabled() ) ? array( __( 'Voucher no.', 'voucher-captain' ) ) : array();
+		$columns = array_merge( array( __( 'Date', 'voucher-captain' ), __( 'Code', 'voucher-captain' ) ), $numbers, array( __( 'Type', 'voucher-captain' ), __( 'Currency', 'voucher-captain' ), __( 'Booking', 'voucher-captain' ), __( 'Amount', 'voucher-captain' ), __( 'Balance after', 'voucher-captain' ), __( 'Order number', 'voucher-captain' ), __( 'Order ID', 'voucher-captain' ), __( 'Till / branch', 'voucher-captain' ), __( 'Receipt no.', 'voucher-captain' ), __( 'Note', 'voucher-captain' ), __( 'VAT treatment', 'voucher-captain' ), __( 'Order amount', 'voucher-captain' ) ) );
 		return null === $accounts ? $columns : array_merge( $columns, AccountingExport::journal_columns() );
 	}
 
 	/**
-	 * One CSV line of a journal booking; with $accounts (SET-VC-20) plus its debit and credit account.
+	 * One CSV line of a journal booking; with $accounts (SET-VC-20) plus its debit and credit account; with voucher
+	 * numbers switched on (SET-VC-13) plus the voucher number after the code.
 	 *
 	 * @param array<string, mixed>                                        $r        Journal row.
 	 * @param array{liability:string, clearing:string, income:string}|null $accounts AccountingExport::journal_accounts().
+	 * @param bool|null                                                    $number   Voucher number column (null: VoucherNumber::enabled()).
 	 */
-	public static function journal_line( array $r, ?array $accounts = null ): array {
+	public static function journal_line( array $r, ?array $accounts = null, ?bool $number = null ): array {
 		static $labels = null, $types = null;
 		$labels   = $labels ?? VoucherRepository::event_labels();
 		$types    = $types ?? Voucher::types();
 		$decimals = API\V1\RedemptionService::decimals( (string) ( $r['currency'] ?: get_option( 'woocommerce_currency' ) ) );
 		$total    = Format::order_total( $r['order_id'] );
 		$line     = array( Csv::date( $r['created_at'] ), $r['code'], $types[ $r['type'] ] ?? $r['type'], $r['currency'], $labels[ $r['event'] ] ?? $r['event'], Csv::number( self::signed_amount( (string) $r['event'], $r['amount'] ), $decimals ), null === $r['balance_after'] ? '' : Csv::number( (float) $r['balance_after'], $decimals ), Format::order_number( $r['order_id'] ), $r['order_id'] ?: '', (string) ( $r['till'] ?? '' ), (string) ( $r['receipt'] ?? '' ), Note::render( (string) $r['note'] ), ProductConfig::treatment_label( self::row_treatment( $r ) ), null === $total ? '' : Csv::number( $total[0], API\V1\RedemptionService::decimals( $total[1] ) ) );
+		if ( $number ?? VoucherNumber::enabled() ) {
+			array_splice( $line, 2, 0, array( (string) ( $r['voucher_number'] ?? '' ) ) );
+		}
 		return null === $accounts ? $line : array_merge( $line, AccountingExport::journal_cells( $r, $accounts ) );
 	}
 
@@ -641,9 +652,10 @@ final class Ledger {
 	 */
 	public static function journal_csv( iterable $journal ): array {
 		$accounts = AccountingExport::journal_accounts();
-		$rows     = array( self::journal_header( $accounts ) );
+		$number   = VoucherNumber::enabled();
+		$rows     = array( self::journal_header( $accounts, $number ) );
 		foreach ( $journal as $r ) {
-			$rows[] = self::journal_line( $r, $accounts );
+			$rows[] = self::journal_line( $r, $accounts, $number );
 		}
 		return $rows;
 	}

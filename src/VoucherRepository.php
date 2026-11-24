@@ -500,6 +500,10 @@ final class VoucherRepository {
 					$parts[] = "REPLACE(REPLACE(REPLACE(code, '-', ''), '_', ''), '.', '') LIKE %s";
 					$vals[]  = '%' . $wpdb->esc_like( $terms['tail'] );
 				}
+				if ( Install::voucher_number_ready() ) {
+					$parts[] = 'voucher_number = %s'; // SET-VC-13: the sequential voucher number, exactly.
+					$vals[]  = $search;
+				}
 				if ( $terms['order_ids'] ) {
 					$parts[] = 'order_id IN (' . implode( ',', array_map( 'intval', $terms['order_ids'] ) ) . ')';
 				}

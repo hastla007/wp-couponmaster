@@ -55,6 +55,11 @@ final class Voucher {
 	public ?string $last_checkin_at = null;
 	public string $created_at    = '';
 	public string $updated_at    = '';
+	/**
+	 * SET-VC-13: sequential voucher number ('' = none). Read from the row, written only by VoucherNumber::assign()
+	 * (never by to_row(), so saving a voucher cannot overwrite it, and works before the column exists).
+	 */
+	public string $voucher_number = '';
 
 	public static function statuses(): array {
 		return array(
@@ -139,7 +144,7 @@ final class Voucher {
 
 	public function to_row(): array {
 		$row = get_object_vars( $this );
-		unset( $row['id'] );
+		unset( $row['id'], $row['voucher_number'] );
 		$row['fields'] = wp_json_encode( $this->fields );
 		$row['transferable'] = $this->transferable ? 1 : 0;
 		return $row;

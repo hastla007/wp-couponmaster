@@ -74,6 +74,7 @@ final class Install {
 		'1.6.0' => 'migrate_1_6_0',
 		'1.7.0' => 'migrate_1_7_0',
 		'1.8.0' => 'migrate_1_8_0',
+		'1.9.0' => 'migrate_1_9_0',
 	);
 	/**
 	 * Schema version of the counter tables (B12 promotion use counters, B16 rate limit counters and scanner
@@ -137,6 +138,31 @@ final class Install {
 			self::$event_till[ $site ] = (bool) $wpdb->get_var( $wpdb->prepare( 'SHOW COLUMNS FROM %i LIKE %s', self::tables()['events'], 'till' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		}
 		return self::$event_till[ $site ];
+	}
+
+	/** Schema version that added the voucher column "voucher_number" (SET-VC-13, sequential voucher number). */
+	public const VOUCHER_NUMBER_VERSION = '1.9.0';
+	/** @var array<int, bool> Whether the voucher table of a site has its "voucher_number" column. */
+	private static array $voucher_number = array();
+
+	/**
+	 * Whether the voucher table has the column "voucher_number" (SET-VC-13): the schema of VOUCHER_NUMBER_VERSION
+	 * is installed, or its tables were created by an upgrade whose data migrations still run – same rules as
+	 * event_till_ready(). Until then no number is assigned or read.
+	 */
+	public static function voucher_number_ready(): bool {
+		$installed = version_compare( (string) get_option( self::OPTION_DB_VERSION, '0' ), self::VOUCHER_NUMBER_VERSION, '>=' );
+		$step      = (string) get_option( self::SCHEMA_STEP_OPTION, '' );
+		$to        = (string) substr( (string) strrchr( $step, '>' ), 1 );
+		if ( ! $installed && ( '' === $to || version_compare( $to, self::VOUCHER_NUMBER_VERSION, '<' ) ) ) {
+			return false;
+		}
+		$site = function_exists( 'get_current_blog_id' ) ? get_current_blog_id() : 0;
+		if ( ! isset( self::$voucher_number[ $site ] ) ) {
+			global $wpdb;
+			self::$voucher_number[ $site ] = (bool) $wpdb->get_var( $wpdb->prepare( 'SHOW COLUMNS FROM %i LIKE %s', self::tables()['vouchers'], 'voucher_number' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		}
+		return self::$voucher_number[ $site ];
 	}
 
 	/**
@@ -1123,6 +1149,15 @@ final class Install {
 	}
 
 	/**
+	 * 1.9.0 (SET-VC-13): the voucher column "voucher_number" (created by the schema step, empty for every existing
+	 * voucher – numbers are given to new vouchers only, once the feature is switched on). No data to move.
+	 */
+	private static function migrate_1_9_0(): bool {
+		self::$voucher_number = array();
+		return true;
+	}
+
+	/**
 	 * Fills till/receipt of counter bookings after EVENT_TILL_CURSOR from their notes (Counter::parse_note()), in
 	 * batches of 1000 rows, until the newest row or the time budget.
 	 *
@@ -1308,6 +1343,7 @@ final class Install {
 					checkins int(11) unsigned NOT NULL DEFAULT 0,
 					last_checkin_at datetime NULL DEFAULT NULL,
 					delivered_roles varchar(30) NOT NULL DEFAULT '',
+					voucher_number varchar(64) NOT NULL DEFAULT '',
 					created_at datetime NOT NULL,
 					updated_at datetime NOT NULL,
 					PRIMARY KEY  (id),
@@ -1323,7 +1359,8 @@ final class Install {
 					KEY product_id (product_id),
 					KEY recipient_email (recipient_email(100)),
 					KEY buyer_email (buyer_email(100)),
-					KEY user_type (user_id,type)
+					KEY user_type (user_id,type),
+					KEY voucher_number (voucher_number)
 				) ENGINE=InnoDB $collate;",
 			'events' => "CREATE TABLE {$t['events']} (
 					id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -1424,8 +1461,9 @@ final class Install {
 	}
 
 	public static function create_tables(): void {
-		self::$event_source = array();
-		self::$event_till   = array();
+		self::$event_source   = array();
+		self::$event_till     = array();
+		self::$voucher_number = array();
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 		foreach ( self::schema() as $sql ) {
 			dbDelta( $sql );

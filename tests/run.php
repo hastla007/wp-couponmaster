@@ -1755,11 +1755,11 @@ $GLOBALS['wpdb']->answers = array(
 	'/^SHOW TABLES LIKE/'           => static fn( $q ) => preg_match( "/LIKE '([a-z_0-9\\\\]+)'/", $q, $m ) ? stripslashes( $m[1] ) : null,
 	'/^SHOW COLUMNS FROM/'          => static function ( $q ) {
 		preg_match( '/FROM (\S+)/', $q, $m );
-		return array( 'id', 'code', 'coupon_id', 'type', 'status', 'order_id', 'order_item_id', 'item_index', 'product_id', 'variation_id', 'template_id', 'usage_mode', 'discount_type', 'initial_amount', 'balance', 'currency', 'expires_at', 'buyer_name', 'buyer_email', 'user_id', 'recipient_name', 'recipient_email', 'message', 'fields', 'send_to', 'delivery_at', 'delivered_at', 'token', 'transferable', 'terms', 'max_checkins', 'checkins', 'last_checkin_at', 'delivered_roles', 'created_at', 'updated_at', 'voucher_id', 'event', 'amount', 'balance_after', 'source', 'till', 'receipt', 'note', 'actor_email_hash', 'batch', 'imported_at', 'used_at', 'redemption_key', 'target', 'state', 'request_hash', 'meta', 'campaign_id', 'customer_key', 'claim_key', 'kind', 'uses', 'window_end', 'counter_key', 'hits', 'key_hash', 'signature', 'event_mark', 'claimed_at', 'response' );
+		return array( 'id', 'code', 'coupon_id', 'type', 'status', 'order_id', 'order_item_id', 'item_index', 'product_id', 'variation_id', 'template_id', 'usage_mode', 'discount_type', 'initial_amount', 'balance', 'currency', 'expires_at', 'buyer_name', 'buyer_email', 'user_id', 'recipient_name', 'recipient_email', 'message', 'fields', 'send_to', 'delivery_at', 'delivered_at', 'token', 'transferable', 'terms', 'max_checkins', 'checkins', 'last_checkin_at', 'delivered_roles', 'voucher_number', 'created_at', 'updated_at', 'voucher_id', 'event', 'amount', 'balance_after', 'source', 'till', 'receipt', 'note', 'actor_email_hash', 'batch', 'imported_at', 'used_at', 'redemption_key', 'target', 'state', 'request_hash', 'meta', 'campaign_id', 'customer_key', 'claim_key', 'kind', 'uses', 'window_end', 'counter_key', 'hits', 'key_hash', 'signature', 'event_mark', 'claimed_at', 'response' );
 	},
 	'/^SHOW INDEX FROM wp_vcap_events$/' => array( 'PRIMARY', 'voucher_ledger', 'voucher_order', 'actor_email_hash', 'event' ),
 	'/^SHOW INDEX FROM/'            => static function ( $q ) {
-		return array( 'PRIMARY', 'code', 'token', 'order_item_slot', 'order_id', 'coupon_id', 'status_expires', 'status_updated', 'expires_at', 'delivery_due', 'product_id', 'recipient_email', 'buyer_email', 'user_type', 'batch_free', 'batch_used', 'redemption_key', 'voucher_id', 'user_id', 'state_expires', 'campaign_customer', 'order_campaign', 'kind_created', 'claimed_at' );
+		return array( 'PRIMARY', 'code', 'token', 'order_item_slot', 'order_id', 'coupon_id', 'status_expires', 'status_updated', 'expires_at', 'delivery_due', 'product_id', 'recipient_email', 'buyer_email', 'user_type', 'voucher_number', 'batch_free', 'batch_used', 'redemption_key', 'voucher_id', 'user_id', 'state_expires', 'campaign_customer', 'order_campaign', 'kind_created', 'claimed_at' );
 	},
 	'/information_schema/'          => 'InnoDB',
 );
@@ -2187,7 +2187,7 @@ unset( $GLOBALS['vcap_test_filters']['vcap_voucher_links'] );
 $r6_src = (string) file_get_contents( dirname( __DIR__ ) . '/src/VoucherRepository.php' );
 check( 'R6: vcap_voucher_event passes the source and the acting user id as trailing arguments (WF-02: then the ledger row)', str_contains( $r6_src, "Db::action( 'vcap_voucher_event', \$voucher_id, \$event, \$amount, \$balance_after, Note::render( \$note ), \$order_id, \$source, (int) \$row['user_id'], \$entry )" ) );
 check( 'R6: the admin menu fires vcap_admin_menu with its parent slug', str_contains( (string) file_get_contents( dirname( __DIR__ ) . '/src/Admin/Menu.php' ), "do_action( 'vcap_admin_menu', 'vcap-vouchers' )" ) );
-check( 'R6: schema 1.8.0 adds the ledger columns till and receipt, migrated after 1.7.0', '1.8.0' === VCAP\Install::EVENT_TILL_VERSION && str_contains( (string) file_get_contents( dirname( __DIR__ ) . '/voucher-captain.php' ), "define( 'VCAP_DB_VERSION', '1.8.0' )" ) && str_contains( (string) file_get_contents( dirname( __DIR__ ) . '/src/Install.php' ), "till varchar(100) NOT NULL DEFAULT ''" ) );
+check( 'R6: schema 1.8.0 adds the ledger columns till and receipt, migrated after 1.7.0', '1.8.0' === VCAP\Install::EVENT_TILL_VERSION && preg_match( "/define\\( 'VCAP_DB_VERSION', '([0-9.]+)' \\)/", (string) file_get_contents( dirname( __DIR__ ) . '/voucher-captain.php' ), $r6_db ) && version_compare( $r6_db[1], '1.8.0', '>=' ) && str_contains( (string) file_get_contents( dirname( __DIR__ ) . '/src/Install.php' ), "till varchar(100) NOT NULL DEFAULT ''" ) );
 
 echo "D14 coupon sync and code masking\n";
 $d14_u = static fn( string $mode, string $status, int $limit, int $count ) => CouponManager::coupon_usage_for( $mode, $status, $limit, $count );
@@ -4584,7 +4584,7 @@ check(
 );
 check(
 	'SET-VC-17: list shows the settings of a section (secrets masked in the full list), export prints the JSON without secrets',
-	array( 'vcap_code_prefix', 'vcap_code_suffix', 'vcap_code_length', 'vcap_code_charset', 'vcap_code_separator', 'vcap_code_order_ref' ) === array_column( $st_rows, 'key' ) && '18' === $st_rows[2]['value'] && VCAP\SettingsLog::MASK === array_column( $st_all_rows, 'value', 'key' )['vcap_secret']
+	array( 'vcap_code_prefix', 'vcap_code_suffix', 'vcap_code_length', 'vcap_code_charset', 'vcap_code_separator', 'vcap_code_order_ref', 'vcap_voucher_number_enabled', 'vcap_voucher_number_pattern', 'vcap_voucher_number_prefix', 'vcap_voucher_number_digits', 'vcap_voucher_number_reset' ) === array_column( $st_rows, 'key' ) && '18' === $st_rows[2]['value'] && VCAP\SettingsLog::MASK === array_column( $st_all_rows, 'value', 'key' )['vcap_secret']
 		&& 1 === count( $st_r_export ) && '18' === json_decode( substr( $st_r_export[0], 6 ), true )['settings']['vcap_code_length'] && ! str_contains( $st_r_export[0], 'cli-secret' ),
 	json_encode( $st_rows )
 );
@@ -6699,6 +6699,20 @@ $x6_db = new class( $x6_fixtures ) {
 	public array $inserts     = array();
 	private array $expired    = array();
 	public function __construct( private array $rows ) {}
+echo "Sequential voucher number (SET-VC-13)\n";
+/** Database of the voucher number tests: one counter store shared by "connections" (each with its own LAST_INSERT_ID). */
+final class VCAP_VN13_Wpdb {
+	public static array $counters = array();
+	public string $prefix      = 'wp_';
+	public string $options     = 'wp_options';
+	public string $last_error  = '';
+	public array $log          = array();
+	public array $numbers      = array();
+	public int $last_id        = 0;
+	public bool $refuse_number = false;
+	/** @var callable|null Runs right after this connection incremented a counter (another request "in between"). */
+	public $after_increment = null;
+	private ?array $snapshot = null;
 	public function prepare( $query, ...$args ) {
 		$args = isset( $args[0] ) && is_array( $args[0] ) ? $args[0] : $args;
 		return vsprintf( str_replace( array( '%d', '%s', '%i' ), array( '%d', "'%s'", '%s' ), $query ), $args );
@@ -6860,6 +6874,268 @@ check(
 );
 $GLOBALS['vcap_test_options'] = $x6_opts;
 $GLOBALS['vcap_test_filters'] = $x6_filters;
+	public function suppress_errors( $s = true ) { return false; }
+	public function query( $q ) {
+		$this->log[] = $q;
+		if ( 'START TRANSACTION' === $q ) {
+			$this->snapshot = self::$counters;
+			return 1;
+		}
+		if ( 'ROLLBACK' === $q ) {
+			self::$counters = $this->snapshot ?? self::$counters;
+			$this->snapshot = null;
+			return 1;
+		}
+		if ( 'COMMIT' === $q ) {
+			$this->snapshot = null;
+			return 1;
+		}
+		if ( preg_match( "/^INSERT IGNORE INTO wp_options \(option_name, option_value, autoload\) VALUES \('([a-z0-9_]+)', '0', 'off'\)$/", $q, $m ) ) {
+			if ( isset( self::$counters[ $m[1] ] ) ) {
+				return 0;
+			}
+			self::$counters[ $m[1] ] = 0;
+			return 1;
+		}
+		if ( preg_match( "/^UPDATE wp_options SET option_value = LAST_INSERT_ID\(CAST\(option_value AS UNSIGNED\) \+ 1\) WHERE option_name = '([a-z0-9_]+)'$/", $q, $m ) ) {
+			if ( ! isset( self::$counters[ $m[1] ] ) ) {
+				return 0;
+			}
+			$this->last_id = ++self::$counters[ $m[1] ];
+			if ( $this->after_increment ) {
+				( $this->after_increment )();
+			}
+			return 1;
+		}
+		if ( preg_match( "/^UPDATE wp_vcap_vouchers SET voucher_number = '([^']*)' WHERE id = (\d+) AND voucher_number = ''$/", $q, $m ) ) {
+			if ( $this->refuse_number || '' !== ( $this->numbers[ (int) $m[2] ] ?? '' ) ) {
+				return 0;
+			}
+			$this->numbers[ (int) $m[2] ] = $m[1];
+			return 1;
+		}
+		return 1;
+	}
+	public function get_var( $q ) {
+		$this->log[] = $q;
+		if ( 'SELECT LAST_INSERT_ID()' === $q ) {
+			return (string) $this->last_id;
+		}
+		if ( str_starts_with( $q, 'SHOW COLUMNS FROM wp_vcap_vouchers' ) ) {
+			return 'voucher_number';
+		}
+		if ( preg_match( "/^SELECT option_value FROM wp_options WHERE option_name = '([a-z0-9_]+)'$/", $q, $m ) ) {
+			return isset( self::$counters[ $m[1] ] ) ? (string) self::$counters[ $m[1] ] : null;
+		}
+		return null;
+	}
+	public function get_row( $q, $o = null ) { return null; }
+	public function get_results( $q, $o = null ) { return array(); }
+	public function get_col( $q, $i = 0 ) { return array(); }
+}
+$vn_saved_opts    = $GLOBALS['vcap_test_options'];
+$vn_saved_filters = $GLOBALS['vcap_test_filters'] ?? array();
+$vn_saved_wpdb    = $GLOBALS['wpdb'] ?? null;
+$GLOBALS['vcap_test_options'] = array();
+VCAP\SettingsRegistry::reset();
+$vn_reg = array();
+foreach ( array( 'vcap_voucher_number_enabled', 'vcap_voucher_number_pattern', 'vcap_voucher_number_prefix', 'vcap_voucher_number_digits', 'vcap_voucher_number_reset' ) as $vn_key ) {
+	$vn_e              = VCAP\SettingsRegistry::get( $vn_key );
+	$vn_reg[ $vn_key ] = array( $vn_e['type'], $vn_e['default'], $vn_e['section'], $vn_e['min'], $vn_e['max'], $vn_e['legal'] );
+}
+$vn_fields = VCAP\Settings::general_part( ( new ReflectionMethod( VCAP\Settings::class, 'general_fields' ) )->invoke( new VCAP\Settings() ), 'codes' );
+$vn_ids    = array_values( array_filter( array_map( static fn( $f ) => (string) ( $f['id'] ?? '' ), $vn_fields ), static fn( $id ) => str_starts_with( $id, 'vcap_voucher_number' ) ) );
+check(
+	'SET-VC-13: register – voucher numbers off by default (E9 a), pattern {year}-{number}, no prefix, 5 digits [1–12], yearly restart; block "Voucher numbers" on "Codes"; the counters are internal state (never exported or reset)',
+	array(
+		'vcap_voucher_number_enabled' => array( 'bool', 'no', 'codes', null, null, true ),
+		'vcap_voucher_number_pattern' => array( 'string', '{year}-{number}', 'codes', null, null, false ),
+		'vcap_voucher_number_prefix'  => array( 'string', '', 'codes', null, null, false ),
+		'vcap_voucher_number_digits'  => array( 'int', 5, 'codes', 1, 12, false ),
+		'vcap_voucher_number_reset'   => array( 'select', 'yearly', 'codes', null, null, false ),
+	) === $vn_reg
+		&& array( 'vcap_voucher_numbers', 'vcap_voucher_number_enabled', 'vcap_voucher_number_pattern', 'vcap_voucher_number_prefix', 'vcap_voucher_number_digits', 'vcap_voucher_number_reset', 'vcap_voucher_numbers' ) === $vn_ids
+		&& VCAP\SettingsRegistry::is_internal( 'vcap_voucher_number_seq' ) && VCAP\SettingsRegistry::is_internal( 'vcap_voucher_number_seq_2026' )
+		&& ! VCAP\VoucherNumber::enabled(),
+	wp_json_encode( array( $vn_reg, $vn_ids ) )
+);
+$vn_cfg = array( 'pattern' => '{year}-{number}', 'prefix' => '', 'digits' => 5, 'reset' => 'yearly' );
+check(
+	'SET-VC-13: format – {year}, {number} with leading zeros, prefix in front or at {prefix}; a yearly restart puts the year in front of a pattern without {year}; "never" does not; an invalid pattern falls back to the default',
+	'2026-00042' === VCAP\VoucherNumber::format( 42, 2026, $vn_cfg )
+		&& 'GS-2026-00042' === VCAP\VoucherNumber::format( 42, 2026, array( 'prefix' => 'GS-' ) + $vn_cfg )
+		&& '2026/GS/007' === VCAP\VoucherNumber::format( 7, 2026, array( 'pattern' => '{year}/{prefix}/{number}', 'prefix' => 'GS', 'digits' => 3 ) + $vn_cfg )
+		&& '2027-000123' === VCAP\VoucherNumber::format( 123, 2027, array( 'pattern' => '{number}', 'digits' => 6 ) + $vn_cfg )
+		&& 'N-123' === VCAP\VoucherNumber::format( 123, 2027, array( 'pattern' => 'N-{number}', 'digits' => 1, 'reset' => 'never' ) + $vn_cfg )
+		&& '1234567' === VCAP\VoucherNumber::format( 1234567, 2026, array( 'pattern' => '{number}', 'digits' => 3, 'reset' => 'never' ) + $vn_cfg )
+		&& '2026-00001' === VCAP\VoucherNumber::format( 1, 2026, array( 'pattern' => 'no-number-token' ) + $vn_cfg )
+		&& 'vcap_voucher_number_seq_2026' === VCAP\VoucherNumber::sequence_option( 2026, 'yearly' ) && 'vcap_voucher_number_seq' === VCAP\VoucherNumber::sequence_option( 2026, 'never' ),
+	VCAP\VoucherNumber::format( 7, 2026, array( 'pattern' => '{year}/{prefix}/{number}', 'prefix' => 'GS', 'digits' => 3 ) + $vn_cfg )
+);
+$vn_bad_import = array( VCAP\SettingsTransfer::validate( 'vcap_voucher_number_pattern', 'GS-{year}' ), VCAP\SettingsTransfer::validate( 'vcap_voucher_number_prefix', 'B B' ) );
+$vn_ok_import  = array( VCAP\SettingsTransfer::validate( 'vcap_voucher_number_pattern', 'GS/{year}/{number}' ), VCAP\SettingsTransfer::validate( 'vcap_voucher_number_prefix', 'A#1' ) );
+$GLOBALS['vcap_test_options']['vcap_voucher_number_pattern'] = 'R-{number}';
+$vn_page = array(
+	VCAP\VoucherNumber::sanitize_setting( 'X {number}', array( 'id' => 'vcap_voucher_number_pattern' ) ),
+	VCAP\VoucherNumber::sanitize_setting( 'K-{year}-{number}', array( 'id' => 'vcap_voucher_number_pattern' ) ),
+	VCAP\VoucherNumber::sanitize_setting( 'B&B', array( 'id' => 'vcap_voucher_number_prefix' ) ),
+);
+check(
+	'SET-VC-13: pattern needs {number} and only letters, digits, . _ - / # besides the tokens; an invalid pattern or prefix is not saved on the settings page (stored value kept) and refused by import/WP-CLI',
+	VCAP\VoucherNumber::valid_pattern( '{year}-{number}' ) && ! VCAP\VoucherNumber::valid_pattern( '{year}' ) && ! VCAP\VoucherNumber::valid_pattern( 'A B{number}' ) && ! VCAP\VoucherNumber::valid_pattern( '{number}' . str_repeat( 'x', 40 ) )
+		&& VCAP\VoucherNumber::valid_prefix( '' ) && VCAP\VoucherNumber::valid_prefix( 'GS-' ) && ! VCAP\VoucherNumber::valid_prefix( 'Ä' )
+		&& array( 'R-{number}', 'K-{year}-{number}', '' ) === $vn_page
+		&& is_wp_error( $vn_bad_import[0] ) && is_wp_error( $vn_bad_import[1] ) && array( 'GS/{year}/{number}', 'A#1' ) === $vn_ok_import,
+	wp_json_encode( array( $vn_page, $vn_bad_import, $vn_ok_import ) )
+);
+$vn_v                 = new Voucher();
+$vn_v->voucher_number = 'GS-2026-00001';
+$vn_row               = $vn_v->to_row();
+$vn_back              = Voucher::from_row( array( 'id' => 3, 'voucher_number' => '2026-00007' ) );
+$vn_install           = (string) file_get_contents( VCAP_PATH . 'src/Install.php' );
+$vn_issuer            = (string) file_get_contents( VCAP_PATH . 'src/Issuer.php' );
+check(
+	'SET-VC-13: storage – column voucher_number (varchar 64, indexed) of schema 1.9.0; Voucher::to_row() never writes it (a save cannot clear a number, works before the column exists), from_row() reads it; Issuer gives the number in create_voucher() after the coupon and in issue_standalone() (imports, admin issues)',
+	! array_key_exists( 'voucher_number', $vn_row ) && '2026-00007' === $vn_back->voucher_number
+		&& '1.9.0' === VCAP\Install::VOUCHER_NUMBER_VERSION && str_contains( $vn_install, "voucher_number varchar(64) NOT NULL DEFAULT ''" ) && str_contains( $vn_install, 'KEY voucher_number (voucher_number)' )
+		&& str_contains( (string) file_get_contents( VCAP_PATH . 'voucher-captain.php' ), "define( 'VCAP_DB_VERSION', '1.9.0' )" )
+		&& 2 === substr_count( $vn_issuer, 'VoucherNumber::assign( $voucher );' )
+		&& strpos( $vn_issuer, 'VoucherNumber::assign( $voucher );' ) > strpos( $vn_issuer, '$this->coupons->set_coupon_enabled( $voucher, false );' )
+		&& strpos( (string) file_get_contents( VCAP_PATH . 'src/Admin/CardImport.php' ), 'issue_standalone( $args )' ) > 0
+);
+
+// Assignment with the counter database.
+VCAP_VN13_Wpdb::$counters = array();
+$vn_db                    = new VCAP_VN13_Wpdb();
+$GLOBALS['wpdb']          = $vn_db;
+VCAP\Db::reset();
+$GLOBALS['vcap_test_options'] = array( 'vcap_db_version' => '1.9.0', 'vcap_voucher_number_enabled' => 'yes', 'vcap_voucher_number_prefix' => 'GS-' );
+VCAP\SettingsRegistry::reset();
+$vn_make   = static function ( int $id, string $created = '2026-11-24 10:00:00', string $type = 'voucher' ): Voucher {
+	$v             = new Voucher();
+	$v->id         = $id;
+	$v->type       = $type;
+	$v->created_at = $created;
+	return $v;
+};
+$vn_a      = $vn_make( 11 );
+$vn_b      = $vn_make( 12 );
+$vn_c      = $vn_make( 13 );
+$vn_out    = array( VCAP\VoucherNumber::assign( $vn_a ), VCAP\VoucherNumber::assign( $vn_b ), VCAP\VoucherNumber::assign( $vn_c ), VCAP\VoucherNumber::assign( $vn_b ) );
+$vn_incr   = preg_grep( '/^UPDATE wp_options SET option_value = LAST_INSERT_ID/', $vn_db->log );
+$vn_reads  = preg_grep( '/^SELECT option_value FROM wp_options/', $vn_db->log );
+$vn_credit = VCAP\VoucherNumber::assign( $vn_make( 14, '2026-11-24 10:00:00', 'credit' ) );
+check(
+	'SET-VC-13: numbers are given in order without gaps (GS-2026-00001, -00002, -00003), stored on the voucher with one UPDATE … WHERE voucher_number = \'\'; a voucher keeps its number (no second one); store credit accounts get none; the counter is incremented in one statement (LAST_INSERT_ID, no read-then-write) inside a transaction',
+	array( 'GS-2026-00001', 'GS-2026-00002', 'GS-2026-00003', 'GS-2026-00002' ) === $vn_out && 'GS-2026-00002' === $vn_b->voucher_number
+		&& array( 11 => 'GS-2026-00001', 12 => 'GS-2026-00002', 13 => 'GS-2026-00003' ) === $vn_db->numbers && '' === $vn_credit
+		&& 3 === count( $vn_incr ) && array() === $vn_reads && 3 === count( array_keys( $vn_db->log, 'START TRANSACTION', true ) ) && 3 === count( array_keys( $vn_db->log, 'COMMIT', true ) )
+		&& 3 === VCAP_VN13_Wpdb::$counters['vcap_voucher_number_seq_2026'],
+	wp_json_encode( array( $vn_out, $vn_db->numbers ) )
+);
+// Two requests at the same moment: another connection increments right after this one, before it reads its value.
+$vn_other                   = new VCAP_VN13_Wpdb();
+$vn_other_got               = array();
+$GLOBALS['vcap_vn13_first'] = $vn_db;
+$vn_db->after_increment     = static function () use ( $vn_other, &$vn_other_got ) {
+	$vn_other->after_increment = null;
+	$GLOBALS['wpdb']           = $vn_other;
+	$v                         = new Voucher();
+	$v->id                     = 21;
+	$v->created_at             = '2026-11-24 10:00:01';
+	$vn_other_got[]            = VCAP\VoucherNumber::assign( $v );
+	$GLOBALS['wpdb']           = $GLOBALS['vcap_vn13_first'];
+};
+$vn_mine                = VCAP\VoucherNumber::assign( $vn_make( 20 ) );
+$vn_db->after_increment = null;
+check(
+	'SET-VC-13: concurrent orders never get the same number – a second request that increments between this request\'s increment and its read gets the next value (LAST_INSERT_ID is per connection), both numbers differ',
+	'GS-2026-00004' === $vn_mine && array( 'GS-2026-00005' ) === $vn_other_got && 5 === VCAP_VN13_Wpdb::$counters['vcap_voucher_number_seq_2026'],
+	wp_json_encode( array( $vn_mine, $vn_other_got ) )
+);
+VCAP\Db::reset();
+$vn_db->refuse_number = true;
+$vn_failed            = VCAP\VoucherNumber::assign( $vn_make( 30 ) );
+$vn_db->refuse_number = false;
+$vn_after             = VCAP\VoucherNumber::assign( $vn_make( 31 ) );
+check(
+	'SET-VC-13: when the number cannot be written onto the voucher the counter increment is rolled back (no gap): the next voucher gets the number that was not used',
+	'' === $vn_failed && 'GS-2026-00006' === $vn_after && in_array( 'ROLLBACK', $vn_db->log, true ),
+	wp_json_encode( array( $vn_failed, $vn_after ) )
+);
+$GLOBALS['vcap_test_options']['vcap_voucher_number_reset'] = 'never';
+$vn_never = array( VCAP\VoucherNumber::assign( $vn_make( 40, '2026-12-31 10:00:00' ) ), VCAP\VoucherNumber::assign( $vn_make( 41, '2027-01-02 10:00:00' ) ) );
+$vn_never_preview = VCAP\VoucherNumber::preview();
+$GLOBALS['vcap_test_options']['vcap_voucher_number_reset'] = 'yearly';
+$vn_new_year = VCAP\VoucherNumber::assign( $vn_make( 42, '2027-01-02 10:00:00' ) );
+check(
+	'SET-VC-13: restart – "never" counts on across the new year with its own counter, "yearly" starts again at 1 in 2027; the settings preview shows the next number',
+	array( 'GS-2026-00001', 'GS-2027-00002' ) === $vn_never && 'GS-2027-00001' === $vn_new_year && 1 === VCAP_VN13_Wpdb::$counters['vcap_voucher_number_seq_2027'] && 2 === VCAP_VN13_Wpdb::$counters['vcap_voucher_number_seq']
+		&& str_starts_with( $vn_never_preview, 'GS-' ) && str_ends_with( $vn_never_preview, '-00003' ),
+	wp_json_encode( array( $vn_never, $vn_new_year, $vn_never_preview ) )
+);
+add_filter( 'vcap_voucher_number_enabled', static fn() => false );
+$vn_filtered_off = VCAP\VoucherNumber::assign( $vn_make( 50 ) );
+$GLOBALS['vcap_test_filters']['vcap_voucher_number_enabled'] = array();
+$GLOBALS['vcap_test_options']['vcap_voucher_number_enabled'] = 'no';
+add_filter( 'vcap_voucher_number_enabled', static fn() => true );
+add_filter( 'vcap_voucher_number', static fn( $n, $seq, $year ) => 'X' . $year . '.' . $seq, 10, 3 );
+$vn_filtered_on = VCAP\VoucherNumber::assign( $vn_make( 51 ) );
+$GLOBALS['vcap_test_filters']['vcap_voucher_number_enabled'] = array();
+$GLOBALS['vcap_test_filters']['vcap_voucher_number']         = array();
+$vn_off = VCAP\VoucherNumber::assign( $vn_make( 52 ) );
+$GLOBALS['vcap_test_options']['vcap_voucher_number_enabled'] = 'yes';
+$GLOBALS['vcap_test_options']['vcap_db_version']             = '1.8.0';
+$vn_old_schema = VCAP\VoucherNumber::assign( $vn_make( 53 ) );
+check(
+	'SET-VC-13: the filter vcap_voucher_number_enabled wins in both directions, vcap_voucher_number changes the number; switched off (default) nothing is given; before schema 1.9.0 nothing is given',
+	'' === $vn_filtered_off && 'X2026.7' === $vn_filtered_on && '' === $vn_off && '' === $vn_old_schema,
+	wp_json_encode( array( $vn_filtered_off, $vn_filtered_on, $vn_off, $vn_old_schema ) )
+);
+$GLOBALS['wpdb'] = $vn_saved_wpdb;
+VCAP\Db::reset();
+
+// Placeholder, voucher list, journal and DATEV.
+$GLOBALS['vcap_test_options'] = array( 'vcap_datev_liability_account' => '3272', 'vcap_datev_clearing_account' => '1360', 'vcap_datev_income_account' => '2700', 'vcap_datev_consultant' => '12345', 'vcap_datev_client' => '99' );
+$vn_jrow      = array( 'created_at' => '2026-11-14 10:00:00', 'code' => 'ABC', 'type' => 'giftcard', 'currency' => 'EUR', 'event' => 'redeemed', 'amount' => 5, 'balance_after' => 10, 'order_id' => 0, 'till' => '', 'receipt' => '', 'note' => '', 'voucher_id' => 0, 'voucher_number' => 'GS-2026-00042' );
+$vn_off_head  = VCAP\Ledger::journal_header();
+$vn_off_line  = VCAP\Ledger::journal_line( $vn_jrow );
+$vn_off_datev = VCAP\DatevExport::booking( $vn_jrow, VCAP\DatevExport::config() );
+$GLOBALS['vcap_test_options']['vcap_voucher_number_enabled'] = 'yes';
+$vn_on_csv   = VCAP\Ledger::journal_csv( array( $vn_jrow ) );
+$vn_on_datev = VCAP\DatevExport::booking( $vn_jrow, VCAP\DatevExport::config() );
+$vn_long     = VCAP\DatevExport::booking( array( 'voucher_number' => 'GUTSCHEIN-2026/000042' ) + $vn_jrow, VCAP\DatevExport::config() );
+check(
+	'SET-VC-13: journal and DATEV are unchanged while the numbers are off (14 columns, "Belegfeld 2" empty); switched on the journal has "Voucher no." after "Code" and DATEV "Belegfeld 2" the number (DATEV length 12, cut)',
+	14 === count( $vn_off_head ) && 14 === count( $vn_off_line ) && ! in_array( 'Voucher no.', $vn_off_head, true ) && null !== $vn_off_datev && '' === $vn_off_datev[11]
+		&& 15 === count( $vn_on_csv[0] ) && 'Voucher no.' === $vn_on_csv[0][2] && 'GS-2026-00042' === $vn_on_csv[1][2]
+		&& null !== $vn_on_datev && 'GS-2026-0004' === $vn_on_datev[11] && 'ABC' === $vn_on_datev[10] && 'GUTSCHEIN-20' === $vn_long[11] && 14 === count( $vn_on_datev ),
+	wp_json_encode( array( $vn_on_csv, $vn_on_datev ) )
+);
+$vn_pv                 = new Voucher();
+$vn_pv->code           = 'CODE-1';
+$vn_pv->voucher_number = 'GS-2026-00042';
+$vn_pv->currency       = 'EUR';
+$vn_pv->created_at     = '2026-11-24 10:00:00';
+$vn_values             = Placeholders::values( $vn_pv );
+if ( ! class_exists( 'WP_List_Table' ) ) {
+	/** Minimal stand-in for the column list of VouchersListTable (no WordPress admin loaded). */
+	class WP_List_Table {
+		public function __construct( $args = array() ) {}
+	}
+}
+$vn_list               = new VCAP\Admin\VouchersListTable( new VCAP\VoucherRepository() );
+$vn_cols_on            = $vn_list->get_columns();
+$GLOBALS['vcap_test_options']['vcap_voucher_number_enabled'] = 'no';
+$vn_cols_off = $vn_list->get_columns();
+check(
+	'SET-VC-13: placeholder {voucher_number} (offered in the PDF designer and emails) prints the number; the voucher list has the column "Voucher no." after "Code" only while the numbers are on',
+	isset( Placeholders::definitions()['voucher_number'] ) && 'GS-2026-00042' === $vn_values['voucher_number']
+		&& array( 'cb', 'code', 'number', 'product' ) === array_slice( array_keys( $vn_cols_on ), 0, 4 ) && ! isset( $vn_cols_off['number'] ),
+	wp_json_encode( array( array_keys( $vn_cols_on ), $vn_values['voucher_number'] ?? null ) )
+);
+$GLOBALS['vcap_test_filters'] = $vn_saved_filters;
+$GLOBALS['vcap_test_options'] = $vn_saved_opts;
 VCAP\SettingsRegistry::reset();
 
 echo "\n$passed passed, $failed failed. Output: $out\n";

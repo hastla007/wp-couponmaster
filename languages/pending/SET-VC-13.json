@@ -1,0 +1,87 @@
+{
+	"Voucher number (sequential)": {
+		"du": "Gutscheinnummer (fortlaufend)",
+		"sie": "Gutscheinnummer (fortlaufend)",
+		"at": "Gutscheinnummer (fortlaufend)"
+	},
+	"Voucher no.": {
+		"du": "Gutschein-Nr.",
+		"sie": "Gutschein-Nr.",
+		"at": "Gutschein-Nr."
+	},
+	"Voucher numbers": {
+		"du": "Gutscheinnummern",
+		"sie": "Gutscheinnummern",
+		"at": "Gutscheinnummern"
+	},
+	"A readable, sequential number in addition to the random code, e.g. for bookkeeping and the till. Given once to every new voucher (orders, issued by hand, imported) without gaps, per site; existing vouchers keep having none. Shown as {voucher_number} in PDFs and emails, in the voucher list and the redemption journal, and in \"Belegfeld 2\" of the DATEV export.": {
+		"du": "Eine lesbare, fortlaufende Nummer zusätzlich zum zufälligen Code, z. B. für Buchhaltung und Kasse. Jeder neue Gutschein (Bestellung, von Hand ausgestellt, importiert) bekommt sie einmal und lückenlos, je Website; bestehende Gutscheine bleiben ohne Nummer. Erscheint als {voucher_number} in PDFs und E-Mails, in der Gutscheinliste und im Einlösejournal sowie im „Belegfeld 2“ des DATEV-Exports.",
+		"sie": "Eine lesbare, fortlaufende Nummer zusätzlich zum zufälligen Code, z. B. für Buchhaltung und Kasse. Jeder neue Gutschein (Bestellung, von Hand ausgestellt, importiert) erhält sie einmal und lückenlos, je Website; bestehende Gutscheine bleiben ohne Nummer. Erscheint als {voucher_number} in PDFs und E-Mails, in der Gutscheinliste und im Einlösejournal sowie im „Belegfeld 2“ des DATEV-Exports.",
+		"at": "Eine lesbare, fortlaufende Nummer zusätzlich zum zufälligen Code, z. B. für Buchhaltung und Kassa. Jeder neue Gutschein (Bestellung, von Hand ausgestellt, importiert) erhält sie einmal und lückenlos, je Website; bestehende Gutscheine bleiben ohne Nummer. Erscheint als {voucher_number} in PDFs und E-Mails, in der Gutscheinliste und im Einlösejournal sowie im „Belegfeld 2“ des DATEV-Exports."
+	},
+	"Give new vouchers a sequential voucher number. Whether numbered vouchers are required in your country has not been legally checked.": {
+		"du": "Neuen Gutscheinen eine fortlaufende Gutscheinnummer geben. Ob nummerierte Gutscheine in deinem Land vorgeschrieben sind, ist nicht rechtlich geprüft.",
+		"sie": "Neuen Gutscheinen eine fortlaufende Gutscheinnummer geben. Ob nummerierte Gutscheine in Ihrem Land vorgeschrieben sind, ist nicht rechtlich geprüft.",
+		"at": "Neuen Gutscheinen eine fortlaufende Gutscheinnummer geben. Ob nummerierte Gutscheine in Ihrem Land vorgeschrieben sind, ist nicht rechtlich geprüft."
+	},
+	"Pattern": {
+		"du": "Muster",
+		"sie": "Muster",
+		"at": "Muster"
+	},
+	"{number} is the counter, {year} the year of issue, {prefix} the prefix (put in front when missing). Letters, digits and . _ - / #, up to 40 characters. With a yearly restart the year is put in front when the pattern has no {year}. Next number: %s": {
+		"du": "{number} ist der Zähler, {year} das Ausstellungsjahr, {prefix} das Präfix (fehlt es, steht es vorne). Buchstaben, Ziffern und . _ - / #, bis zu 40 Zeichen. Bei jährlichem Neustart steht das Jahr vorne, wenn das Muster kein {year} enthält. Nächste Nummer: %s",
+		"sie": "{number} ist der Zähler, {year} das Ausstellungsjahr, {prefix} das Präfix (fehlt es, steht es vorne). Buchstaben, Ziffern und . _ - / #, bis zu 40 Zeichen. Bei jährlichem Neustart steht das Jahr vorne, wenn das Muster kein {year} enthält. Nächste Nummer: %s",
+		"at": "{number} ist der Zähler, {year} das Ausstellungsjahr, {prefix} das Präfix (fehlt es, steht es vorne). Buchstaben, Ziffern und . _ - / #, bis zu 40 Zeichen. Bei jährlichem Neustart steht das Jahr vorne, wenn das Muster kein {year} enthält. Nächste Nummer: %s"
+	},
+	"Optional, e.g. \"GS-\". Letters, digits and . _ - / #, up to 20 characters.": {
+		"du": "Optional, z. B. „GS-“. Buchstaben, Ziffern und . _ - / #, bis zu 20 Zeichen.",
+		"sie": "Optional, z. B. „GS-“. Buchstaben, Ziffern und . _ - / #, bis zu 20 Zeichen.",
+		"at": "Optional, z. B. „GS-“. Buchstaben, Ziffern und . _ - / #, bis zu 20 Zeichen."
+	},
+	"Digits": {
+		"du": "Stellen",
+		"sie": "Stellen",
+		"at": "Stellen"
+	},
+	"Minimum digits of {number}, filled with leading zeros (5 = 00042).": {
+		"du": "Mindestzahl der Stellen von {number}, mit führenden Nullen aufgefüllt (5 = 00042).",
+		"sie": "Mindestzahl der Stellen von {number}, mit führenden Nullen aufgefüllt (5 = 00042).",
+		"at": "Mindestzahl der Stellen von {number}, mit führenden Nullen aufgefüllt (5 = 00042)."
+	},
+	"Start again at 1": {
+		"du": "Wieder bei 1 beginnen",
+		"sie": "Wieder bei 1 beginnen",
+		"at": "Wieder bei 1 beginnen"
+	},
+	"Every year (1 January, site time zone)": {
+		"du": "Jedes Jahr (1. Januar, Zeitzone der Website)",
+		"sie": "Jedes Jahr (1. Januar, Zeitzone der Website)",
+		"at": "Jedes Jahr (1. Jänner, Zeitzone der Website)"
+	},
+	"Numbers given are never changed or reused; changing this only affects new vouchers.": {
+		"du": "Vergebene Nummern werden nie geändert oder wiederverwendet; eine Änderung wirkt nur auf neue Gutscheine.",
+		"sie": "Vergebene Nummern werden nie geändert oder wiederverwendet; eine Änderung wirkt nur auf neue Gutscheine.",
+		"at": "Vergebene Nummern werden nie geändert oder wiederverwendet; eine Änderung wirkt nur auf neue Gutscheine."
+	},
+	"Voucher number pattern \"%s\" was not saved: it must contain {number} and may contain {year} and {prefix}, letters, digits and . _ - / # (up to 40 characters).": {
+		"du": "Muster der Gutscheinnummer „%s“ wurde nicht gespeichert: Es muss {number} enthalten und darf {year} und {prefix}, Buchstaben, Ziffern und . _ - / # enthalten (bis zu 40 Zeichen).",
+		"sie": "Muster der Gutscheinnummer „%s“ wurde nicht gespeichert: Es muss {number} enthalten und darf {year} und {prefix}, Buchstaben, Ziffern und . _ - / # enthalten (bis zu 40 Zeichen).",
+		"at": "Muster der Gutscheinnummer „%s“ wurde nicht gespeichert: Es muss {number} enthalten und darf {year} und {prefix}, Buchstaben, Ziffern und . _ - / # enthalten (bis zu 40 Zeichen)."
+	},
+	"Voucher number prefix \"%s\" was not saved: use only letters, digits and . _ - / # (up to 20 characters).": {
+		"du": "Präfix der Gutscheinnummer „%s“ wurde nicht gespeichert: Verwende nur Buchstaben, Ziffern und . _ - / # (bis zu 20 Zeichen).",
+		"sie": "Präfix der Gutscheinnummer „%s“ wurde nicht gespeichert: Verwenden Sie nur Buchstaben, Ziffern und . _ - / # (bis zu 20 Zeichen).",
+		"at": "Präfix der Gutscheinnummer „%s“ wurde nicht gespeichert: Verwenden Sie nur Buchstaben, Ziffern und . _ - / # (bis zu 20 Zeichen)."
+	},
+	"a pattern with {number} (also {year}, {prefix}, letters, digits and . _ - / #, up to 40 characters)": {
+		"du": "ein Muster mit {number} (dazu {year}, {prefix}, Buchstaben, Ziffern und . _ - / #, bis zu 40 Zeichen)",
+		"sie": "ein Muster mit {number} (dazu {year}, {prefix}, Buchstaben, Ziffern und . _ - / #, bis zu 40 Zeichen)",
+		"at": "ein Muster mit {number} (dazu {year}, {prefix}, Buchstaben, Ziffern und . _ - / #, bis zu 40 Zeichen)"
+	},
+	"letters, digits and . _ - / # (up to 20 characters)": {
+		"du": "Buchstaben, Ziffern und . _ - / # (bis zu 20 Zeichen)",
+		"sie": "Buchstaben, Ziffern und . _ - / # (bis zu 20 Zeichen)",
+		"at": "Buchstaben, Ziffern und . _ - / # (bis zu 20 Zeichen)"
+	}
+}
