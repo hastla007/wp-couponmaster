@@ -120,6 +120,25 @@ $retention_note  = $wpdb->get_var( $wpdb->prepare( 'SELECT note FROM ' . VCAP\In
 vcap_security_assert( $anonymised > 0 && '' === $after_retention->buyer_email && array() === $after_retention->fields, 'retention anonymises expired voucher personalisation' );
 vcap_security_assert( '[personal data removed by retention]' === $retention_note, 'retention redacts free-text audit notes without deleting the audit trail' );
 
+// OD-1 (owner decision 24.11.2026): eraser and retention keep the consent (text, value, time) and "Consent given".
+$od1_consent = array( 'label' => 'Terms read', 'value' => 'Yes', 'given_at' => '2026-11-24 10:00:00' );
+foreach ( array( 'erase' => 900002, 'retention' => 900003 ) as $od1_how => $od1_index ) {
+	$od1_email           = "od1-{$od1_how}-" . strtolower( wp_generate_password( 6, false, false ) ) . '@example.test';
+	$od1_voucher         = vcap_security_create_voucher( $od1_email, $od1_index );
+	$od1_voucher->fields = array( 'extra' => array( 'label' => 'Extra', 'value' => 'Private field' ), 'consent' => $od1_consent );
+	vcap()->vouchers->update( $od1_voucher );
+	VCAP\Consent::log( vcap()->vouchers, $od1_voucher );
+	if ( 'erase' === $od1_how ) {
+		$privacy->erase( $od1_email, 1 );
+	} else {
+		$wpdb->update( VCAP\Install::tables()['vouchers'], array( 'status' => 'expired', 'expires_at' => $old_date, 'updated_at' => $old_date ), array( 'id' => $od1_voucher->id ) );
+		vcap()->vouchers->anonymise_older_than( 30 );
+	}
+	$od1_after = vcap()->vouchers->get( $od1_voucher->id );
+	$od1_note  = (string) $wpdb->get_var( $wpdb->prepare( 'SELECT note FROM ' . VCAP\Install::tables()['events'] . ' WHERE voucher_id = %d AND event = %s', $od1_voucher->id, VCAP\Consent::EVENT ) );
+	vcap_security_assert( '' === $od1_after->buyer_email && '' === $od1_after->buyer_name && array( 'consent' => $od1_consent ) === $od1_after->fields && VCAP\Note::is_coded( $od1_note ) && str_contains( $od1_note, 'Terms read' ), "OD-1: {$od1_how} keeps the consent text and time and the history entry \"Consent given\", without name or address" );
+}
+
 // AP-S3-1: the personalisation is also copied into the order line ("_vcap_fields" and the visible "vcap_…" meta).
 $ap_tag     = strtolower( wp_generate_password( 6, false, false ) );
 $ap_product = new WC_Product_Simple();

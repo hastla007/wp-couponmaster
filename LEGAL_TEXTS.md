@@ -88,6 +88,14 @@ Abschnitt 3).
 | `vcap_command_log_days` | Protokoll der Gutscheinbefehle (ohne Codes) behalten | 90 (Tage) | 30 – 3650 | ☐ |
 | `vcap_scanner_failed_lookup_days` | Fehlgeschlagene Kassenabfragen je Mitarbeiter behalten | 92 (Tage) | 31 – 3650 | ☐ |
 
+Was eine Löschung personenbezogener Daten (WordPress-Löschanfrage, Anonymisierung nach Frist) bewusst behält
+(Inhaberentscheidung 24.11.2026, im Vorschlag für die Datenschutzerklärung genannt):
+
+| Daten | Was bleibt | Grundlage | Rechtlich geprüft |
+|---|---|---|---|
+| Zustimmungs-Checkbox (SET-VC-12) | Text wie angezeigt, Häkchen und Zeitpunkt der Bestellung an Gutschein und Bestellposition sowie der Verlaufseintrag „Consent given“ – ohne Name und Adresse | Nachweis der Zustimmung (berechtigtes Interesse) – **Rechtsprüfung offen** | ☐ |
+| Änderungsprotokoll und Sicherungen der Einstellungen (SET-VC-16, PV-P2-6) | was wann geändert wurde; das Mitarbeiterkonto wird entfernt (angezeigt als „unknown“) | Löschfunktion neben dem Export (PV-P1-7/PV-P4-3) | ☐ |
+
 ## 5. Feste Texte des Plugins
 
 ### Gültigkeit und Ablauf

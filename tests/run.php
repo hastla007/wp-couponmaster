@@ -4553,6 +4553,39 @@ check(
 		} )()
 );
 
+// OD-2 (owner decision 24.11.2026): personal data eraser of the change log and the settings backups.
+$GLOBALS['vcap_test_options'][ VCAP\SettingsLog::OPTION ] = array(
+	array( 'time' => time() - 20, 'user' => 7, 'key' => 'vcap_code_length', 'from' => '12', 'to' => '14', 'source' => 'admin', 'via' => '' ),
+	array( 'time' => time() - 10, 'user' => 8, 'key' => 'vcap_attach_pdf', 'from' => 'yes', 'to' => 'no', 'source' => 'admin', 'via' => 'import' ),
+);
+$GLOBALS['vcap_test_options'][ VCAP\SettingsTransfer::BACKUP_OPTION ] = array(
+	time() - 5  => array( 'reason' => 'import', 'user' => 7, 'json' => '{"settings":{"vcap_code_length":12}}' ),
+	time() - 15 => array( 'reason' => 'reset', 'user' => 8, 'json' => '{"settings":{"vcap_code_length":14}}' ),
+);
+$GLOBALS['vcap_test_users']['admin7@example.test'] = (object) array( 'ID' => 7, 'locale' => '' );
+$od2_erased  = VCAP\SettingsLog::erase_personal_data( 'admin7@example.test' );
+$od2_again   = VCAP\SettingsLog::erase_personal_data( 'admin7@example.test' );
+$od2_nobody  = VCAP\SettingsLog::erase_personal_data( 'nobody@example.test' );
+unset( $GLOBALS['vcap_test_users']['admin7@example.test'] );
+$od2_log     = VCAP\SettingsLog::entries();
+$od2_backups = VCAP\SettingsTransfer::backups();
+check(
+	'OD-2: the personal data eraser anonymises the staff user in the change log and the settings backups (user 0, shown as "unknown"), keeping what was changed; other users stay; a second run and an unknown address remove nothing',
+	true === $od2_erased['items_removed'] && false === $od2_erased['items_retained'] && $od2_erased['done'] && false === $od2_again['items_removed'] && false === $od2_nobody['items_removed']
+		&& array( 0, 8 ) === array_column( $od2_log, 'user' ) && '14' === $od2_log[0]['to'] && 'vcap_code_length' === $od2_log[0]['key']
+		&& array( 0, 8 ) === array_values( array_column( $od2_backups, 'user' ) ) && str_contains( (string) reset( $od2_backups )['json'], 'vcap_code_length' )
+		&& 'unknown' === VCAP\SettingsLog::user_label( 0 ) && '#8' === VCAP\SettingsLog::user_label( 8 ) && 0 === VCAP\SettingsLog::anonymise_user( 0 ) && 0 === VCAP\SettingsTransfer::anonymise_backups( -1 ),
+	json_encode( array( $od2_erased, $od2_log, $od2_backups ) )
+);
+check(
+	'OD-2: the eraser is registered next to the exporter (wp_privacy_personal_data_erasers), the log screen names an erased user "unknown" and the privacy policy text says so',
+	array( VCAP\SettingsLog::class, 'erase_personal_data' ) === VCAP\SettingsLog::erasers( 'x' )['voucher-captain-settings-log']['callback'] && isset( VCAP\SettingsLog::exporters( array() )['voucher-captain-settings-log'] )
+		&& str_contains( (string) file_get_contents( VCAP_PATH . 'src/SettingsLog.php' ), "add_filter( 'wp_privacy_personal_data_erasers', array( self::class, 'erasers' ) );" )
+		&& str_contains( (string) file_get_contents( VCAP_PATH . 'src/Admin/SettingsTools.php' ), 'SettingsLog::user_label( $row[\'user\'] )' )
+		&& (bool) array_filter( VCAP\Privacy::policy_paragraphs(), static fn( $p ) => str_starts_with( $p, 'Settings changes:' ) && str_contains( $p, 'what was changed is kept' ) )
+);
+unset( $GLOBALS['vcap_test_options'][ VCAP\SettingsTransfer::BACKUP_OPTION ] );
+
 // SET-VC-17: WP-CLI (stub of WP_CLI that records the output; halt() ends the command).
 if ( ! class_exists( 'WP_CLI' ) ) {
 	eval( 'class WP_CLI { public static array $out = array(); public static function line( $m = "" ) { self::$out[] = "line: " . $m; } public static function success( $m ) { self::$out[] = "success: " . $m; } public static function warning( $m ) { self::$out[] = "warning: " . $m; } public static function error( $m, $exit = true ) { self::$out[] = "error: " . $m; } public static function halt( $code ) { throw new RuntimeException( "halt" ); } public static function confirm( $q, $a = array() ) { self::$out[] = "confirm: " . $q; } }' );
@@ -6566,6 +6599,34 @@ check(
 	'SET-VC-12: block cart/checkout – the Store API add-to-cart runs the same errors() (required checkbox), the checkout (classic and Store API: woocommerce_check_cart_items) stops a voucher line without the consent; the product screen offers global/yes/no and stores only those',
 	str_contains( $cn_fields_src, '$this->check_consent( $values );' ) && str_contains( $cn_fields_src, 'Consent::KEY === (string) $key ? Consent::missing_message( $label )' )
 		&& str_contains( $cn_ps_src, "'_vcap_consent', isset( Consent::product_choices()[ \$consent ] ) ? \$consent : ''" ) && array( '', 'yes', 'no' ) === array_keys( VCAP\Consent::product_choices() )
+);
+// OD-1 (owner decision 24.11.2026): an erasure keeps the consent (text, value, time) as proof, without name or address.
+$od1_fields = array(
+	'recipient_name' => array( 'label' => 'Recipient name', 'value' => 'Anna' ),
+	'company'        => array( 'label' => 'Company', 'value' => 'Buyer GmbH' ),
+	'delivery_date'  => array( 'label' => 'Delivery date', 'value' => '2026-12-24' ),
+	'consent'        => array( 'label' => 'Terms read', 'value' => 'Yes', 'given_at' => '2026-11-24 10:00:00', 'buyer' => 'Max Buyer, Main St 1' ),
+);
+$od1_buyer = VCAP\Privacy::erased_fields( $od1_fields, 'buyer' );
+$od1_rcpt  = VCAP\Privacy::erased_fields( $od1_fields, 'recipient' );
+$od1_keep  = array( 'consent' => array( 'label' => 'Terms read', 'value' => 'Yes', 'given_at' => '2026-11-24 10:00:00' ) );
+check(
+	'OD-1: the WordPress eraser keeps the consent – text, value and time, nothing else (no name, no address) – on a buyer erasure (the merchant\'s own fields go, the recipient\'s stay) and on a recipient erasure (all other fields go); without a consent nothing is kept',
+	array( 'recipient_name', 'delivery_date', 'consent' ) === array_keys( $od1_buyer ) && $od1_keep['consent'] === $od1_buyer['consent'] && $od1_keep === $od1_rcpt
+		&& array() === VCAP\Privacy::erased_fields( array( 'company' => $od1_fields['company'] ), 'recipient' ) && array() === VCAP\Consent::retained( 'x' ) && array() === VCAP\Consent::retained( array( 'consent' => array( 'label' => 'Terms read', 'value' => '' ) ) )
+		&& array( 'text' => 'Terms read', 'given_at' => '2026-11-24 10:00:00' ) === VCAP\Consent::of( $od1_rcpt ) && ! str_contains( (string) json_encode( array( $od1_buyer, $od1_rcpt ) ), 'Max Buyer' ),
+	json_encode( array( $od1_buyer, $od1_rcpt ) )
+);
+$od1_privacy = (string) file_get_contents( VCAP_PATH . 'src/Privacy.php' );
+$od1_repo    = (string) file_get_contents( VCAP_PATH . 'src/VoucherRepository.php' );
+check(
+	'OD-1: the eraser uses erased_fields() for buyer and recipient, the order line keeps its consent, retention keeps the fields\' consent and the coded history entry "Consent given" (coded notes survive the eraser anyway); the privacy policy text names it',
+	str_contains( $od1_privacy, "self::erased_fields( \$voucher->fields, 'recipient' )" ) && str_contains( $od1_privacy, "self::erased_fields( \$voucher->fields, 'buyer' )" )
+		&& str_contains( (string) file_get_contents( VCAP_PATH . 'src/Fields.php' ), "if ( 'delivery_date' === \$key || Consent::KEY === \$key ) {" )
+		&& str_contains( $od1_repo, "AND note NOT LIKE %s\", \$wpdb->esc_like( Note::PREFIX . '{\"c\":\"' . Consent::NOTE . '\"' ) . '%'" ) && str_contains( $od1_repo, '$kept    = Consent::retained( $decoded );' )
+		&& str_starts_with( VCAP\Note::make( VCAP\Consent::NOTE, array( 'Terms read', '2026-11-24 10:00:00' ) ), VCAP\Note::PREFIX . '{"c":"' . VCAP\Consent::NOTE . '"' )
+		&& (bool) array_filter( VCAP\Privacy::policy_paragraphs(), static fn( $p ) => str_starts_with( $p, 'Consent checkbox:' ) && str_contains( $p, 'without your name or address' ) )
+		&& str_contains( (string) file_get_contents( VCAP_PATH . 'LEGAL_TEXTS.md' ), 'Nachweis der Zustimmung (berechtigtes Interesse) – **Rechtsprüfung offen**' )
 );
 $GLOBALS['vcap_test_options'] = $cn_saved_opts;
 $GLOBALS['vcap_test_filters'] = $cn_saved_filters;

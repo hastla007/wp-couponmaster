@@ -1024,7 +1024,7 @@ final class Fields {
 	 *   a recipient erasure, so the order line follows it);
 	 * - "buyer": the merchant's own fields (typed by the buyer, they cannot be attributed to the recipient);
 	 * - "all": every field (retention, WooCommerce's order anonymisation).
-	 * The delivery date is no personal data and stays. Saves the line when something changed.
+	 * The delivery date is no personal data and stays; so does the consent (OD-1). Saves the line when something changed.
 	 *
 	 * @param \WC_Order_Item $item  Order line.
 	 * @param string         $scope recipient|buyer|all.
@@ -1039,7 +1039,8 @@ final class Fields {
 		$keys   = array();
 		foreach ( array_keys( $fields ) as $key ) {
 			$key = (string) $key;
-			if ( 'delivery_date' === $key ) {
+			// OD-1 (owner decision 24.11.2026): the consent (text, value, time – no name or address) stays as proof.
+			if ( 'delivery_date' === $key || Consent::KEY === $key ) {
 				continue;
 			}
 			$recipient = in_array( $key, self::RECIPIENT_FIELDS, true );

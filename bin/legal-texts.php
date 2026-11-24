@@ -165,6 +165,13 @@ foreach ( $retention_rows as $option => $what ) {
 	$md   .= '| `' . $option . '` | ' . $cell( $what[0] ) . ' | ' . $cell( (string) ( $entry['default'] ?? '' ) . ' (' . $what[1] . ')' ) . ' | ' . $range . " | ☐ |\n";
 }
 
+// OD-1 / OD-2 (owner decisions 24.11.2026): what an erasure of personal data keeps.
+$md .= "\nWas eine Löschung personenbezogener Daten (WordPress-Löschanfrage, Anonymisierung nach Frist) bewusst behält\n";
+$md .= "(Inhaberentscheidung 24.11.2026, im Vorschlag für die Datenschutzerklärung genannt):\n\n";
+$md .= "| Daten | Was bleibt | Grundlage | Rechtlich geprüft |\n|---|---|---|---|\n";
+$md .= "| Zustimmungs-Checkbox (SET-VC-12) | Text wie angezeigt, Häkchen und Zeitpunkt der Bestellung an Gutschein und Bestellposition sowie der Verlaufseintrag „Consent given“ – ohne Name und Adresse | Nachweis der Zustimmung (berechtigtes Interesse) – **Rechtsprüfung offen** | ☐ |\n";
+$md .= "| Änderungsprotokoll und Sicherungen der Einstellungen (SET-VC-16, PV-P2-6) | was wann geändert wurde; das Mitarbeiterkonto wird entfernt (angezeigt als „unknown“) | Löschfunktion neben dem Export (PV-P1-7/PV-P4-3) | ☐ |\n";
+
 $md .= "\n## 5. Feste Texte des Plugins\n";
 foreach ( $topics as $topic => $ids ) {
 	$md .= "\n### {$topic}\n\n| Englisch (Quelltext) | Deutsch (DE, du) | Deutsch (DE, Sie) | Deutsch (AT) | Fundstelle | Freigabe |\n|---|---|---|---|---|---|\n";
