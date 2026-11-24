@@ -294,6 +294,7 @@ final class ReportsAdmin {
 		$total   = count( $journal ) < 1000 ? count( $journal ) : $ledger->journal_count( $from, $to );
 		$csv     = self::journal_csv_url( $from, $to );
 		$labels  = \VCAP\VoucherRepository::event_labels();
+		$numbers = \VCAP\VoucherNumber::enabled(); // SET-VC-13: column "Voucher no." only when switched on.
 		?>
 		<div class="wrap">
 			<h1><?php esc_html_e( 'Reports', 'voucher-captain' ); ?></h1>
@@ -325,6 +326,9 @@ final class ReportsAdmin {
 				<thead><tr>
 					<th><?php esc_html_e( 'Date', 'voucher-captain' ); ?></th>
 					<th><?php esc_html_e( 'Code', 'voucher-captain' ); ?></th>
+					<?php if ( $numbers ) : ?>
+						<th><?php esc_html_e( 'Voucher no.', 'voucher-captain' ); ?></th>
+					<?php endif; ?>
 					<th><?php esc_html_e( 'Booking', 'voucher-captain' ); ?></th>
 					<th><?php esc_html_e( 'Amount', 'voucher-captain' ); ?></th>
 					<th><?php esc_html_e( 'Balance after', 'voucher-captain' ); ?></th>
@@ -335,12 +339,15 @@ final class ReportsAdmin {
 				</tr></thead>
 				<tbody>
 				<?php if ( ! $journal ) : ?>
-					<tr><td colspan="9"><?php esc_html_e( 'No bookings in this period.', 'voucher-captain' ); ?></td></tr>
+					<tr><td colspan="<?php echo $numbers ? 10 : 9; ?>"><?php esc_html_e( 'No bookings in this period.', 'voucher-captain' ); ?></td></tr>
 				<?php endif; ?>
 				<?php foreach ( $journal as $r ) : ?>
 					<tr>
 						<td><?php echo esc_html( \VCAP\LocalDate::from_utc( $r['created_at'], get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) ) ); ?></td>
 						<td><?php echo esc_html( strtoupper( (string) $r['code'] ) ); ?></td>
+						<?php if ( $numbers ) : ?>
+							<td><?php echo esc_html( '' !== (string) ( $r['voucher_number'] ?? '' ) ? (string) $r['voucher_number'] : '–' ); ?></td>
+						<?php endif; ?>
 						<td><?php echo esc_html( $labels[ $r['event'] ] ?? $r['event'] ); ?></td>
 						<td><?php echo wp_kses_post( wc_price( \VCAP\Ledger::signed_amount( (string) $r['event'], $r['amount'] ), array( 'currency' => $r['currency'] ) ) ); ?></td>
 						<td><?php echo null === $r['balance_after'] ? '–' : wp_kses_post( wc_price( (float) $r['balance_after'], array( 'currency' => $r['currency'] ) ) ); ?></td>

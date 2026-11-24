@@ -58,6 +58,7 @@
 		<custom-field action="copy">_vcap_allowed_templates</custom-field>
 		<custom-field action="copy">_vcap_physical</custom-field>
 		<custom-field action="copy">_vcap_review_service</custom-field>
+		<custom-field action="copy">_vcap_consent</custom-field>
 		<custom-field action="copy">_vcap_tax_treatment</custom-field>
 		<custom-field action="copy">_vcap_code_pool_low</custom-field>
 		<custom-field action="copy">_vcap_code_pool_empty</custom-field>
@@ -75,6 +76,7 @@
 		<key name="vcap_privacy_url" />
 		<key name="vcap_withdrawal_url" />
 		<key name="vcap_legal_text" />
+		<key name="vcap_consent_text" />
 		<key name="vcap_terms_by_country">
 			<key name="*">
 				<key name="text" />

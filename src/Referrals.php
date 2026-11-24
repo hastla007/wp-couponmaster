@@ -226,7 +226,7 @@ final class Referrals {
 				return $coupon->get_id() ? $coupon : null;
 			}
 			try {
-				$code = CodeIndex::unique( array( 'prefix' => (string) apply_filters( 'vcap_referral_code_prefix', 'FRIEND' ), 'length' => 8 ) );
+				$code = CodeIndex::unique( array( 'prefix' => (string) apply_filters( 'vcap_referral_code_prefix', (string) Settings::value( 'vcap_referral_code_prefix' ) ), 'length' => 8 ) ); // SET-VC-24: setting, the filter wins.
 			} catch ( \RuntimeException $e ) {
 				Claim::release( $claim );
 				return null;

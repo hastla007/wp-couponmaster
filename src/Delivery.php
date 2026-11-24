@@ -418,7 +418,7 @@ final class Delivery {
 			if ( $voucher->delivery_at && strtotime( $voucher->delivery_at . ' UTC' ) > time() ) {
 				return;
 			}
-			if ( $voucher->expires_at && strtotime( $voucher->expires_at . ' UTC' ) < time() ) {
+			if ( $voucher->is_expired() ) { // SET-VC-06: follows the expiry behaviour (grace period, never).
 				// Never mail (or activate) a voucher that has already ended: the shop has to decide.
 				$this->refuse_expired( $voucher );
 				return;
@@ -1532,6 +1532,7 @@ final class Delivery {
 				Install::ensure_upload_dir();
 				return true;
 			case 'expire_overdue':
+				// SET-VC-06: the expiry behaviour decides (ExpiryPolicy) – at the date, when the grace days end, or never.
 				$this->repo->expire_overdue( $budget, $finished );
 				return $finished;
 			case 'retention':

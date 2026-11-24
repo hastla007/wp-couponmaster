@@ -53,9 +53,13 @@ final class Privacy {
 				array( 'name' => __( 'Recipient email', 'voucher-captain' ), 'value' => $voucher->recipient_email ),
 				array( 'name' => __( 'Message', 'voucher-captain' ), 'value' => $voucher->message ),
 			);
-			foreach ( $voucher->fields as $field ) {
+			foreach ( $voucher->fields as $key => $field ) {
+				if ( Consent::KEY === (string) $key ) {
+					continue; // SET-VC-12: below, with its text and time.
+				}
 				$data[] = array( 'name' => $field['label'] ?? '', 'value' => $field['value'] ?? '' );
 			}
+			$data = array_merge( $data, Consent::export_rows( $voucher->fields ) );
 			$items[] = array(
 				'group_id'    => 'vcap-vouchers',
 				'group_label' => __( 'Vouchers', 'voucher-captain' ),

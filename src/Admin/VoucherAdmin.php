@@ -909,6 +909,11 @@ final class VoucherAdmin {
 		$new_max     = isset( $_POST['max_checkins'] ) ? max( 1, absint( $_POST['max_checkins'] ) ) : $v->max_checkins;
 		$new_expires = (string) $expiry['date'] !== $current ? ( null !== $expiry['date'] ? get_gmt_from_date( $expiry['date'] . ' 23:59:59' ) : null ) : $v->expires_at;
 		$revived     = ( Voucher::STATUS_EXPIRED === $v->status || ( $v->is_expired() && in_array( $v->status, array( Voucher::STATUS_ACTIVE, Voucher::STATUS_SCHEDULED ), true ) ) ) && ( ! $new_expires || strtotime( $new_expires . ' UTC' ) >= time() );
+		if ( $new_expires !== $v->expires_at && ! \VCAP\ExpiryPolicy::staff_may_set( $v, $new_expires ) ) {
+			// SET-VC-06: staff may extend a validity by at most the days of "vcap_expiry_staff_extension_days".
+			Flash::add( 'error', self::extension_limit_message( $v ) );
+			return false;
+		}
 		if ( ( $new_max > (int) $v->max_checkins || $revived ) && ! self::can_increase() ) {
 			Flash::add(
 				'error',
@@ -1167,16 +1172,30 @@ final class VoucherAdmin {
 		return array( 'done' => $done, 'failed' => $failed, 'skipped' => $skipped );
 	}
 
+	/** SET-VC-06: why a new expiry date was refused (extension limit for staff), with the latest allowed date. */
+	public static function extension_limit_message( Voucher $v ): string {
+		$limit = \VCAP\ExpiryPolicy::staff_extension_limit( $v );
+		return sprintf(
+			/* translators: 1: number of days, 2: latest allowed date */
+			__( 'Staff may extend a validity by at most %1$d days (latest date for this voucher: %2$s). The voucher was not saved.', 'voucher-captain' ),
+			\VCAP\ExpiryPolicy::staff_extension_days(),
+			null !== $limit ? wp_date( (string) get_option( 'date_format', 'Y-m-d' ), $limit ) : ''
+		);
+	}
+
 	/**
 	 * M12-94: "Extend validity…" for the selected vouchers – by a number of days from their current expiry or to a
 	 * date. Vouchers without an expiry, void, redeemed or store credit are skipped; making an expired voucher usable
 	 * again needs the right to raise values. Every change is logged and written to the coupon (sync_coupon).
 	 *
 	 * @param int[] $ids
-	 * @return array{done:int, skipped:int, failed:int}
+	 * SET-VC-06: vouchers the new date would extend by more than the setting "vcap_expiry_staff_extension_days" allows
+	 * are counted as "limited" and left unchanged.
+	 *
+	 * @return array{done:int, skipped:int, failed:int, limited:int}
 	 */
 	public function extend_validity( array $ids, int $days, string $date ): array {
-		$result = array( 'done' => 0, 'skipped' => 0, 'failed' => 0 );
+		$result = array( 'done' => 0, 'skipped' => 0, 'failed' => 0, 'limited' => 0 );
 		$target = null;
 		if ( '' !== $date ) {
 			$parsed = self::parse_expiry( $date, false, '' );
@@ -1199,6 +1218,10 @@ final class VoucherAdmin {
 			$old = (string) $v->expires_at;
 			$new = $target ?? gmdate( 'Y-m-d H:i:s', (int) strtotime( $old . ' UTC' ) + $days * DAY_IN_SECONDS );
 			$revives = ( Voucher::STATUS_EXPIRED === $v->status || $v->is_expired() ) && strtotime( $new . ' UTC' ) >= time();
+			if ( ! \VCAP\ExpiryPolicy::staff_may_set( $v, $new ) ) {
+				++$result['limited']; // SET-VC-06: beyond the extension staff may grant.
+				continue;
+			}
 			if ( strtotime( $new . ' UTC' ) <= strtotime( $old . ' UTC' ) || ( $revives && ! self::can_increase() ) ) {
 				++$result['skipped']; // Never shortened; reviving value needs the right to raise it.
 				continue;
@@ -1227,6 +1250,17 @@ final class VoucherAdmin {
 		if ( $result['failed'] ) {
 			/* translators: %d: number of vouchers */
 			Flash::add( 'error', sprintf( _n( '%d voucher could not be saved.', '%d vouchers could not be saved.', $result['failed'], 'voucher-captain' ), $result['failed'] ) );
+		}
+		if ( $result['limited'] ) {
+			Flash::add(
+				'warning',
+				sprintf(
+					/* translators: 1: number of vouchers, 2: number of days */
+					_n( '%1$d voucher was not extended: staff may extend a validity by at most %2$d days from its current expiry date or today.', '%1$d vouchers were not extended: staff may extend a validity by at most %2$d days from its current expiry date or today.', $result['limited'], 'voucher-captain' ),
+					$result['limited'],
+					\VCAP\ExpiryPolicy::staff_extension_days()
+				)
+			);
 		}
 		return $result;
 	}

@@ -967,6 +967,8 @@ final class Issuer {
 				$this->coupons->set_coupon_enabled( $voucher, false );
 			}
 		}
+		// SET-VC-13: the sequential voucher number (when switched on) – only now, so an undone slot never uses one.
+		VoucherNumber::assign( $voucher );
 		// M12-29: the VAT treatment at issue is kept with the "issued" entry (journal column, never changed later).
 		$treatment = ProductConfig::tax_treatment( $voucher );
 		ProductConfig::remember_sold( $voucher, true, $treatment );
@@ -974,6 +976,7 @@ final class Issuer {
 			Db::fail( 'log_issued', array( 'voucher_id' => $voucher->id, 'order_id' => $order->get_id() ) );
 			$order->add_order_note( sprintf( /* translators: %s: code */ __( 'Voucher %s was issued, but its history entry could not be written.', 'voucher-captain' ), Mask::code( (string) $voucher->code ) ) );
 		}
+		Consent::log( $this->repo, $voucher, $order->get_id() ); // SET-VC-12: history entry of a consent given with the order.
 		return $voucher;
 	}
 
@@ -1115,6 +1118,8 @@ final class Issuer {
 			}
 			return $voucher;
 		}
+		// SET-VC-13: the sequential voucher number (when switched on), also for imports and admin issues.
+		VoucherNumber::assign( $voucher );
 		// M12-42/M12-29: whether it was sold and its VAT treatment at issue, kept with the "issued" entry.
 		$treatment = ProductConfig::tax_treatment( $voucher );
 		ProductConfig::remember_sold( $voucher, $sold, $treatment );
@@ -1371,7 +1376,7 @@ final class Issuer {
 		$remaining_base = $to_base( $remaining );
 		if ( null === $remaining_base || null === $to_base( $amount ) ) {
 			// Foreign currency without exchange rate: the spent base-currency value cannot be compared (never 1:1).
-			if ( apply_filters( 'vcap_allow_refund_of_spent_vouchers', false, $order, $amount, $spent ) ) {
+			if ( apply_filters( 'vcap_allow_refund_of_spent_vouchers', $this->settings->yes( 'vcap_allow_refund_of_spent_vouchers' ), $order, $amount, $spent ) ) {
 				return;
 			}
 			throw new \Exception(
@@ -1386,7 +1391,7 @@ final class Issuer {
 		$max_base       = $remaining_base - $spent;
 		$decimals       = API\V1\RedemptionService::decimals( (string) $order->get_currency() );
 		$tolerance      = 0.5 / ( 10 ** $decimals );
-		if ( $to_base( $amount ) <= $max_base + $tolerance || apply_filters( 'vcap_allow_refund_of_spent_vouchers', false, $order, $amount, $spent ) ) {
+		if ( $to_base( $amount ) <= $max_base + $tolerance || apply_filters( 'vcap_allow_refund_of_spent_vouchers', $this->settings->yes( 'vcap_allow_refund_of_spent_vouchers' ), $order, $amount, $spent ) ) {
 			return;
 		}
 		$max   = $remaining_base > 0 ? round( $remaining * max( 0.0, $max_base ) / $remaining_base, $decimals ) : 0.0;

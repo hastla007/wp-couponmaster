@@ -99,6 +99,8 @@ with a public API contract, the contract starts with 1.1.0). Add-ons check the c
 | `vcap_client_ip` | 1.2.0 | `src/Health.php`, `src/Plugin.php` | – |
 | `vcap_command_limits` | 1.3.0 | `src/API/V1/CommandLimits.php` | Lowers the limits of an automatic voucher command or switches it off (args: limits {enabled, per_day, per_recipient, max_amount_minor, amount_allowed}, command, currency of the amount). Values above the given ones, and enabled = true for a command the operator switched off, have no effect. |
 | `vcap_command_log_days` | 1.3.0 | `src/API/V1/OptionCommandStore.php` | Days the daily counters and the protocol of the voucher commands are kept. 0 keeps them. |
+| `vcap_consent_required` | 1.3.0 | `src/Consent.php` | Whether the product page of a voucher asks for the consent checkbox (SET-VC-12). |
+| `vcap_consent_text` | 1.3.0 | `src/Consent.php` | Text of the consent checkbox on the product page (SET-VC-12); stored with the order as shown. |
 | `vcap_contact_opted_out` | 1.3.0 | `src/API/V1/ContactService.php` | Whether the address must not be contacted for this purpose (e.g. an opt-out list). An opted-out address is never returned. |
 | `vcap_contact_read_allowed` | 1.3.0 | `src/API/V1/ContactService.php` | Whether the current caller may read the contact of a voucher. |
 | `vcap_counter_limit_applies` | 1.2.0 | `src/Counter.php` | Whether the daily counter limits apply (default: not for staff who manage vouchers). Args: bool, user id, Voucher. |
@@ -133,6 +135,9 @@ with a public API contract, the contract starts with 1.1.0). Add-ons check the c
 | `vcap_email_intro` | 1.2.0 | `src/Emails/VoucherEmail.php` | Intro text of a voucher email (e.g. a ticket voucher's reminder speaks of tickets, not of a remaining value). |
 | `vcap_email_locale` | 1.2.0 | `src/Compat/Multilingual.php`, `src/Integrations/ReviewSource.php` | – |
 | `vcap_event_labels` | 1.1.0 | `src/VoucherRepository.php` | Labels of connector events in the voucher history. |
+| `vcap_expiry_behaviour` | 1.3.0 | `src/ExpiryPolicy.php` | What happens when the validity of a voucher ends: "expires" (booked off at the date), "grace" (still redeemable for the grace days, booked off when they end) or "never" (date shown as a notice only). Gets the setting; the filter wins. Not legally checked – derecognition is income. |
+| `vcap_expiry_grace_days` | 1.3.0 | `src/ExpiryPolicy.php` | Days a voucher stays redeemable after its expiry date with the behaviour "grace". Gets the setting; the filter wins (at least 0). |
+| `vcap_expiry_staff_extension_days` | 1.3.0 | `src/ExpiryPolicy.php` | Days staff may extend the validity of a voucher by hand (voucher edit and bulk action "Extend validity"), counted from its current expiry date or today, whichever is later. 0 = no limit. Gets the setting; the filter wins. |
 | `vcap_field_definitions` | 1.0.0 | `src/Fields.php` | – |
 | `vcap_field_group_applies` | 1.0.0 | `src/Fields.php` | – |
 | `vcap_first_order_counting_statuses` | 1.1.0 | `src/FirstOrderCoupons.php` | – |
@@ -151,7 +156,7 @@ with a public API contract, the contract starts with 1.1.0). Add-ons check the c
 | `vcap_issue_requires_payment` | 1.2.0 | `src/Delivery.php`, `src/Issuer.php` | – |
 | `vcap_issue_retry_delay` | 1.2.0 | `src/Issuer.php` | – |
 | `vcap_job_step_seconds` | 1.2.0 | `src/Jobs.php` | Seconds one background action works on a bulk job (code generation, import) before it queues the next. |
-| `vcap_keep_status_on_partial_return` | 1.2.0 | `src/OrderReturn.php` | Whether an order paid partly with vouchers keeps its status after a refund of all its money (default true). |
+| `vcap_keep_status_on_partial_return` | 1.2.0 | `src/OrderReturn.php` | Whether an order paid partly with vouchers keeps its status after a refund of all its money (default: the setting, on; SET-VC-05). |
 | `vcap_ledger_money_events` | 1.2.0 | `src/Ledger.php` | – |
 | `vcap_legacy_claim_retention_days` | 1.2.0 | `src/Claim.php` | – |
 | `vcap_line_snapshot` | 1.1.0 | `src/Issuer.php` | Extra snapshot keys of connectors (e.g. the ticket a voucher is exchanged for); core keys always win. |
@@ -219,7 +224,7 @@ with a public API contract, the contract starts with 1.1.0). Add-ons check the c
 | `vcap_referral_code_prefix` | 1.1.0 | `src/Referrals.php` | – |
 | `vcap_referral_min_spend` | 1.2.0 | `src/Referrals.php` | Minimum order value of referral codes (V3). |
 | `vcap_referral_same_address` | 1.2.0 | `src/Referrals.php` | – |
-| `vcap_refund_guest_as_gift_card` | 1.2.0 | `src/StoreCredit.php` | Whether a guest order can be refunded as a new gift card instead of store credit (default true). |
+| `vcap_refund_guest_as_gift_card` | 1.2.0 | `src/StoreCredit.php` | Whether a guest order can be refunded as a new gift card instead of store credit (default: the setting, on; SET-VC-05). |
 | `vcap_render_template_id` | 1.0.0 | `src/PdfRenderer.php` | The PDF template a voucher is printed with (args: template id, Voucher), e.g. a translation of the template. |
 | `vcap_report_group` | 1.1.0 | `src/Reports.php` | Group of a coupon code in the campaign report (args: array{type, name}, code, coupon id), e.g. an add-on's own source. |
 | `vcap_report_statuses` | 1.1.0 | `src/Reports.php` | Order statuses (without "wc-") whose orders count in the campaign report (default: WooCommerce's paid statuses and refunded). |
@@ -279,6 +284,8 @@ with a public API contract, the contract starts with 1.1.0). Add-ons check the c
 | `vcap_voucher_is_means_of_payment` | 1.2.0 | `src/Coupons/CartCoupons.php` | – |
 | `vcap_voucher_links` | 1.2.0 | `src/Downloads.php` | Extra links of a voucher in its email and the customer's voucher list, e.g. "Add to Wallet". Args: list of array{label: string, url: string, id?: string, image?: string, width?: int, alt?: string}, Voucher, context ("email", "email_plain", "account" or "placeholder"). |
 | `vcap_voucher_next_steps` | 1.2.0 | `templates/emails/plain/voucher.php`, `templates/emails/voucher.php` | Steps after receiving the voucher (e.g. "exchange it for tickets on the redeem page"); connectors add them for their voucher types. Empty: the usual "enter the code at checkout" hint. |
+| `vcap_voucher_number` | 1.3.0 | `src/VoucherNumber.php` | The sequential number of a voucher before it is stored (SET-VC-13). Args: string number, int counter value, int year, Voucher. Keep it unique (max. 64 characters); '' gives the voucher no number. |
+| `vcap_voucher_number_enabled` | 1.3.0 | `src/VoucherNumber.php` | Whether new vouchers get a sequential voucher number (SET-VC-13). Args: bool from the setting "Voucher numbers". The filter wins over the setting. |
 | `vcap_voucher_pays_after_tax` | 1.2.0 | `src/PaymentVouchers.php` | – |
 | `vcap_voucher_pays_shipping_and_fees` | 1.2.0 | `src/PaymentVouchers.php` | Whether a voucher paying after tax may also pay shipping and fees (default: when it is not limited to products or categories). |
 | `vcap_voucher_request_handover` | 1.2.0 | `src/Integrations/VoucherRequests.php` | Hands a voucher request over to a company order (D5, contract 1.0.0). Return `array{url: string, order_id: int}` (admin URL of the order's preview) or a WP_Error; null means no extension took it. The same reference again must answer the same order. |

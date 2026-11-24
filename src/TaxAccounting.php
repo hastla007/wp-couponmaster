@@ -11,6 +11,11 @@ defined( 'ABSPATH' ) || exit;
  * - the ledger books the remaining value of a single-use voucher that an order did not use ("forfeited", or kept as
  *   store credit / a new gift card with the product setting "Keep the rest"), the value lost at the expiry
  *   ("expired" with an amount) and its counter-booking when the voucher becomes valid again ("expiry_reversed").
+ *
+ * SET-VC-06: when the "expired" booking is made follows the expiry behaviour (ExpiryPolicy, setting and filter
+ * "vcap_expiry_behaviour"): at the expiry date ("expires", default), when the grace days end ("grace" – nothing is
+ * booked off while the voucher is still redeemable), or never ("never", the date is a notice only). Derecognition is
+ * income: not legally or tax checked (TAX.md 6.1a, "zu prüfen").
  */
 final class TaxAccounting {
 	/** Ledger event: rest of a single-use voucher that the redeeming order did not use (lost, M12-29). */
@@ -27,6 +32,7 @@ final class TaxAccounting {
 	public function __construct( private VoucherRepository $repo ) {}
 
 	public function register(): void {
+		ExpiryPolicy::register(); // SET-VC-06: WooCommerce's expiry check of voucher coupons and the grace notice.
 		add_action( 'vcap_voucher_updated', array( $this, 'book_expiry_reversal' ), 20 );
 		add_filter( 'vcap_event_labels', array( self::class, 'event_labels' ) );
 		add_filter( 'woocommerce_coupon_get_items_to_apply', array( $this, 'single_purpose_items' ), 14, 3 );

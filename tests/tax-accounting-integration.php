@@ -250,6 +250,27 @@ TopUp::extend_validity( vcap()->vouchers, vcap()->vouchers->get( $expiring->id )
 $back = current( array_filter( vcap_ta_events( $expiring ), static fn( $e ) => TaxAccounting::EXPIRY_REVERSED_EVENT === $e['event'] ) );
 vcap_ta_assert( $back && abs( 40.0 - (float) $back['amount'] ) < 0.001 && 40.0 === Ledger::signed_amount( TaxAccounting::EXPIRY_REVERSED_EVENT, $back['amount'] ), 'M12-29: extending the validity books the expired value back once', vcap_ta_events( $expiring ) );
 
+// SET-VC-06: grace period – still redeemable and not booked off; booked off once the grace period ended.
+update_option( 'vcap_expiry_behaviour', 'grace' );
+update_option( 'vcap_expiry_grace_days', 30 );
+$grace_card = vcap_ta_voucher( 'giftcard', 'balance', $mpv_product->get_id(), 25, array( 'expires_at' => gmdate( 'Y-m-d H:i:s', time() - 5 * DAY_IN_SECONDS ) ) );
+$grace_coupon = new WC_Coupon( $grace_card->coupon_id );
+$grace_coupon->set_date_expires( time() - 5 * DAY_IN_SECONDS );
+$grace_coupon->save();
+vcap()->vouchers->expire_overdue();
+$grace_fresh = vcap()->vouchers->get( $grace_card->id );
+vcap_ta_assert( Voucher::STATUS_ACTIVE === $grace_fresh->status && ! $grace_fresh->is_expired() && ! array_filter( vcap_ta_events( $grace_card ), static fn( $e ) => 'expired' === $e['event'] ) && false === apply_filters( 'woocommerce_coupon_validate_expiry_date', true, new WC_Coupon( $grace_card->coupon_id ), null ), 'SET-VC-06: in the grace period the card stays active, WooCommerce\'s expiry check accepts its coupon and nothing is booked off' );
+update_option( 'vcap_expiry_grace_days', 3 );
+vcap()->vouchers->expire_overdue();
+$grace_booked = current( array_filter( vcap_ta_events( $grace_card ), static fn( $e ) => 'expired' === $e['event'] ) );
+vcap_ta_assert( $grace_booked && abs( 25.0 - (float) $grace_booked['amount'] ) < 0.001 && Voucher::STATUS_EXPIRED === vcap()->vouchers->get( $grace_card->id )->status, 'SET-VC-06: when the grace period ended the expiry is booked with the remaining value', vcap_ta_events( $grace_card ) );
+update_option( 'vcap_expiry_behaviour', 'never' );
+$never_card = vcap_ta_voucher( 'giftcard', 'balance', $mpv_product->get_id(), 15, array( 'expires_at' => gmdate( 'Y-m-d H:i:s', time() - 400 * DAY_IN_SECONDS ) ) );
+vcap()->vouchers->expire_overdue();
+vcap_ta_assert( Voucher::STATUS_ACTIVE === vcap()->vouchers->get( $never_card->id )->status && ! array_filter( vcap_ta_events( $never_card ), static fn( $e ) => 'expired' === $e['event'] ), 'SET-VC-06: "never expires" – nothing expires or is booked off' );
+delete_option( 'vcap_expiry_behaviour' );
+delete_option( 'vcap_expiry_grace_days' );
+
 // A single-use voucher of 100 used for 60: "redeemed" 60 and "forfeited" 40, both with the order.
 update_option( 'woocommerce_calc_taxes', 'no' );
 $small_goods = new WC_Product_Simple();

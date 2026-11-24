@@ -371,6 +371,13 @@ vcap_acc_assert( true === $single_use->apply_coupon( $single->code ), 'the vouch
 wc_get_order( $single_use->get_id() )->update_status( 'failed', 'Card declined.' );
 $single_guard = wc_create_refund( array( 'order_id' => $single_buy->get_id(), 'amount' => 30 ) );
 vcap_acc_assert( is_wp_error( $single_guard ) && str_contains( $single_guard->get_error_message(), $single->code ), 'the purchase of a single-use voucher sitting in an unpaid order cannot be refunded' );
+// SET-VC-05: the setting "Refund spent voucher value" is the default of the filter, which wins.
+update_option( 'vcap_allow_refund_of_spent_vouchers', 'yes' );
+add_filter( 'vcap_allow_refund_of_spent_vouchers', '__return_false' );
+$s05_refused = wc_create_refund( array( 'order_id' => $single_buy->get_id(), 'amount' => 30 ) );
+remove_filter( 'vcap_allow_refund_of_spent_vouchers', '__return_false' );
+delete_option( 'vcap_allow_refund_of_spent_vouchers' );
+vcap_acc_assert( is_wp_error( $s05_refused ) && VCAP\Voucher::STATUS_VOID !== vcap()->vouchers->get( $single->id )->status, 'SET-VC-05: setting "Refund spent voucher value" on, but the filter (false) wins: still refused' );
 add_filter( 'vcap_allow_refund_of_spent_vouchers', '__return_true' );
 $single_forced = wc_create_refund( array( 'order_id' => $single_buy->get_id(), 'amount' => 30 ) );
 remove_filter( 'vcap_allow_refund_of_spent_vouchers', '__return_true' );

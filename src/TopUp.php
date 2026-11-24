@@ -1040,7 +1040,7 @@ final class TopUp {
 			}
 		}
 		$amount = (float) ( $args['amount'] ?? 0 );
-		if ( ( ! $codes && ! $unknown ) || apply_filters( 'vcap_allow_refund_of_spent_top_ups', false, $order, $amount, $over + $lost ) ) {
+		if ( ( ! $codes && ! $unknown ) || apply_filters( 'vcap_allow_refund_of_spent_top_ups', 'yes' === Settings::value( 'vcap_allow_refund_of_spent_top_ups' ), $order, $amount, $over + $lost ) ) {
 			return;
 		}
 		if ( $unknown ) {

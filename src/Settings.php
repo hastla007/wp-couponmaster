@@ -117,7 +117,7 @@ final class Settings {
 		add_action( 'woocommerce_sections_vcap', array( $this, 'sections' ) );
 		add_action( 'woocommerce_admin_field_' . Admin\SettingsUi::DEFAULT_SUBMIT_TYPE, array( Admin\SettingsUi::class, 'render_default_submit' ) );
 		add_filter( 'woocommerce_admin_settings_sanitize_option_' . Logger::VERBOSE_OPTION, array( Logger::class, 'sanitize_verbose' ) );
-		foreach ( array( 'vcap_code_prefix', 'vcap_code_suffix', 'vcap_code_separator' ) as $affix ) {
+		foreach ( array( 'vcap_code_prefix', 'vcap_code_suffix', 'vcap_code_separator', 'vcap_bonus_code_prefix', 'vcap_referral_code_prefix' ) as $affix ) {
 			add_filter( 'woocommerce_admin_settings_sanitize_option_' . $affix, array( $this, 'sanitize_affix' ), 10, 2 );
 		}
 		// SET-VC-04: validity and conditions per country are tables, checked row by row on save.
@@ -126,6 +126,8 @@ final class Settings {
 		( new Admin\CountryProfilesAdmin() )->register();
 		// SET-VC-11: links of "Issuer and legal texts" only http(s), address and legal text as plain text.
 		LegalInfo::register_sanitizers();
+		// SET-VC-13: pattern and prefix of the voucher numbers are kept only when valid.
+		VoucherNumber::register_sanitizers();
 		// M12-84: "30, 7, 1" is stored normalised (largest first), anything else as 0 (no reminders).
 		add_filter(
 			'woocommerce_admin_settings_sanitize_option_vcap_expiry_reminder_days',
@@ -134,6 +136,11 @@ final class Settings {
 				return $days ? implode( ', ', $days ) : '0';
 			}
 		);
+	}
+
+	/** SET-VC-13: the next voucher number for the help text ('' while the schema has no number column yet). */
+	private static function voucher_number_preview(): string {
+		return Install::voucher_number_ready() ? VoucherNumber::preview() : VoucherNumber::format( 1, VoucherNumber::year_of( null ), VoucherNumber::config() );
 	}
 
 	/**
@@ -204,6 +211,12 @@ final class Settings {
 
 	public function get( string $key ) {
 		return apply_filters( 'vcap_setting_' . $key, get_option( $key, SettingsRegistry::default( $key ) ) );
+	}
+
+	/** SET-VC-24: the link parameter as CouponLink reads it (sanitized, '' = "gutschein"). */
+	private function link_param(): string {
+		$param = sanitize_key( (string) $this->get( 'vcap_coupon_link_param' ) );
+		return '' !== $param ? $param : CouponLink::LEGACY_PARAM;
 	}
 
 	public function yes( string $key ): bool {
@@ -827,13 +840,99 @@ final class Settings {
 		);
 	}
 
+	/**
+	 * SET-VC-05: block "Refund & cancellation" of the section "Redemption & balance" – one field per rule (1.12 no. 1–7).
+	 * Defaults = the fixed values of 1.2.0; the filter of the same name gets the setting and wins (API.md). Legal and tax
+	 * weight: the help says the rule is not legally checked.
+	 *
+	 * @return array<int, array<string, mixed>>
+	 */
+	public static function refund_rule_fields(): array {
+		$note = ' ' . __( 'Not legally checked: have the rule checked for your country (tax and consumer law).', 'voucher-captain' );
+		$box  = static function ( string $key, string $title, string $help ) use ( $note ): array {
+			return SettingsRegistry::field(
+				$key,
+				array(
+					'title' => $title,
+					'type'  => 'checkbox',
+					'desc'  => $help . $note,
+				)
+			);
+		};
+		return array(
+			array(
+				'type'  => 'title',
+				'title' => __( 'Refund & cancellation', 'voucher-captain' ),
+				'desc'  => __( 'What happens to vouchers, gift cards and bonus vouchers when an order is refunded or cancelled. The defaults protect against paying out value that was already spent.', 'voucher-captain' ),
+				'id'    => 'vcap_refund_rules',
+			),
+			$box(
+				'vcap_allow_refund_of_spent_vouchers',
+				__( 'Refund spent voucher value', 'voucher-captain' ),
+				__( 'Allow refunding a voucher purchase above "order total minus value already spent". Off (default): such a refund is refused with the maximum amount; unused vouchers are voided.', 'voucher-captain' )
+			),
+			$box(
+				'vcap_allow_refund_of_spent_top_ups',
+				__( 'Refund spent top-ups', 'voucher-captain' ),
+				__( 'Allow refunding a gift card top-up whose value was already spent from the card. Off (default): at most what is still on the card can be refunded.', 'voucher-captain' )
+			),
+			$box(
+				'vcap_allow_refund_of_used_bonus',
+				__( 'Refund below a used bonus', 'voucher-captain' ),
+				__( 'Allow a refund that takes an order below a promotion\'s threshold while its bonus voucher was already used. Off (default): at most "order rest minus used bonus" can be refunded.', 'voucher-captain' )
+			),
+			$box(
+				'vcap_refund_guest_as_gift_card',
+				__( 'Refund guest orders as gift card', 'voucher-captain' ),
+				__( '"Refund as store credit" on a guest order creates a new gift card for the billing email address (default on). Off: guest orders can only be refunded as money.', 'voucher-captain' )
+			),
+			$box(
+				'vcap_keep_status_on_partial_return',
+				__( 'Keep the status after a partial return', 'voucher-captain' ),
+				__( 'An order paid partly with vouchers keeps its status when all its money is refunded but refundable items are left, so the voucher part is not booked back automatically (default on). Off: WooCommerce sets it to "Refunded" and the whole voucher charge is booked back.', 'voucher-captain' )
+			),
+			SettingsRegistry::field(
+				'vcap_restore_extension_days',
+				array(
+					'title'             => __( 'Extend expired vouchers on booking back (days)', 'voucher-captain' ),
+					'type'              => 'number',
+					'custom_attributes' => array( 'step' => 1 ),
+					'desc'              => __( 'When a cancellation books value back onto a voucher that has expired, its validity is extended by this many days from today. 0 (default) = not extended; the order gets a note and the shop a notice instead. Cancelled vouchers are never extended.', 'voucher-captain' ) . $note,
+				)
+			),
+			SettingsRegistry::field(
+				Coupons\Settlement::DEDUCT_OPTION,
+				array(
+					'title'   => __( 'Charge balances at', 'voucher-captain' ),
+					'type'    => 'multiselect',
+					'class'   => 'wc-enhanced-select',
+					'options' => Coupons\Settlement::deduct_choices(),
+					'desc'    => __( 'Gift card and store credit balances used in an order are charged when the order reaches one of these statuses (default: Processing, Completed). Only paid statuses can be chosen; empty = the default.', 'voucher-captain' ) . $note,
+				)
+			),
+			SettingsRegistry::field(
+				Coupons\Settlement::RESTORE_OPTION,
+				array(
+					'title'   => __( 'Book balances back at', 'voucher-captain' ),
+					'type'    => 'multiselect',
+					'class'   => 'wc-enhanced-select',
+					'options' => Coupons\Settlement::restore_choices(),
+					'desc'    => __( 'Balances charged by an order are booked back (if "Restore balance on cancellation" is on) and reservations released when it reaches one of these statuses (default: all three). Empty = all three.', 'voucher-captain' ) . $note,
+				)
+			),
+			array( 'type' => 'sectionend', 'id' => 'vcap_refund_rules' ),
+		);
+	}
+
 	/* ---- M12-90: sections of the former "General" page. ---------------------------------------------------- */
 
 	/** Blocks of general_fields() shown on their own section (other blocks stay on "General"). */
 	private const GENERAL_BLOCKS = array(
 		'vcap_codes'    => 'codes',
+		'vcap_voucher_numbers' => 'codes',
 		'vcap_redeem'         => 'redemption',
 		'vcap_redeem_windows' => 'redemption',
+		'vcap_refund_rules'   => 'redemption',
 		'vcap_guessing'       => 'redemption',
 		'vcap_referral' => 'promotions',
 	);
@@ -842,6 +941,7 @@ final class Settings {
 	private const GENERAL_OPTIONS = array(
 		'vcap_campaigns_enabled'     => 'promotions',
 		'vcap_bonus_wait_days'       => 'promotions',
+		'vcap_bonus_code_prefix'     => 'promotions',
 		'vcap_discounts_on_vouchers' => 'promotions',
 		'vcap_coupon_link'           => 'promotions',
 		'vcap_coupon_link_param'     => 'promotions',
@@ -997,6 +1097,46 @@ final class Settings {
 			),
 			array( 'type' => 'sectionend', 'id' => 'vcap_general' ),
 
+			// SET-VC-06: what happens when the validity ends; defaults = 1.2.0 (expires, no limit for staff).
+			array(
+				'type'  => 'title',
+				'title' => __( 'When the validity ends', 'voucher-captain' ),
+				'desc'  => __( 'Not legally or tax checked: booking off an expired value is income, and consumer law may forbid short validity periods. Have the choice checked for your country.', 'voucher-captain' ),
+				'id'    => 'vcap_expiry_behaviour_block',
+			),
+			SettingsRegistry::field(
+				'vcap_expiry_behaviour',
+				array(
+					'title'    => __( 'Expired vouchers', 'voucher-captain' ),
+					'type'     => 'select',
+					'options'  => array(
+						'expires' => __( 'Expire on the expiry date (remaining value booked off)', 'voucher-captain' ),
+						'grace'   => __( 'Grace period: still redeemable for the days below', 'voucher-captain' ),
+						'never'   => __( 'Never expire: the expiry date is only shown as a notice', 'voucher-captain' ),
+					),
+					'desc_tip' => __( 'In the grace period the voucher is still accepted in the cart, at the counter and through the redemption API, with a notice; its remaining value is booked off only when the grace period ends. With "Never expire" nothing is booked off. Vouchers that already expired stay expired – extend them by hand.', 'voucher-captain' ),
+				)
+			),
+			SettingsRegistry::field(
+				'vcap_expiry_grace_days',
+				array(
+					'title'             => __( 'Grace period (days)', 'voucher-captain' ),
+					'type'              => 'number',
+					'custom_attributes' => array( 'step' => 1 ),
+					'desc_tip'          => __( 'Only with "Grace period": days after the expiry date in which the voucher is still accepted.', 'voucher-captain' ),
+				)
+			),
+			SettingsRegistry::field(
+				'vcap_expiry_staff_extension_days',
+				array(
+					'title'             => __( 'Staff may extend the validity by up to (days)', 'voucher-captain' ),
+					'type'              => 'number',
+					'custom_attributes' => array( 'step' => 1 ),
+					'desc_tip'          => __( 'Limit for extending a voucher by hand (voucher edit and bulk action "Extend validity"), counted from its current expiry date or today, whichever is later. 0 = no limit.', 'voucher-captain' ),
+				)
+			),
+			array( 'type' => 'sectionend', 'id' => 'vcap_expiry_behaviour_block' ),
+
 			array(
 				'type'  => 'title',
 				'title' => __( 'Abuse protection', 'voucher-captain' ),
@@ -1107,6 +1247,64 @@ final class Settings {
 			),
 			array( 'type' => 'sectionend', 'id' => 'vcap_codes' ),
 
+			// SET-VC-13: sequential voucher number in addition to the random code (off by default, E9 a).
+			array(
+				'type'  => 'title',
+				'title' => __( 'Voucher numbers', 'voucher-captain' ),
+				'desc'  => __( 'A readable, sequential number in addition to the random code, e.g. for bookkeeping and the till. Given once to every new voucher (orders, issued by hand, imported) without gaps, per site; existing vouchers keep having none. Shown as {voucher_number} in PDFs and emails, in the voucher list and the redemption journal, and in "Belegfeld 2" of the DATEV export.', 'voucher-captain' ),
+				'id'    => 'vcap_voucher_numbers',
+			),
+			SettingsRegistry::field(
+				'vcap_voucher_number_enabled',
+				array(
+					'title' => __( 'Voucher numbers', 'voucher-captain' ),
+					'type'  => 'checkbox',
+					'desc'  => __( 'Give new vouchers a sequential voucher number. Whether numbered vouchers are required in your country has not been legally checked.', 'voucher-captain' ),
+				)
+			),
+			SettingsRegistry::field(
+				'vcap_voucher_number_pattern',
+				array(
+					'title'             => __( 'Pattern', 'voucher-captain' ),
+					'type'              => 'text',
+					/* translators: %s: example of the next voucher number */
+					'desc'              => sprintf( __( '{number} is the counter, {year} the year of issue, {prefix} the prefix (put in front when missing). Letters, digits and . _ - / #, up to 40 characters. With a yearly restart the year is put in front when the pattern has no {year}. Next number: %s', 'voucher-captain' ), self::voucher_number_preview() ),
+					'custom_attributes' => array( 'maxlength' => VoucherNumber::PATTERN_LENGTH ),
+				)
+			),
+			SettingsRegistry::field(
+				'vcap_voucher_number_prefix',
+				array(
+					'title'             => __( 'Prefix', 'voucher-captain' ),
+					'type'              => 'text',
+					'desc_tip'          => __( 'Optional, e.g. "GS-". Letters, digits and . _ - / #, up to 20 characters.', 'voucher-captain' ),
+					'custom_attributes' => array( 'maxlength' => VoucherNumber::PREFIX_LENGTH, 'pattern' => '[A-Za-z0-9._\\-\\/#]*' ),
+				)
+			),
+			SettingsRegistry::field(
+				'vcap_voucher_number_digits',
+				array(
+					'title'             => __( 'Digits', 'voucher-captain' ),
+					'type'              => 'number',
+					'css'               => 'width:70px',
+					'desc_tip'          => __( 'Minimum digits of {number}, filled with leading zeros (5 = 00042).', 'voucher-captain' ),
+					'custom_attributes' => array( 'step' => 1 ),
+				)
+			),
+			SettingsRegistry::field(
+				'vcap_voucher_number_reset',
+				array(
+					'title'    => __( 'Start again at 1', 'voucher-captain' ),
+					'type'     => 'select',
+					'options'  => array(
+						'yearly' => __( 'Every year (1 January, site time zone)', 'voucher-captain' ),
+						'never'  => __( 'Never', 'voucher-captain' ),
+					),
+					'desc_tip' => __( 'Numbers given are never changed or reused; changing this only affects new vouchers.', 'voucher-captain' ),
+				)
+			),
+			array( 'type' => 'sectionend', 'id' => 'vcap_voucher_numbers' ),
+
 			array( 'type' => 'title', 'title' => __( 'Redemption', 'voucher-captain' ), 'id' => 'vcap_redeem' ),
 			SettingsRegistry::field(
 				'vcap_redeem_page_id',
@@ -1161,6 +1359,16 @@ final class Settings {
 					'desc_tip'          => __( 'A bonus voucher is created when the order is paid, but sent and redeemable only after this many days; a cancelled or refunded order withdraws it before. 0 = at once.', 'voucher-captain' ),
 				)
 			),
+			// SET-VC-24: prefix of bonus codes (default "BONUS" as in 1.2.0; the filter vcap_bonus_code_prefix wins).
+			SettingsRegistry::field(
+				'vcap_bonus_code_prefix',
+				array(
+					'title'    => __( 'Prefix of bonus codes', 'voucher-captain' ),
+					'type'     => 'text',
+					'css'      => 'width:160px',
+					'desc_tip' => __( 'Start of every new bonus code, e.g. BONUS-AB12CD34EF. Letters, digits, dot, hyphen and underscore, up to 20 characters; empty = no prefix. Codes already created keep theirs.', 'voucher-captain' ),
+				)
+			),
 			SettingsRegistry::field(
 				'vcap_store_credit',
 				array(
@@ -1210,7 +1418,8 @@ final class Settings {
 				array(
 					'title' => __( 'Voucher links', 'voucher-captain' ),
 					'type'  => 'checkbox',
-					'desc'  => __( 'Apply a coupon automatically when a customer opens a link such as https://your-shop/?gutschein=CODE (any WooCommerce coupon). The code is applied once, validated by WooCommerce, and only when the cart has products.', 'voucher-captain' ),
+					/* translators: %s: name of the link parameter, e.g. "voucher" */
+					'desc'  => sprintf( __( 'Apply a coupon automatically when a customer opens a link such as https://your-shop/?%s=CODE (any WooCommerce coupon). The code is applied once, validated by WooCommerce, and only when the cart has products.', 'voucher-captain' ), esc_html( $this->link_param() ) ),
 				)
 			),
 			SettingsRegistry::field(
@@ -1219,7 +1428,7 @@ final class Settings {
 					'title'    => __( 'Link parameter', 'voucher-captain' ),
 					'type'     => 'text',
 					'css'      => 'width:160px',
-					'desc_tip' => __( 'Name of the URL parameter (letters, digits, - and _).', 'voucher-captain' ),
+					'desc_tip' => __( 'Name of the URL parameter (letters, digits, - and _). Links with the former parameter "gutschein" keep working after a change.', 'voucher-captain' ),
 				)
 			),
 			SettingsRegistry::field(
@@ -1274,6 +1483,7 @@ final class Settings {
 				)
 			),
 			array( 'type' => 'sectionend', 'id' => 'vcap_redeem_windows' ),
+			...self::refund_rule_fields(), // SET-VC-05.
 
 			// SET-VC-31 (1.12 no. 22, 24): limits against guessing codes; the register's floor keeps them switched on.
 			array(
@@ -1333,6 +1543,16 @@ final class Settings {
 					'type'  => 'checkbox',
 					'desc'  => __( 'Enable referral codes', 'voucher-captain' ),
 					'desc_tip' => __( 'Gives every customer a personal referral code in My Account → Vouchers; the rules are set below.', 'voucher-captain' ),
+				)
+			),
+			// SET-VC-24: prefix of referral codes (default "FRIEND" as in 1.2.0; the filter vcap_referral_code_prefix wins).
+			SettingsRegistry::field(
+				'vcap_referral_code_prefix',
+				array(
+					'title'    => __( 'Prefix of referral codes', 'voucher-captain' ),
+					'type'     => 'text',
+					'css'      => 'width:160px',
+					'desc_tip' => __( 'Start of every new personal referral code, e.g. FRIEND-AB12CD34. Letters, digits, dot, hyphen and underscore, up to 20 characters; empty = no prefix. Codes already given to customers keep theirs.', 'voucher-captain' ),
 				)
 			),
 			SettingsRegistry::field(
@@ -1432,7 +1652,7 @@ final class Settings {
 		);
 		// SET-VC-02: the country profile comes first – it suggests values for the blocks below.
 		// SET-VC-19: block "Payment methods for vouchers"; SET-VC-11: block "Issuer and legal texts".
-		return array_merge( Admin\CountryProfilesAdmin::fields(), $fields, PaymentMethods::settings_fields(), VoucherCurrency::settings_fields(), LegalInfo::settings_fields() ); // SET-VC-19, SET-VC-32, SET-VC-11: blocks on "General".
+		return array_merge( Admin\CountryProfilesAdmin::fields(), $fields, PaymentMethods::settings_fields(), VoucherCurrency::settings_fields(), LegalInfo::settings_fields(), Consent::settings_fields() ); // SET-VC-19, SET-VC-32, SET-VC-11, SET-VC-12: blocks on "General".
 	}
 
 	/**

@@ -22,9 +22,11 @@ final class VouchersListTable extends \WP_List_Table {
 	}
 
 	public function get_columns(): array {
+		$number = \VCAP\VoucherNumber::enabled() ? array( 'number' => __( 'Voucher no.', 'voucher-captain' ) ) : array(); // SET-VC-13.
 		return array(
 			'cb'        => '<input type="checkbox" />',
 			'code'      => __( 'Code', 'voucher-captain' ),
+		) + $number + array(
 			'product'   => __( 'Product', 'voucher-captain' ),
 			'value'     => __( 'Value / balance', 'voucher-captain' ),
 			'status'    => __( 'Status', 'voucher-captain' ),
@@ -186,6 +188,11 @@ final class VouchersListTable extends \WP_List_Table {
 			$actions['coupon'] = '<a href="' . esc_url( get_edit_post_link( $v->coupon_id ) ?: '' ) . '">' . esc_html__( 'Coupon', 'voucher-captain' ) . '</a>';
 		}
 		return '<strong><a href="' . esc_url( $url ) . '"><code>' . esc_html( $v->code ) . '</code></a></strong><br><small>' . esc_html( Voucher::types()[ $v->type ] ?? $v->type ) . '</small>' . $this->row_actions( $actions );
+	}
+
+	/** SET-VC-13: the sequential voucher number ("–" for vouchers issued before the numbers were switched on). */
+	protected function column_number( Voucher $v ): string {
+		return '' !== $v->voucher_number ? esc_html( $v->voucher_number ) : '–';
 	}
 
 	protected function column_product( Voucher $v ): string {

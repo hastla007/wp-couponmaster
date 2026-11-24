@@ -47,6 +47,12 @@ $vcap_settings = array(
 	'vcap_default_expiry_rule'       => array( 'type' => 'select', 'choices' => array( 'statutory', 'days' ), 'section' => '', 'legal' => true ),
 	// PV-P2-10: at most 100 years (the product field "Valid for (days)" has the same ceiling).
 	'vcap_default_expiry_days'       => array( 'type' => 'int', 'default' => 365, 'min' => 0, 'max' => 36500, 'section' => '', 'legal' => true ),
+	// SET-VC-06: what happens when the validity ends (VCAP\ExpiryPolicy; filters vcap_expiry_behaviour,
+	// vcap_expiry_grace_days, vcap_expiry_staff_extension_days win). Defaults = 1.2.0: expires at the date (booked off),
+	// staff may extend without limit (0). Derecognition is income – not legally or tax checked.
+	'vcap_expiry_behaviour'            => array( 'type' => 'select', 'default' => 'expires', 'choices' => array( 'expires', 'grace', 'never' ), 'section' => '', 'legal' => true ),
+	'vcap_expiry_grace_days'           => array( 'type' => 'int', 'default' => 30, 'min' => 1, 'max' => 3650, 'section' => '', 'legal' => true ),
+	'vcap_expiry_staff_extension_days' => array( 'type' => 'int', 'default' => 0, 'min' => 0, 'max' => 36500, 'section' => '', 'legal' => true ),
 	/* ---- General: abuse protection (P12, 0 switches each one off) ---- */
 	'vcap_custom_max_default'        => array( 'type' => 'decimal', 'default' => 500, 'min' => 0, 'section' => '' ),
 	'vcap_customer_daily_limit'      => array( 'type' => 'decimal', 'default' => 1000, 'min' => 0, 'section' => '' ),
@@ -65,6 +71,10 @@ $vcap_settings = array(
 	'vcap_legal_text'                => array( 'type' => 'text', 'section' => '', 'legal' => true ),
 	/* ---- General: currencies (SET-VC-32; filter vcap_vouchers_shop_currency_only wins) ---- */
 	'vcap_vouchers_shop_currency_only' => array( 'type' => 'bool', 'default' => 'no', 'section' => '' ),
+	/* ---- General: consent checkbox (SET-VC-12, E6; off = no checkbox as in 1.2.0; filters vcap_consent_required, vcap_consent_text win) ---- */
+	// Products choose "use global" / "always" / "never" (product meta _vcap_consent). Text and effect not legally checked.
+	'vcap_consent_enabled'           => array( 'type' => 'bool', 'default' => 'no', 'section' => '', 'legal' => true ),
+	'vcap_consent_text'              => array( 'type' => 'text', 'default' => '', 'section' => '', 'legal' => true ),
 
 	/* ---- Codes ---- */
 	'vcap_code_prefix'               => array( 'section' => 'codes' ),
@@ -73,6 +83,12 @@ $vcap_settings = array(
 	'vcap_code_charset'              => array( 'type' => 'select', 'default' => 'alnum_upper', 'choices' => array( 'alnum_upper', 'alpha_upper', 'numeric', 'alnum' ), 'section' => 'codes' ),
 	'vcap_code_separator'            => array( 'default' => '-', 'section' => 'codes' ),
 	'vcap_code_order_ref'            => array( 'type' => 'bool', 'default' => 'no', 'section' => 'codes' ),
+	/* ---- Codes: sequential voucher number (SET-VC-13, E9 a: off by default; filter vcap_voucher_number_enabled wins) ---- */
+	'vcap_voucher_number_enabled'    => array( 'type' => 'bool', 'default' => 'no', 'section' => 'codes', 'legal' => true ),
+	'vcap_voucher_number_pattern'    => array( 'default' => '{year}-{number}', 'section' => 'codes' ),
+	'vcap_voucher_number_prefix'     => array( 'section' => 'codes' ),
+	'vcap_voucher_number_digits'     => array( 'type' => 'int', 'default' => 5, 'min' => 1, 'max' => 12, 'section' => 'codes' ),
+	'vcap_voucher_number_reset'      => array( 'type' => 'select', 'default' => 'yearly', 'choices' => array( 'yearly', 'never' ), 'section' => 'codes' ),
 
 	/* ---- Redemption & balance ---- */
 	'vcap_redeem_page_id'            => array( 'type' => 'post', 'section' => 'redemption', 'export' => false ),
@@ -98,13 +114,31 @@ $vcap_settings = array(
 	'vcap_code_attempts_site_wide'   => array( 'type' => 'int', 'default' => 300, 'min' => 50, 'max' => 10000, 'section' => 'redemption' ),
 	'vcap_email_confirm_per_hour'    => array( 'type' => 'int', 'default' => 3, 'min' => 1, 'max' => 10, 'section' => 'redemption' ),
 	'vcap_email_confirm_link_hours'  => array( 'type' => 'int', 'default' => 48, 'min' => 1, 'max' => 168, 'section' => 'redemption' ),
+	// SET-VC-05 (1.12 no. 1–7): refund and cancellation rules; defaults = the fixed filter defaults of 1.2.0, the
+	// filters of the same name get the setting and win. Legal/tax weight: help texts not legally checked.
+	'vcap_allow_refund_of_spent_vouchers' => array( 'type' => 'bool', 'default' => 'no', 'section' => 'redemption', 'legal' => true ),
+	'vcap_allow_refund_of_spent_top_ups'  => array( 'type' => 'bool', 'default' => 'no', 'section' => 'redemption', 'legal' => true ),
+	'vcap_allow_refund_of_used_bonus'     => array( 'type' => 'bool', 'default' => 'no', 'section' => 'redemption', 'legal' => true ),
+	'vcap_refund_guest_as_gift_card'      => array( 'type' => 'bool', 'default' => 'yes', 'section' => 'redemption', 'legal' => true ),
+	'vcap_keep_status_on_partial_return'  => array( 'type' => 'bool', 'default' => 'yes', 'section' => 'redemption', 'legal' => true ),
+	'vcap_restore_extension_days'         => array( 'type' => 'int', 'default' => 0, 'min' => 0, 'max' => 3650, 'section' => 'redemption', 'legal' => true ),
+	// Paid statuses only (empty = default), resp. cancelled/refunded/failed only (empty = all three): Coupons\Settlement.
+	'vcap_balance_deduct_statuses'        => array( 'type' => 'list', 'default' => array( 'processing', 'completed' ), 'section' => 'redemption', 'legal' => true ),
+	'vcap_balance_restore_statuses'       => array( 'type' => 'list', 'default' => array( 'cancelled', 'refunded', 'failed' ), 'section' => 'redemption', 'legal' => true ),
 
 	/* ---- Promotions & refer a friend ---- */
 	'vcap_campaigns_enabled'         => array( 'type' => 'bool', 'default' => 'no', 'section' => 'promotions' ),
 	'vcap_bonus_wait_days'           => array( 'type' => 'int', 'default' => 14, 'min' => 0, 'section' => 'promotions' ),
 	'vcap_discounts_on_vouchers'     => array( 'type' => 'bool', 'default' => 'no', 'section' => 'promotions' ),
 	'vcap_coupon_link'               => array( 'type' => 'bool', 'default' => 'no', 'section' => 'promotions' ),
+	// SET-VC-24 (E10 a): shops that never saved it keep "gutschein"; a first installation stores the parameter of the site
+	// language instead (Install::activate_site() → CouponLink::fresh_param(): de* "gutschein", else "voucher"). The old
+	// parameter "gutschein" always stays valid as an alias (CouponLink::params()).
 	'vcap_coupon_link_param'         => array( 'default' => 'gutschein', 'section' => 'promotions' ),
+	// SET-VC-24: prefixes of generated bonus and referral codes; defaults = the fixed prefixes of 1.2.0, the filters
+	// vcap_bonus_code_prefix / vcap_referral_code_prefix get the setting and win. '' = no prefix.
+	'vcap_bonus_code_prefix'         => array( 'default' => 'BONUS', 'section' => 'promotions' ),
+	'vcap_referral_code_prefix'      => array( 'default' => 'FRIEND', 'section' => 'promotions' ),
 	'vcap_referral_enabled'          => array( 'type' => 'bool', 'default' => 'no', 'section' => 'promotions' ),
 	'vcap_referral_friend_amount'    => array( 'type' => 'decimal', 'default' => 10, 'min' => 0, 'section' => 'promotions' ),
 	'vcap_referral_friend_type'      => array( 'type' => 'select', 'default' => 'fixed_cart', 'choices' => array( 'fixed_cart', 'percent' ), 'section' => 'promotions' ),
@@ -309,6 +343,8 @@ return array(
 		// SET-VC-14/15/16: automatic backups of the settings and the change log (never autoloaded).
 		'vcap_settings_backups',
 		'vcap_settings_log',
+		// SET-VC-13: counter of the sequential voucher numbers (restart "never"; per year: prefix below).
+		'vcap_voucher_number_seq',
 	),
 	'internal_prefixes' => array(
 		'vcap_cmd_count_',
@@ -324,5 +360,6 @@ return array(
 		'vcap_pin_',
 		'vcap_job_',
 		'vcap_rl_',
+		'vcap_voucher_number_seq_',
 	),
 );

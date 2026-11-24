@@ -55,6 +55,11 @@ final class Voucher {
 	public ?string $last_checkin_at = null;
 	public string $created_at    = '';
 	public string $updated_at    = '';
+	/**
+	 * SET-VC-13: sequential voucher number ('' = none). Read from the row, written only by VoucherNumber::assign()
+	 * (never by to_row(), so saving a voucher cannot overwrite it, and works before the column exists).
+	 */
+	public string $voucher_number = '';
 
 	public static function statuses(): array {
 		return array(
@@ -139,7 +144,7 @@ final class Voucher {
 
 	public function to_row(): array {
 		$row = get_object_vars( $this );
-		unset( $row['id'] );
+		unset( $row['id'], $row['voucher_number'] );
 		$row['fields'] = wp_json_encode( $this->fields );
 		$row['transferable'] = $this->transferable ? 1 : 0;
 		return $row;
@@ -167,8 +172,12 @@ final class Voucher {
 		return 'balance' === $this->usage_mode;
 	}
 
+	/**
+	 * Whether the voucher counts as expired now. SET-VC-06: with the expiry behaviour "grace" only after the grace
+	 * days, with "never" not at all (ExpiryPolicy); the printed date is still $expires_at.
+	 */
 	public function is_expired(): bool {
-		return $this->expires_at && strtotime( $this->expires_at . ' UTC' ) < time();
+		return ExpiryPolicy::is_expired( $this->expires_at );
 	}
 
 	public function is_usable(): bool {
@@ -221,6 +230,10 @@ final class Voucher {
 	public function status_label(): string {
 		if ( self::STATUS_ACTIVE === $this->status && $this->is_expired() ) {
 			return self::statuses()[ self::STATUS_EXPIRED ];
+		}
+		if ( self::STATUS_ACTIVE === $this->status && ExpiryPolicy::past_date_redeemable( $this ) ) {
+			// SET-VC-06: grace period or "never expires" – a notice instead of the status "Expired".
+			return __( 'Active (validity date passed)', 'voucher-captain' );
 		}
 		return self::statuses()[ $this->status ] ?? $this->status;
 	}

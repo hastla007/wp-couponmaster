@@ -6,7 +6,7 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Dynamic placeholders used in PDF templates and emails.
  *
- * Static tokens: {coupon_code}, {coupon_value}, … (see definitions()); issuer and legal texts {issuer}, {legal_text},
+ * Static tokens: {coupon_code}, {voucher_number} (SET-VC-13), {coupon_value}, … (see definitions()); issuer and legal texts {issuer}, {legal_text},
  * {terms_url}, {privacy_url}, {withdrawal_url} from LegalInfo (SET-VC-11).
  * Dynamic tokens: {field:KEY} personalisation field, {item_meta:KEY} order item meta (e.g. Flexible Product Fields),
  * {order_meta:KEY} order meta (e.g. Flexible Checkout Fields), {billing_FIELD} / {shipping_FIELD} address fields.
@@ -16,6 +16,8 @@ final class Placeholders {
 	public static function definitions(): array {
 		$defs = array(
 			'coupon_code'       => __( 'Coupon code', 'voucher-captain' ),
+			// SET-VC-13: empty unless "Voucher numbers" is switched on (Settings → Codes).
+			'voucher_number'    => __( 'Voucher number (sequential)', 'voucher-captain' ),
 			'coupon_value'      => __( 'Voucher value (formatted)', 'voucher-captain' ),
 			'coupon_value_plain'=> __( 'Voucher value (number)', 'voucher-captain' ),
 			'coupon_balance'    => __( 'Remaining balance', 'voucher-captain' ),
@@ -106,6 +108,7 @@ final class Placeholders {
 
 		$values = array(
 			'coupon_code'       => $voucher->code,
+			'voucher_number'    => $voucher->voucher_number,
 			'coupon_value'      => $value,
 			'coupon_value_plain'=> wc_format_localized_decimal( $voucher->initial_amount ),
 			'coupon_balance'    => 'percent' === $voucher->discount_type ? $value : self::money( $voucher->balance, $voucher->currency ),

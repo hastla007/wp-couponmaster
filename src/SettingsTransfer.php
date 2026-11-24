@@ -380,6 +380,12 @@ final class SettingsTransfer {
 		if ( in_array( $key, array( 'vcap_code_prefix', 'vcap_code_suffix', 'vcap_code_separator' ), true ) && '' !== $text && ! CodeGenerator::valid_affix( $text, 'vcap_code_separator' === $key ) ) {
 			return $invalid( __( 'letters, digits, dot, hyphen and underscore (up to 20 characters, separator up to 3)', 'voucher-captain' ) );
 		}
+		if ( VoucherNumber::OPTION_PATTERN === $key && ! VoucherNumber::valid_pattern( $text ) ) {
+			return $invalid( __( 'a pattern with {number} (also {year}, {prefix}, letters, digits and . _ - / #, up to 40 characters)', 'voucher-captain' ) ); // SET-VC-13.
+		}
+		if ( VoucherNumber::OPTION_PREFIX === $key && ! VoucherNumber::valid_prefix( $text ) ) {
+			return $invalid( __( 'letters, digits and . _ - / # (up to 20 characters)', 'voucher-captain' ) ); // SET-VC-13.
+		}
 		if ( 'vcap_expiry_reminder_days' === $key ) {
 			// Stored normalised like the settings page (M12-84): largest first, anything else as 0.
 			$days = Delivery::expiry_reminder_offsets( $text );

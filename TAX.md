@@ -305,8 +305,8 @@ Nachweis: `tests/tax-accounting-integration.php` „M12-29: a single-use voucher
 | Kaufbestellung vollständig erstattet oder storniert | ausgestellte Gutscheine werden gesperrt; eine aufgeladene Geschenkkarte behält ihr Aufladeguthaben: nur der unverbrauchte Kaufwert wird abgebucht (Journal „purchase_refunded“), die Karte bleibt nutzbar | „Gutscheine bei Erstattung stornieren“ (`vcap_void_on_refund`, Standard an); `tests/tax-integration.php` „a fully refunded gift card purchase voids …“, `tests/topup-integration.php` Abschnitt 4b |
 | Kaufbestellung von Hand „Storniert“ (keine Erstattung erfasst) | nur ungenutzte Gutscheine werden gesperrt; bereits genutzte (eingelöst, teilweise verbraucht, reserviert) bleiben gültig, Bestellnotiz nennt sie | `Issuer::on_purchase_cancelled()`; `tests/order-lifecycle-integration.php` „P9 …“ |
 | Teilerstattung (Menge) | so viele Gutscheine wie erstattet werden gesperrt, ungenutzte zuerst, dann teilweise verbrauchte Geschenkkarten; vollständig verbrauchte (eingelöster Einmalgutschein, Karte ohne Guthaben) nie – Bestellnotiz. Schlägt das Sperren fehl: Bestellnotiz, Admin-Hinweis und automatische Wiederholung | `Issuer::on_partial_refund()`; `tests/acceptance-integration.php` „refunding one of two gift cards …“, `tests/connector-integration.php` |
-| Gutschein schon (teilweise) eingelöst | Erstattung höchstens Bestellbetrag minus verbrauchter Wert; mehr lehnt WooCommerce mit Hinweis ab (Filter `vcap_allow_refund_of_spent_vouchers`). Geschenkkarte: verbraucht = Kaufwert + Aufladungen − Rücknahmen − Guthaben, verbraucht wird zuerst der Kaufwert; Kauf- und Aufladungserstattungen zusammen nie mehr als das Guthaben. Einmalgutschein in einer unbezahlten Bestellung (ausstehend, fehlgeschlagen, wartend) gilt als eingelöst | `Issuer::guard_refund()`, `TopUp::shares()`; `tests/acceptance-integration.php` „refunding value that was already spent …“, „… sitting in an unpaid order …“, `tests/topup-integration.php` Abschnitt 4b |
-| Aufladung einer Geschenkkarte erstattet (ganz oder teilweise) | Teilerstattung nimmt den erstatteten Anteil der Aufladeposition von der Karte zurück (Positionserstattung über `_refunded_item_id`; ein Betrag ohne Positionen erstattet zuerst die übrigen Waren, erst der Rest die Aufladung), Storno/Vollerstattung den Rest; bereits ausgegebenes Aufladeguthaben ist nicht erstattbar – mehr als das Kartenguthaben hergibt, lehnt WooCommerce mit Höchstbetrag ab (Filter `vcap_allow_refund_of_spent_top_ups`; bestellweit zählt es in `Issuer::guard_refund()` mit, auch ohne `vcap_void_on_refund`) | `TopUp::reverse_refunded()`, `TopUp::guard_refund()`; `tests/topup-integration.php` Abschnitte 1–4 |
+| Gutschein schon (teilweise) eingelöst | Erstattung höchstens Bestellbetrag minus verbrauchter Wert; mehr lehnt WooCommerce mit Hinweis ab (Einstellung/Filter `vcap_allow_refund_of_spent_vouchers`, 5.3). Geschenkkarte: verbraucht = Kaufwert + Aufladungen − Rücknahmen − Guthaben, verbraucht wird zuerst der Kaufwert; Kauf- und Aufladungserstattungen zusammen nie mehr als das Guthaben. Einmalgutschein in einer unbezahlten Bestellung (ausstehend, fehlgeschlagen, wartend) gilt als eingelöst | `Issuer::guard_refund()`, `TopUp::shares()`; `tests/acceptance-integration.php` „refunding value that was already spent …“, „… sitting in an unpaid order …“, `tests/topup-integration.php` Abschnitt 4b |
+| Aufladung einer Geschenkkarte erstattet (ganz oder teilweise) | Teilerstattung nimmt den erstatteten Anteil der Aufladeposition von der Karte zurück (Positionserstattung über `_refunded_item_id`; ein Betrag ohne Positionen erstattet zuerst die übrigen Waren, erst der Rest die Aufladung), Storno/Vollerstattung den Rest; bereits ausgegebenes Aufladeguthaben ist nicht erstattbar – mehr als das Kartenguthaben hergibt, lehnt WooCommerce mit Höchstbetrag ab (Einstellung/Filter `vcap_allow_refund_of_spent_top_ups`, 5.3; bestellweit zählt es in `Issuer::guard_refund()` mit, auch ohne `vcap_void_on_refund`) | `TopUp::reverse_refunded()`, `TopUp::guard_refund()`; `tests/topup-integration.php` Abschnitte 1–4 |
 | Ticketgutschein bereits in Tickets getauscht | Kauferstattung sperrt den Gutschein und storniert die Tickets | `tests/passcaptain-integration.php` „voiding the voucher (purchase refunded) revokes its tickets“ |
 
 Steuerliche Folge (vom Plugin nicht selbst gebucht): bei Einzweck Korrektur der beim Verkauf berechneten USt durch
@@ -316,7 +316,7 @@ die Erstattung in WooCommerce; bei Mehrzweck keine USt-Folge, da beim Verkauf ke
 
 | Fall | Verhalten | Einstellung / Nachweis |
 |---|---|---|
-| Storniert, fehlgeschlagen oder vollständig erstattet | eingesetzter Gutschein-/Guthabenbetrag wird zurückgebucht; einmalige Gutscheine wieder gültig (bei „Vollständig erstattet“ senkt Voucher Captain den Nutzungszähler selbst, WooCommerce tut es nur bei „Storniert“; ist die Einstellung aus, bleiben auch Einmalgutscheine eingelöst). Ist die Karte inzwischen abgelaufen oder gesperrt: Bestellnotiz + Admin-Hinweis (Filter `vcap_restore_extension_days` verlängert abgelaufene Karten) | „Guthaben bei Stornierung wiederherstellen“ (`vcap_restore_on_cancel`, Standard an); `tests/tax-integration.php` „cancelling the redemption order …“, `tests/acceptance-integration.php` „a full refund restores the used balance …“ |
+| Storniert, fehlgeschlagen oder vollständig erstattet | eingesetzter Gutschein-/Guthabenbetrag wird zurückgebucht; einmalige Gutscheine wieder gültig (bei „Vollständig erstattet“ senkt Voucher Captain den Nutzungszähler selbst, WooCommerce tut es nur bei „Storniert“; ist die Einstellung aus, bleiben auch Einmalgutscheine eingelöst). Ist die Karte inzwischen abgelaufen oder gesperrt: Bestellnotiz + Admin-Hinweis (Einstellung/Filter `vcap_restore_extension_days` verlängert abgelaufene Karten, 5.3) | „Guthaben bei Stornierung wiederherstellen“ (`vcap_restore_on_cancel`, Standard an); `tests/tax-integration.php` „cancelling the redemption order …“, `tests/acceptance-integration.php` „a full refund restores the used balance …“ |
 | Teilerstattung | WooCommerce erstattet über die Zahlungsart; Gutscheinsalden bleiben unverändert | README.md „Erstattung“ |
 | Teilrückgabe einer mit Geschenkkarte bezahlten Bestellung (auch Gast, Gesamt 0 €) | „Auf Gutschein zurückbuchen“ in der Bestellung: Betrag zurück auf die Karte, höchstens der von ihr gezahlte und noch nicht zurückgebuchte Anteil; Journal `returned` mit Position und Grund; eine spätere Stornierung bucht nur den Rest zurück | `src/OrderReturn.php`; `tests/order-lifecycle-integration.php` „a returned item is booked back …“ |
 | „Als Guthaben erstatten“ | nur ausdrücklich durch das Personal, nicht für Gastbestellungen; erzeugt Kundenguthaben (2.6); Bestellung in Fremdwährung ohne bekannten Kurs wird abgelehnt (nie 1:1). **Offen (M12-11):** die WooCommerce-Erstattung hat keine Positionen und keine USt (keine Korrektur nach § 17 UStG) – Frage F18 | `tests/store-credit-integration.php` (`refund_as_credit`) |
@@ -326,6 +326,28 @@ die Erstattung in WooCommerce; bei Mehrzweck keine USt-Folge, da beim Verkauf ke
 | Pass Captain: Tickets einer Gutscheinzahlung erstattet | Pass Captain bucht den Gutscheinanteil genau einmal zurück; Abgleich unter Gutscheine → Auswertung → Abgleich | `tests/passcaptain-integration.php` „the voucher share of the refunded ticket returns …“ |
 
 Barauszahlung von Restguthaben ist im Plugin nicht vorgesehen (Frage F6).
+
+### 5.3 Einstellungen „Erstattung & Storno“ (SET-VC-05) – zu prüfen
+
+Beschreibend, **nicht steuerlich/rechtlich geprüft** (Hilfetexte und Folgen: Steuer-/Rechtsprüfung offen, je Land
+DE/AT/CH). WooCommerce → Einstellungen → Gutscheine → Einlösung & Guthaben → Block „Erstattung & Storno“. Die
+Standardwerte entsprechen dem bisherigen festen Verhalten (Abschnitte 5.1, 5.2); bestehende Shops ändern sich nicht.
+Jede Einstellung ist der Standardwert des gleichnamigen Filters, **der Filter gewinnt** (Regel S2).
+
+| Nr. (1.12) | Einstellung (Option) | Standard | Wirkung | Steuerlich zu prüfen |
+|---|---|---|---|---|
+| 1 | „Bereits verbrauchten Gutscheinwert erstatten“ (`vcap_allow_refund_of_spent_vouchers`) | aus | an: eine Kauferstattung über „Bestellbetrag minus verbrauchter Wert“ wird nicht mehr abgelehnt (`Issuer::guard_refund()`) | Erstattung eines bereits eingelösten Werts: doppelte Leistung; bei Einzweck USt-Korrektur trotz erbrachter Leistung (F5) |
+| 2 | „Verbrauchte Aufladungen erstatten“ (`vcap_allow_refund_of_spent_top_ups`) | aus | an: eine Aufladung wird auch erstattet, soweit ihr Wert schon von der Karte ausgegeben wurde (`TopUp::guard_refund()`; die Karte wird nur um den vorhandenen Rest gekürzt) | wie Nr. 1 |
+| 3 | „Erstattung trotz eingelöster Prämie“ (`vcap_allow_refund_of_used_bonus`) | aus | an: eine Teilerstattung unter die Aktionsschwelle ist erlaubt, obwohl der Prämiengutschein schon eingelöst ist (`Discounts\Bonus::guard_refund()`) | Rabatt ohne Gegenleistung: Minderung der Bemessungsgrundlage der Aktionsbestellung? |
+| 4 | „Gastbestellungen als Geschenkkarte erstatten“ (`vcap_refund_guest_as_gift_card`) | an | „Als Guthaben erstatten“ erzeugt bei Gastbestellungen eine neue Geschenkkarte an die Rechnungsadresse; aus: Gastbestellungen nur in Geld (`StoreCredit::guest_gift_card_email()`) | Erstattung als Gutschein statt Geld: Einordnung der neuen Karte (Einzweck/Mehrzweck), Zustimmung des Kunden (F18) |
+| 5 | „Status nach Teilrückgabe behalten“ (`vcap_keep_status_on_partial_return`) | an | eine teils mit Gutschein bezahlte Bestellung wird bei vollständiger Gelderstattung mit verbleibenden Positionen nicht „Erstattet“; aus: WooCommerce setzt „Erstattet“ und der gesamte Gutscheinanteil wird zurückgebucht (`OrderReturn::keep_status_on_partial_return()`) | Rückbuchung des ganzen Gutscheinanteils bei Teilrückgabe: Verbindlichkeit und Journal (Abschnitt 6) |
+| 6 | „Abgelaufene Gutscheine beim Zurückbuchen verlängern (Tage)“ (`vcap_restore_extension_days`, 0–3650) | 0 | > 0: wird Wert auf einen abgelaufenen Gutschein zurückgebucht, verlängert sich seine Gültigkeit ab heute um so viele Tage (Journal `extended`); 0: nur Bestellnotiz und Hinweis. Gesperrte Gutscheine nie (`Coupons\BookBack::check_restored_card()`) | Verlängerung und Verfallsertrag (F7): bereits als verfallen gebuchter Wert lebt wieder auf |
+| 7 | „Restwert und Kundenguthaben abbuchen bei“ (`vcap_balance_deduct_statuses`) | In Bearbeitung, Abgeschlossen | Bestellstatus, bei denen Geschenkkarten- und Kundenguthaben abgebucht wird; nur bezahlte Status wählbar, leer = Standard (`Coupons\Settlement::deduct_statuses()`) | Zeitpunkt der Einlösung im Journal (Leistungszeitpunkt bei Einzweck/Mehrzweck) |
+| 7 | „Restwert und Kundenguthaben zurückbuchen bei“ (`vcap_balance_restore_statuses`) | Storniert, Erstattet, Fehlgeschlagen | Status, bei denen abgebuchtes Guthaben zurückgebucht (wenn „Restwert bei Stornierung wiederherstellen“ an ist) und Reservierungen freigegeben werden; nur diese drei wählbar, leer = alle drei (`Coupons\Settlement::restore_statuses()`) | wie oben; ohne „Erstattet“ bleibt der Gutscheinanteil einer erstatteten Bestellung verbraucht |
+
+Nachweis: `tests/run.php` „SET-VC-05: …“ (je Regel „Einstellung wirkt“ und „Filter gewinnt“); Integrationstests
+(nicht lokal gelaufen) in `tests/acceptance-integration.php`, `tests/topup-integration.php`,
+`tests/bonus-integration.php`, `tests/refund-lifecycle-integration.php` („SET-VC-05: …“).
 
 ## 6. Buchhaltung: Journal, Verbindlichkeit, Kontierung
 
@@ -346,6 +368,25 @@ Spalten **„VAT treatment“** (Einordnung beim Ausstellen, 3; ältere Gutschei
 
 Die Summe der Spalte entspricht der Änderung der offenen Gutscheinwerte. Nachweis: `tests/tax-accounting-integration.php`
 „M12-29: …“, `tests/tax-integration.php` „M12-29: the booked-off rounding rest carries the order id …“.
+
+### 6.1a Verhalten bei Ablauf (SET-VC-06) – zu prüfen
+
+Einstellung „Abgelaufene Gutscheine“ (`vcap_expiry_behaviour`, Abschnitt „Allgemein“, Block „Wenn die Gültigkeit
+endet“; Filter `vcap_expiry_behaviour` gewinnt; `VCAP\ExpiryPolicy`):
+
+| Wert | Einlösung nach dem Ablaufdatum | Buchung `expired` (Ausbuchung = Ertrag) | Verbindlichkeit (6.2) |
+|---|---|---|---|
+| `expires` (Standard, Verhalten bis 1.2.0) | abgelehnt | am Ablaufdatum (tägliche Wartung) | ab dem Ablaufdatum „abgelaufen“ |
+| `grace` | weiter möglich für `vcap_expiry_grace_days` Tage (Standard 30; Warenkorb, Store API, Admin-Bestellung, Einlöse-API, Kasse) mit Hinweis | erst nach Ende der Kulanzfrist; in der Frist **keine** Ausbuchung | in der Frist offen, danach „abgelaufen“ |
+| `never` | immer möglich; das Datum ist nur ein Hinweis | nie | immer offen |
+
+Das aufgedruckte Datum bleibt unverändert. Bereits abgelaufene Gutscheine bleiben abgelaufen (Verlängerung von Hand
+bucht wie bisher `expiry_reversed`). „Verlängerung durch Mitarbeiter bis X Tage“ (`vcap_expiry_staff_extension_days`,
+0 = ohne Grenze wie bisher) begrenzt die Verlängerung von Hand (Bearbeiten und Sammelaktion), gezählt ab dem
+bisherigen Ablaufdatum bzw. heute. **Zu prüfen (Steuerberatung/Rechtsprüfung, Frage F24):** Zeitpunkt der
+Ertragsbuchung bei Kulanzfrist und bei „läuft nie ab“ (Verbindlichkeit bleibt dauerhaft stehen), Zulässigkeit
+kurzer Fristen gegenüber Verbrauchern je Land. Alle drei Werte sind im Register als `legal` markiert. Nachweis:
+`tests/run.php` „SET-VC-06: …“.
 
 ### 6.2 Verbindlichkeit (Stichtag)
 
@@ -567,6 +608,7 @@ des Codes dabei.
 | F21 | **Kontierung** (Abschnitt 6.3/6.4): Konten, keine Steuerschlüssel auf Gutscheinbuchungen, Gutscheinzahlung als Zahlung statt Erlösminderung – bestätigt? | wie 6.3 | |
 | F22 | **Physische Karten** (3.2): Gilt der Verkauf (Zahlung) als maßgeblicher Zeitpunkt, auch wenn die Karte erst bei „Abgeschlossen“ aktiviert wird? | Verkauf maßgeblich, Aktivierung ohne Buchung | |
 | F23 | **Umbuchung Geschenkkarte → Kundenguthaben** (3.2): steuerlich neutral (Mehrzweck → Mehrzweck), keine Rechnungskorrektur? | neutral, nur Umbuchung der Verbindlichkeit | |
+| F24 | **Verhalten bei Ablauf** (6.1a, SET-VC-06): Ertragsbuchung erst nach einer Kulanzfrist bzw. nie („läuft nie ab“, Verbindlichkeit bleibt stehen) – zulässig und richtig ausgewiesen? Gilt eine Kulanzfrist als Verlängerung der Gültigkeit? | „verfällt“ am Ablaufdatum (wie bisher) | |
 
 ## 12. Freigabe
 

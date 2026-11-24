@@ -560,7 +560,7 @@ final class Tickets {
 				$now,
 				$voucher->id,
 				$count,
-				$now
+				ExpiryPolicy::sql_cutoff( $now ) // SET-VC-06: grace period / never expires.
 			)
 		);
 		if ( 1 !== (int) $rows ) {

@@ -716,6 +716,37 @@ and emails stay unchanged. Translation: WPML via `wpml-config.xml` (admin-texts)
 Accessors: `LegalInfo::issuer()`, `issuer_name()`, `issuer_address()`, `issuer_contact()`, `legal_text()`,
 `terms_url()`, `privacy_url()`, `withdrawal_url()`, `placeholders()`.
 
+### Sequential voucher number (SET-VC-13)
+
+`VCAP\VoucherNumber` – block "Voucher numbers" in *Settings → Vouchers → Codes*, **off by default** (owner decision E9,
+recommendation a: free core, off from the factory; whether numbered vouchers are required in a country is not legally
+checked). A readable number in addition to the random code, e.g. `GS-2026-00042`. Settings (register, section Codes):
+`vcap_voucher_number_enabled` (bool, `no`, `legal` = true), `vcap_voucher_number_pattern` (`{year}-{number}`; tokens
+`{number}` (required), `{year}` (year of issue, site time zone), `{prefix}`; letters, digits and `. _ - / #`, up to 40
+characters – checked on the page and on import/WP-CLI), `vcap_voucher_number_prefix` (`''`, put in front when the
+pattern has no `{prefix}`), `vcap_voucher_number_digits` (5, 1–12, leading zeros), `vcap_voucher_number_reset`
+(`yearly` | `never`; with `yearly` a pattern without `{year}` gets the year in front).
+
+- **Assignment:** every new voucher that is kept – orders (`Issuer::create_voucher()`, after its row and WooCommerce
+  coupon exist), `issue_standalone()` (admin "Issue voucher", card import, store credit to card, connectors) – gets the
+  next number of its site; store credit accounts get none, existing vouchers keep having none. Filter
+  `vcap_voucher_number_enabled` (bool) wins over the setting; `vcap_voucher_number` (`$number`, `$sequence`, `$year`,
+  `Voucher`) may change the finished number (keep it unique, '' = no number).
+- **Never twice, no gaps:** the counter is one options row per period (`vcap_voucher_number_seq` or
+  `vcap_voucher_number_seq_{year}`, internal state, never exported or reset), incremented with a single
+  `UPDATE … SET option_value = LAST_INSERT_ID(option_value + 1)` and read back with `SELECT LAST_INSERT_ID()` on the
+  same connection – the row lock serialises concurrent orders. The increment and the write onto the voucher
+  (`UPDATE … SET voucher_number = … WHERE id = … AND voucher_number = ''`) run in one transaction; if the write fails the
+  increment is rolled back. (A gap remains possible only if `wp_options` is not InnoDB.)
+- **Storage:** column `voucher_number` of the voucher table (schema 1.9.0, indexed), property `Voucher::$voucher_number`.
+  `Voucher::to_row()` never writes it (saving a voucher cannot change a number); before the schema step nothing is
+  assigned (`Install::voucher_number_ready()`).
+- **Output:** placeholder `{voucher_number}` (PDF templates, emails; '' without a number), column "Voucher no." in the
+  voucher list (search finds the exact number) and – only while switched on – in the redemption journal (page and CSV,
+  after "Code") and "Belegfeld 2" of the DATEV export (DATEV length 12, longer numbers are cut; "Belegfeld 1" keeps the
+  order number or code). Switched off, journal CSV and DATEV file are byte-identical to before.
+- Helpers: `VoucherNumber::enabled()`, `config()`, `format( $sequence, $year, $config )`, `preview()`, `assign( $voucher )`.
+
 ### Country profiles (SET-VC-02)
 
 `VCAP\CountryProfiles` reads `config/country-profiles.php` (filter `vcap_country_profiles`). A profile only suggests
@@ -772,6 +803,10 @@ counter columns, payment methods, retention days) and the Form Captain hooks bel
 | `vcap_customer_can_resend` | filter | `bool $allowed` (setting `vcap_customer_can_resend`, default yes), `Voucher` | 1.1.0 | SET-VC-18: whether the buyer may resend a delivered voucher from My Account; the filter gets the setting and wins. |
 | `vcap_customer_can_change`, `vcap_recipient_fix_days`, `vcap_recipient_fix_max`, `vcap_topup_min_remaining_days`, `vcap_checkin_undo_minutes`, `vcap_counter_reversal_minutes` | filter | the setting of the same name, `Voucher` | 1.2.0 | SET-VC-18: customer self-service and deadlines are settings (Settings → Vouchers → Delivery & downloads "Customer self-service", Redemption & balance "Top-ups and counter"; defaults as in 1.2.0: yes, 30 days, 2, 30 days, 10 min, 15 min). Each filter gets the setting instead of the fixed value and wins; the floors of 1.2.0 stay (link at least 1 day, at most 2 corrections, windows not below 0). |
 | `vcap_printed_link_grace_days` | filter | `int $days` (setting `vcap_printed_link_grace_days`, default 30), `Voucher` | 1.3.0 | SET-VC-18: days the download link printed on a voucher (QR code) stays valid after the voucher expired (`Downloads::printed_link_grace_days()`). |
+| `vcap_balance_deduct_statuses`, `vcap_balance_restore_statuses` | filter | the setting of the same name instead of the fixed list (`string[]`; deduct default `['processing','completed']` – paid statuses only, empty = default; restore default `['cancelled','refunded','failed']` – only these, empty = all three) | 1.0.0 | SET-VC-05 (1.12 no. 7): order statuses that charge and book back balances are settings (Settings → Vouchers → Redemption & balance → *Refund & cancellation*); each filter gets the setting and wins. Helpers `Coupons\Settlement::restore_statuses()`, `setting_deduct_statuses()`, `setting_restore_statuses()`. |
+| `vcap_allow_refund_of_spent_vouchers` | filter | `bool $allow` (setting of the same name, default no), `WC_Order`, `float $amount`, `float $spent` | 1.1.0 | SET-VC-05 (1.12 no. 1): see the next row. |
+| `vcap_allow_refund_of_spent_top_ups`, `vcap_allow_refund_of_used_bonus`, `vcap_refund_guest_as_gift_card`, `vcap_keep_status_on_partial_return`, `vcap_restore_extension_days` | filter | the setting of the same name instead of the fixed default (`bool` no / no / yes / yes; days `int` 0, 0–3650) and the arguments as before | 1.2.0 | SET-VC-05 (1.12 no. 1–6): refund and cancellation rules are settings (Settings → Vouchers → Redemption & balance → *Refund & cancellation*, legal weight, not legally checked; TAX.md 5.3); each filter gets the setting and wins. |
+| `vcap_expiry_behaviour`, `vcap_expiry_grace_days`, `vcap_expiry_staff_extension_days` | filter | `string $behaviour` (setting `vcap_expiry_behaviour`: `expires` default, `grace`, `never`); `int $days` (setting `vcap_expiry_grace_days`, default 30; `vcap_expiry_staff_extension_days`, default 0 = no limit) | 1.3.0 | SET-VC-06: what happens when the validity ends (`VCAP\ExpiryPolicy`, Settings → Vouchers → General "When the validity ends"). `expires` = as before (expired and booked off at the date); `grace` = still redeemable for the grace days (cart, Store API, admin orders, redemption API, counter; `Voucher::is_expired()` and WooCommerce's coupon expiry check follow it), the "expired" booking and the liability's "expired" bucket move to the end of the grace period; `never` = the date is a notice only, nothing expires or is booked off. Staff extension: voucher edit and bulk "Extend validity" refuse a date more than the days after the current expiry or today. The filters get the setting and win. Not legally or tax checked (TAX.md 6.1a). |
 | `vcap_affiliate_commission_on_voucher_sales`, `vcap_passcaptain_restore_on_revoke` | filter | the setting of the same name (`bool`, default yes) and the arguments as before | 1.1.0 | SET-VC-33 (1.12 no. 38, 39): see the next row. |
 | `vcap_physical_activation_statuses`, `vcap_review_first_redemption_only`, `vcap_subscription_issue_on_switch` | filter | the setting of the same name (statuses `string[]` default `['completed']`; first redemption only `bool` default yes; subscription switch `bool` default no) and the arguments as before | 1.2.0 | SET-VC-33 (1.12 no. 12, 35, 38–40): rules of physical cards and partner plugins are settings (Settings → Vouchers → Integrations (API) → *Integration rules*); each filter gets the setting and wins. Physical cards: only paid statuses, empty = completed. |
 | `vcap_settings_partner_active` | filter | `bool $active`, `string $partner` (`review`, `affiliate`, `passcaptain`, `subscriptions`) | 1.3.0 | SET-VC-33: whether the rules of a partner plugin are shown in *Integration rules* (a hidden rule keeps its value and still applies). |
@@ -784,6 +819,9 @@ counter columns, payment methods, retention days) and the Form Captain hooks bel
 | `vcap_pro_hints_hidden` | filter | `bool $hidden`, `int $user_id` | 1.3.0 | Whether the hint lines are hidden for the current user (default: the user's setting "Hide hints on extensions"). |
 | `vcap_voucher_excluded_gateways` | filter | `string[] $ids` (setting `vcap_voucher_excluded_gateways` "Do not sell vouchers with", default none) | 1.3.0 | SET-VC-19: payment gateway ids not offered while the cart (or the order paid on "Pay for order") contains a voucher product (`PaymentMethods::excluded()`); the filter wins over the setting. |
 | `vcap_vouchers_shop_currency_only` | filter | `bool $only` (setting `vcap_vouchers_shop_currency_only` "Sell vouchers only in the shop currency", default no) | 1.3.0 | SET-VC-32: while true, voucher products cannot be added to the cart or checked out when the active currency (`get_woocommerce_currency()`, set by a currency switcher) differs from the shop base currency (`VoucherCurrency::refused()`); the filter wins over the setting. |
+| `vcap_consent_required` | filter | `bool $required` (product setting "Consent checkbox", else the setting `vcap_consent_enabled`, default no), `array $config` | 1.3.0 | SET-VC-12: whether the product page of a voucher asks for the required consent checkbox (built-in field `consent`, also checked in the Store API add-to-cart request and at checkout). The order line keeps text and time (`_vcap_fields['consent']` with `label`, `value`, `given_at` UTC), the voucher takes it over with its fields, gets the history event `purchase_consent` and the personal data export lists it. Not legally checked. |
+| `vcap_consent_text` | filter | `string $text` (setting `vcap_consent_text`, empty = "I have read the terms of this voucher and agree to them.") | 1.3.0 | SET-VC-12: text of the consent checkbox (one line of plain text, at most 500 characters, stored with the order as shown). |
+| `vcap_bonus_code_prefix`, `vcap_referral_code_prefix` | filter | `string $prefix` (settings of the same name, default `BONUS` / `FRIEND` as before; bonus: also `array $campaign`, `WC_Order`) | 1.1.0 | SET-VC-24: prefix of new bonus and referral codes; the filter gets the setting and wins. |
 | `vcap_setting_locked` | filter | `bool $locked` (default false), `string $option` | 1.3.0 | SET-VC-34: a locked setting is shown read-only with the note "Set by the network administrator." (`SettingsRegistry::field()`), its save is ignored (stored value kept), an import skips it with a warning, WP-CLI `settings set` refuses it, `settings reset` and the reset button leave it, a country profile shows it with an error and does not apply it. The core locks nothing; network-wide defaults are an add-on's job. |
 | `vcap_product_settings_fields` / `vcap_product_settings_save` | action | – / `WC_Product`, `array $post` | 1.1.0 | Own fields in the product's *Voucher* tab and saving them. |
 | `vcap_template_design` | filter | `array $design`, `int $template_id` | 1.0.0 | The design a PDF template prints with. |

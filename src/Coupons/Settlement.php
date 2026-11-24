@@ -34,8 +34,99 @@ final class Settlement {
 		return 'yes' === $order->get_meta( self::SHORTFALL_META );
 	}
 
+	/** SET-VC-05: option of the order statuses that charge stored balances (filter of the same name wins). */
+	public const DEDUCT_OPTION = 'vcap_balance_deduct_statuses';
+
+	/** SET-VC-05: option of the order statuses that book balances back (filter of the same name wins). */
+	public const RESTORE_OPTION = 'vcap_balance_restore_statuses';
+
+	/** Statuses the restore setting can choose (the end statuses of an order that was not kept). */
+	public const RESTORE_CHOICES = array( 'cancelled', 'refunded', 'failed' );
+
+	/**
+	 * Order statuses (without "wc-") at which stored balances are charged. SET-VC-05: the setting (paid statuses only,
+	 * empty = processing and completed) is the default of the filter "vcap_balance_deduct_statuses", which wins.
+	 *
+	 * @return string[]
+	 */
 	public static function deduct_statuses(): array {
-		return array_map( 'sanitize_key', (array) apply_filters( 'vcap_balance_deduct_statuses', array( 'processing', 'completed' ) ) );
+		return array_map( 'sanitize_key', (array) apply_filters( 'vcap_balance_deduct_statuses', self::setting_deduct_statuses() ) );
+	}
+
+	/**
+	 * Order statuses (without "wc-") at which balances are booked back and reservations released. SET-VC-05: the
+	 * setting (cancelled, refunded, failed; empty = all three) is the default of the filter
+	 * "vcap_balance_restore_statuses", which wins.
+	 *
+	 * @return mixed What the filter returns (an array of statuses).
+	 */
+	public static function restore_statuses() {
+		return apply_filters( 'vcap_balance_restore_statuses', self::setting_restore_statuses() );
+	}
+
+	/**
+	 * The deduct statuses of the setting: paid statuses only (an unpaid status would charge a balance before the
+	 * money arrived), "processing" and "completed" when none is left.
+	 *
+	 * @param mixed $value Stored value (default: the setting).
+	 * @return string[]
+	 */
+	public static function setting_deduct_statuses( $value = null ): array {
+		$list = self::status_list( null === $value ? Settings::value( self::DEDUCT_OPTION ) : $value );
+		$list = array_values( array_diff( $list, \VCAP\PhysicalCards::UNPAID_STATUSES ) );
+		return $list ? $list : array( 'processing', 'completed' );
+	}
+
+	/**
+	 * The restore statuses of the setting: only cancelled, refunded and failed; all three when none is left.
+	 *
+	 * @param mixed $value Stored value (default: the setting).
+	 * @return string[]
+	 */
+	public static function setting_restore_statuses( $value = null ): array {
+		$list = array_values( array_intersect( self::status_list( null === $value ? Settings::value( self::RESTORE_OPTION ) : $value ), self::RESTORE_CHOICES ) );
+		return $list ? $list : self::RESTORE_CHOICES;
+	}
+
+	/**
+	 * Paid order statuses the deduct setting offers (status without "wc-" => label).
+	 *
+	 * @return array<string, string>
+	 */
+	public static function deduct_choices(): array {
+		return \VCAP\PhysicalCards::status_choices();
+	}
+
+	/**
+	 * Statuses the restore setting offers (status => label).
+	 *
+	 * @return array<string, string>
+	 */
+	public static function restore_choices(): array {
+		$labels  = function_exists( 'wc_get_order_statuses' ) ? wc_get_order_statuses() : array();
+		$choices = array();
+		foreach ( self::RESTORE_CHOICES as $status ) {
+			$choices[ $status ] = (string) ( $labels[ 'wc-' . $status ] ?? ucfirst( $status ) );
+		}
+		return $choices;
+	}
+
+	/**
+	 * Statuses of a stored list: keys without "wc-", no duplicates.
+	 *
+	 * @param mixed $value Stored value.
+	 * @return string[]
+	 */
+	private static function status_list( $value ): array {
+		$list = array();
+		foreach ( (array) $value as $status ) {
+			$status = is_scalar( $status ) ? sanitize_key( (string) $status ) : '';
+			$status = str_starts_with( $status, 'wc-' ) ? substr( $status, 3 ) : $status;
+			if ( '' !== $status && ! in_array( $status, $list, true ) ) {
+				$list[] = $status;
+			}
+		}
+		return $list;
 	}
 
 	/** Status hook, priority 1: commit and deduct before vouchers, bonus coupons or tickets are issued. */
@@ -95,7 +186,7 @@ final class Settlement {
 			return;
 		}
 		$deduct_statuses  = self::deduct_statuses();
-		$restore_statuses = apply_filters( 'vcap_balance_restore_statuses', array( 'cancelled', 'refunded', 'failed' ) );
+		$restore_statuses = self::restore_statuses();
 
 		if ( in_array( $to, $deduct_statuses, true ) ) {
 			if ( empty( $this->settled[ $order->get_id() ] ) ) {

@@ -61,6 +61,18 @@ WC()->cart->remove_coupon( $coupon->get_code() );
 $link->apply_pending();
 vcap_link_assert( ! WC()->cart->has_discount( $coupon->get_code() ), 'a coupon the customer removed is not applied again' );
 
+// SET-VC-24: with another parameter set, an old link ?gutschein=CODE still applies the code (alias).
+update_option( 'vcap_coupon_link_param', 'voucher' );
+$saved_get = $_GET;
+$_GET      = array( 'gutschein' => strtoupper( $coupon->get_code() ) );
+vcap_link_assert( 'gutschein' === $link->request_param() && array( 'voucher', 'gutschein' ) === $link->params(), 'with the parameter "voucher", old links with "gutschein" are still read' );
+vcap_link_assert( $link->capture( (string) $_GET[ $link->request_param() ] ), 'the code of an old link is remembered' );
+$link->apply_pending();
+vcap_link_assert( WC()->cart->has_discount( $coupon->get_code() ), 'the code of an old link is applied' );
+$_GET = $saved_get;
+WC()->cart->remove_coupon( $coupon->get_code() );
+update_option( 'vcap_coupon_link_param', 'gutschein' );
+
 update_option( 'vcap_coupon_link', 'no' );
 WC()->cart->empty_cart();
 wc_clear_notices();

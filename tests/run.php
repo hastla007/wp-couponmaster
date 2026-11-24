@@ -1755,11 +1755,11 @@ $GLOBALS['wpdb']->answers = array(
 	'/^SHOW TABLES LIKE/'           => static fn( $q ) => preg_match( "/LIKE '([a-z_0-9\\\\]+)'/", $q, $m ) ? stripslashes( $m[1] ) : null,
 	'/^SHOW COLUMNS FROM/'          => static function ( $q ) {
 		preg_match( '/FROM (\S+)/', $q, $m );
-		return array( 'id', 'code', 'coupon_id', 'type', 'status', 'order_id', 'order_item_id', 'item_index', 'product_id', 'variation_id', 'template_id', 'usage_mode', 'discount_type', 'initial_amount', 'balance', 'currency', 'expires_at', 'buyer_name', 'buyer_email', 'user_id', 'recipient_name', 'recipient_email', 'message', 'fields', 'send_to', 'delivery_at', 'delivered_at', 'token', 'transferable', 'terms', 'max_checkins', 'checkins', 'last_checkin_at', 'delivered_roles', 'created_at', 'updated_at', 'voucher_id', 'event', 'amount', 'balance_after', 'source', 'till', 'receipt', 'note', 'actor_email_hash', 'batch', 'imported_at', 'used_at', 'redemption_key', 'target', 'state', 'request_hash', 'meta', 'campaign_id', 'customer_key', 'claim_key', 'kind', 'uses', 'window_end', 'counter_key', 'hits', 'key_hash', 'signature', 'event_mark', 'claimed_at', 'response' );
+		return array( 'id', 'code', 'coupon_id', 'type', 'status', 'order_id', 'order_item_id', 'item_index', 'product_id', 'variation_id', 'template_id', 'usage_mode', 'discount_type', 'initial_amount', 'balance', 'currency', 'expires_at', 'buyer_name', 'buyer_email', 'user_id', 'recipient_name', 'recipient_email', 'message', 'fields', 'send_to', 'delivery_at', 'delivered_at', 'token', 'transferable', 'terms', 'max_checkins', 'checkins', 'last_checkin_at', 'delivered_roles', 'voucher_number', 'created_at', 'updated_at', 'voucher_id', 'event', 'amount', 'balance_after', 'source', 'till', 'receipt', 'note', 'actor_email_hash', 'batch', 'imported_at', 'used_at', 'redemption_key', 'target', 'state', 'request_hash', 'meta', 'campaign_id', 'customer_key', 'claim_key', 'kind', 'uses', 'window_end', 'counter_key', 'hits', 'key_hash', 'signature', 'event_mark', 'claimed_at', 'response' );
 	},
 	'/^SHOW INDEX FROM wp_vcap_events$/' => array( 'PRIMARY', 'voucher_ledger', 'voucher_order', 'actor_email_hash', 'event' ),
 	'/^SHOW INDEX FROM/'            => static function ( $q ) {
-		return array( 'PRIMARY', 'code', 'token', 'order_item_slot', 'order_id', 'coupon_id', 'status_expires', 'status_updated', 'expires_at', 'delivery_due', 'product_id', 'recipient_email', 'buyer_email', 'user_type', 'batch_free', 'batch_used', 'redemption_key', 'voucher_id', 'user_id', 'state_expires', 'campaign_customer', 'order_campaign', 'kind_created', 'claimed_at' );
+		return array( 'PRIMARY', 'code', 'token', 'order_item_slot', 'order_id', 'coupon_id', 'status_expires', 'status_updated', 'expires_at', 'delivery_due', 'product_id', 'recipient_email', 'buyer_email', 'user_type', 'voucher_number', 'batch_free', 'batch_used', 'redemption_key', 'voucher_id', 'user_id', 'state_expires', 'campaign_customer', 'order_campaign', 'kind_created', 'claimed_at' );
 	},
 	'/information_schema/'          => 'InnoDB',
 );
@@ -2187,7 +2187,7 @@ unset( $GLOBALS['vcap_test_filters']['vcap_voucher_links'] );
 $r6_src = (string) file_get_contents( dirname( __DIR__ ) . '/src/VoucherRepository.php' );
 check( 'R6: vcap_voucher_event passes the source and the acting user id as trailing arguments (WF-02: then the ledger row)', str_contains( $r6_src, "Db::action( 'vcap_voucher_event', \$voucher_id, \$event, \$amount, \$balance_after, Note::render( \$note ), \$order_id, \$source, (int) \$row['user_id'], \$entry )" ) );
 check( 'R6: the admin menu fires vcap_admin_menu with its parent slug', str_contains( (string) file_get_contents( dirname( __DIR__ ) . '/src/Admin/Menu.php' ), "do_action( 'vcap_admin_menu', 'vcap-vouchers' )" ) );
-check( 'R6: schema 1.8.0 adds the ledger columns till and receipt, migrated after 1.7.0', '1.8.0' === VCAP\Install::EVENT_TILL_VERSION && str_contains( (string) file_get_contents( dirname( __DIR__ ) . '/voucher-captain.php' ), "define( 'VCAP_DB_VERSION', '1.8.0' )" ) && str_contains( (string) file_get_contents( dirname( __DIR__ ) . '/src/Install.php' ), "till varchar(100) NOT NULL DEFAULT ''" ) );
+check( 'R6: schema 1.8.0 adds the ledger columns till and receipt, migrated after 1.7.0', '1.8.0' === VCAP\Install::EVENT_TILL_VERSION && preg_match( "/define\\( 'VCAP_DB_VERSION', '([0-9.]+)' \\)/", (string) file_get_contents( dirname( __DIR__ ) . '/voucher-captain.php' ), $r6_db ) && version_compare( $r6_db[1], '1.8.0', '>=' ) && str_contains( (string) file_get_contents( dirname( __DIR__ ) . '/src/Install.php' ), "till varchar(100) NOT NULL DEFAULT ''" ) );
 
 echo "D14 coupon sync and code masking\n";
 $d14_u = static fn( string $mode, string $status, int $limit, int $count ) => CouponManager::coupon_usage_for( $mode, $status, $limit, $count );
@@ -4584,7 +4584,7 @@ check(
 );
 check(
 	'SET-VC-17: list shows the settings of a section (secrets masked in the full list), export prints the JSON without secrets',
-	array( 'vcap_code_prefix', 'vcap_code_suffix', 'vcap_code_length', 'vcap_code_charset', 'vcap_code_separator', 'vcap_code_order_ref' ) === array_column( $st_rows, 'key' ) && '18' === $st_rows[2]['value'] && VCAP\SettingsLog::MASK === array_column( $st_all_rows, 'value', 'key' )['vcap_secret']
+	array( 'vcap_code_prefix', 'vcap_code_suffix', 'vcap_code_length', 'vcap_code_charset', 'vcap_code_separator', 'vcap_code_order_ref', 'vcap_voucher_number_enabled', 'vcap_voucher_number_pattern', 'vcap_voucher_number_prefix', 'vcap_voucher_number_digits', 'vcap_voucher_number_reset' ) === array_column( $st_rows, 'key' ) && '18' === $st_rows[2]['value'] && VCAP\SettingsLog::MASK === array_column( $st_all_rows, 'value', 'key' )['vcap_secret']
 		&& 1 === count( $st_r_export ) && '18' === json_decode( substr( $st_r_export[0], 6 ), true )['settings']['vcap_code_length'] && ! str_contains( $st_r_export[0], 'cli-secret' ),
 	json_encode( $st_rows )
 );
@@ -6305,6 +6305,845 @@ $GLOBALS['vcap_test_filters'] = $mc_saved_filters;
 $GLOBALS['vcap_test_options'] = $mc_saved_opts;
 VCAP\SettingsRegistry::reset_flags();
 VCAP\CountryProfiles::reset();
+
+// SET-VC-05: refund and cancellation rules (1.12 no. 1–7) as settings in block "Refund & cancellation" of
+// "Redemption & balance"; defaults = the fixed filter defaults of 1.2.0, each filter gets the setting and wins.
+echo "SET-VC-05 refund and cancellation rules\n";
+VCAP\SettingsRegistry::reset();
+$v05_saved_opts    = $GLOBALS['vcap_test_options'];
+$v05_saved_filters = $GLOBALS['vcap_test_filters'];
+$v05_keys          = array( 'vcap_allow_refund_of_spent_vouchers', 'vcap_allow_refund_of_spent_top_ups', 'vcap_allow_refund_of_used_bonus', 'vcap_refund_guest_as_gift_card', 'vcap_keep_status_on_partial_return', 'vcap_restore_extension_days', 'vcap_balance_deduct_statuses', 'vcap_balance_restore_statuses' );
+foreach ( $v05_keys as $v05_k ) {
+	unset( $GLOBALS['vcap_test_options'][ $v05_k ], $GLOBALS['vcap_test_filters'][ $v05_k ] );
+}
+$v05_def    = VCAP\Settings::defaults();
+$v05_fields = array();
+foreach ( VCAP\Settings::refund_rule_fields() as $v05_f ) {
+	if ( isset( $v05_f['id'] ) && VCAP\SettingsRegistry::has( (string) $v05_f['id'] ) ) {
+		$v05_fields[ $v05_f['id'] ] = $v05_f;
+	}
+}
+check(
+	'SET-VC-05: defaults are the behaviour of 1.2.0 (no refund of spent value, guest refund as gift card, keep status, no extension, charge at processing/completed, book back at cancelled/refunded/failed); one field per setting in "Redemption & balance", legal weight, visible "not legally checked" help',
+	'no' === $v05_def['vcap_allow_refund_of_spent_vouchers'] && 'no' === $v05_def['vcap_allow_refund_of_spent_top_ups'] && 'no' === $v05_def['vcap_allow_refund_of_used_bonus'] && 'yes' === $v05_def['vcap_refund_guest_as_gift_card'] && 'yes' === $v05_def['vcap_keep_status_on_partial_return'] && 0 === $v05_def['vcap_restore_extension_days']
+		&& array( 'processing', 'completed' ) === $v05_def['vcap_balance_deduct_statuses'] && array( 'cancelled', 'refunded', 'failed' ) === $v05_def['vcap_balance_restore_statuses']
+		&& $v05_keys === array_keys( $v05_fields ) && array() === array_filter( $v05_keys, static fn( $k ) => 'redemption' !== VCAP\SettingsRegistry::get( $k )['section'] || ! VCAP\SettingsRegistry::get( $k )['legal'] )
+		&& array() === array_filter( $v05_fields, static fn( $f ) => array_key_exists( 'desc_tip', $f ) || ! str_contains( (string) $f['desc'], 'Not legally checked' ) )
+		&& 'redemption' === VCAP\Settings::general_section_of( 'vcap_refund_rules', 'vcap_restore_extension_days' ),
+	wp_json_encode( array_keys( $v05_fields ) )
+);
+$v05_src = static fn( string $file ): string => (string) file_get_contents( VCAP_PATH . $file );
+// No. 1: refund of spent voucher value (Issuer::guard_refund(), both call sites).
+$v05_issuer = $v05_src( 'src/Issuer.php' );
+$v05_call1  = "apply_filters( 'vcap_allow_refund_of_spent_vouchers', \$this->settings->yes( 'vcap_allow_refund_of_spent_vouchers' ), \$order, \$amount, \$spent )";
+$v05_r1     = array( ( new VCAP\Settings() )->yes( 'vcap_allow_refund_of_spent_vouchers' ) );
+$GLOBALS['vcap_test_options']['vcap_allow_refund_of_spent_vouchers'] = 'yes';
+$v05_r1[] = ( new VCAP\Settings() )->yes( 'vcap_allow_refund_of_spent_vouchers' );
+check( 'SET-VC-05: no. 1 refund of spent voucher value – setting takes effect (off by default, "yes" is the default of filter vcap_allow_refund_of_spent_vouchers at both call sites of Issuer::guard_refund())', array( false, true ) === $v05_r1 && 2 === substr_count( $v05_issuer, $v05_call1 ) && 2 === substr_count( $v05_issuer, "'vcap_allow_refund_of_spent_vouchers'," ) );
+check( 'SET-VC-05: no. 1 refund of spent voucher value – filter wins (its result alone lets the refund through; integration test acceptance "SET-VC-05: …")', str_contains( $v05_issuer, "<= \$max_base + \$tolerance || " . $v05_call1 . ' ) {' ) && str_contains( $v05_issuer, 'if ( ' . $v05_call1 . ' ) {' ) && str_contains( $v05_src( 'tests/acceptance-integration.php' ), 'SET-VC-05:' ) );
+// No. 2: refund of spent top-ups (TopUp::guard_refund()).
+$v05_topup = $v05_src( 'src/TopUp.php' );
+$v05_call2 = "apply_filters( 'vcap_allow_refund_of_spent_top_ups', 'yes' === Settings::value( 'vcap_allow_refund_of_spent_top_ups' ), \$order, \$amount, \$over + \$lost )";
+$v05_r2    = array( VCAP\Settings::value( 'vcap_allow_refund_of_spent_top_ups' ) );
+$GLOBALS['vcap_test_options']['vcap_allow_refund_of_spent_top_ups'] = 'yes';
+$v05_r2[] = VCAP\Settings::value( 'vcap_allow_refund_of_spent_top_ups' );
+check( 'SET-VC-05: no. 2 refund of spent top-ups – setting takes effect (off by default, "yes" is the default of filter vcap_allow_refund_of_spent_top_ups in TopUp::guard_refund())', array( 'no', 'yes' ) === $v05_r2 && 1 === substr_count( $v05_topup, "'vcap_allow_refund_of_spent_top_ups'," ) && str_contains( $v05_topup, $v05_call2 ) );
+check( 'SET-VC-05: no. 2 refund of spent top-ups – filter wins (its result alone lets the refund through; integration test topup "SET-VC-05: …")', str_contains( $v05_topup, '( ! $codes && ! $unknown ) || ' . $v05_call2 . ' ) {' ) && str_contains( $v05_src( 'tests/topup-integration.php' ), 'SET-VC-05:' ) );
+// No. 3: refund below a used bonus (Discounts\Bonus::guard_refund()).
+$v05_bonus = $v05_src( 'src/Discounts/Bonus.php' );
+$v05_call3 = "apply_filters( 'vcap_allow_refund_of_used_bonus', 'yes' === \\VCAP\\Settings::value( 'vcap_allow_refund_of_used_bonus' ), \$order, \$amount, \$used )";
+$v05_r3    = array( VCAP\Settings::value( 'vcap_allow_refund_of_used_bonus' ) );
+$GLOBALS['vcap_test_options']['vcap_allow_refund_of_used_bonus'] = 'yes';
+$v05_r3[] = VCAP\Settings::value( 'vcap_allow_refund_of_used_bonus' );
+check( 'SET-VC-05: no. 3 refund below a used bonus – setting takes effect (off by default, "yes" is the default of filter vcap_allow_refund_of_used_bonus in Bonus::guard_refund())', array( 'no', 'yes' ) === $v05_r3 && 1 === substr_count( $v05_bonus, "'vcap_allow_refund_of_used_bonus'," ) && str_contains( $v05_bonus, $v05_call3 ) );
+check( 'SET-VC-05: no. 3 refund below a used bonus – filter wins (its result alone lets the refund through; integration test bonus "SET-VC-05: …")', str_contains( $v05_bonus, '$amount <= $max + 0.00001 || ' . $v05_call3 . ' ) {' ) && str_contains( $v05_src( 'tests/bonus-integration.php' ), 'SET-VC-05:' ) );
+// No. 4: guest orders refunded as a new gift card (StoreCredit::guest_gift_card_email()).
+$v05_guest = new class() extends WC_Order {
+	public function get_billing_email() { return 'guest05@example.com'; }
+};
+$v05_r4 = array( VCAP\StoreCredit::guest_gift_card_email( $v05_guest ) );
+$GLOBALS['vcap_test_options']['vcap_refund_guest_as_gift_card'] = 'no';
+$v05_r4[]  = VCAP\StoreCredit::guest_gift_card_email( $v05_guest );
+$v05_seen4 = null;
+add_filter( 'vcap_refund_guest_as_gift_card', static function ( $allowed ) use ( &$v05_seen4 ) { $v05_seen4 = $allowed; return true; } );
+$v05_r4[] = VCAP\StoreCredit::guest_gift_card_email( $v05_guest );
+unset( $GLOBALS['vcap_test_filters']['vcap_refund_guest_as_gift_card'] );
+check( 'SET-VC-05: no. 4 guest refund as gift card – setting takes effect (on by default; "no" = no gift card address)', 'guest05@example.com' === $v05_r4[0] && '' === $v05_r4[1] );
+check( 'SET-VC-05: no. 4 guest refund as gift card – filter vcap_refund_guest_as_gift_card gets the setting (false) and wins', false === $v05_seen4 && 'guest05@example.com' === $v05_r4[2] );
+// No. 5: keep the order status after a partial return (OrderReturn::keep_status_on_partial_return()).
+$v05_return = $v05_src( 'src/OrderReturn.php' );
+$v05_call5  = "apply_filters( 'vcap_keep_status_on_partial_return', 'yes' === Settings::value( 'vcap_keep_status_on_partial_return' ), \$order, (int) \$refund_id )";
+$v05_r5     = array( VCAP\Settings::value( 'vcap_keep_status_on_partial_return' ) );
+$GLOBALS['vcap_test_options']['vcap_keep_status_on_partial_return'] = 'no';
+$v05_r5[] = VCAP\Settings::value( 'vcap_keep_status_on_partial_return' );
+check( 'SET-VC-05: no. 5 keep the status after a partial return – setting takes effect (on by default, "no" is the default of filter vcap_keep_status_on_partial_return; integration test refund-lifecycle "SET-VC-05: …")', array( 'yes', 'no' ) === $v05_r5 && str_contains( $v05_return, 'if ( ! ' . $v05_call5 . ' ) {' ) && str_contains( $v05_src( 'tests/refund-lifecycle-integration.php' ), 'SET-VC-05: setting off' ) );
+check( 'SET-VC-05: no. 5 keep the status after a partial return – filter wins (its result alone decides; integration test refund-lifecycle "SET-VC-05: … the filter wins")', 1 === substr_count( $v05_return, "'vcap_keep_status_on_partial_return'," ) && str_contains( $v05_src( 'tests/refund-lifecycle-integration.php' ), 'SET-VC-05: setting off, filter' ) );
+// No. 6: extend an expired voucher when value is booked back (Coupons\BookBack::check_restored_card()).
+$v05_saved_wpdb  = $GLOBALS['wpdb'] ?? null;
+$GLOBALS['wpdb'] = new VCAP_Test_Wpdb();
+$v05_order       = new class() extends WC_Order {
+	public array $notes = array();
+	public function get_id() { return 505; }
+	public function get_order_number() { return '505'; }
+	public function add_order_note( $note, $is_customer = 0, $added_by_user = false ) { $this->notes[] = (string) $note; return 1; }
+};
+$v05_card             = new Voucher();
+$v05_card->id         = 505;
+$v05_card->code       = 'GIFT-SET05';
+$v05_card->status     = Voucher::STATUS_EXPIRED;
+$v05_card->currency   = 'EUR';
+$v05_card->expires_at = gmdate( 'Y-m-d H:i:s', time() - DAY_IN_SECONDS );
+$v05_seen6            = array();
+add_filter( 'vcap_restore_extension_days', static function ( $days ) use ( &$v05_seen6 ) { $v05_seen6[] = $days; return 0; } );
+VCAP\Coupons\BookBack::check_restored_card( new VCAP\VoucherRepository(), $v05_order, $v05_card, 10.0 );
+$GLOBALS['vcap_test_options']['vcap_restore_extension_days'] = '30';
+VCAP\Coupons\BookBack::check_restored_card( new VCAP\VoucherRepository(), $v05_order, $v05_card, 10.0 );
+$GLOBALS['vcap_test_options']['vcap_restore_extension_days'] = '99999';
+VCAP\Coupons\BookBack::check_restored_card( new VCAP\VoucherRepository(), $v05_order, $v05_card, 10.0 );
+unset( $GLOBALS['vcap_test_filters']['vcap_restore_extension_days'] );
+$GLOBALS['wpdb'] = $v05_saved_wpdb;
+check( 'SET-VC-05: no. 6 extension of expired vouchers on booking back – setting takes effect (0 by default, 30, at most 3650) as the default of filter vcap_restore_extension_days', array( 0, 30, 3650 ) === $v05_seen6, wp_json_encode( $v05_seen6 ) );
+check( 'SET-VC-05: no. 6 extension – filter wins: with the setting at 30 the filter\'s 0 extends nothing; the order gets the "expired" note instead', 3 === count( $v05_order->notes ) && str_contains( $v05_order->notes[1], 'it has expired' ) && Voucher::STATUS_EXPIRED === $v05_card->status, wp_json_encode( $v05_order->notes ) );
+// No. 7: order statuses that charge and book back balances (Coupons\Settlement).
+$v05_r7 = array( VCAP\Coupons\Settlement::deduct_statuses(), VCAP\Coupons\Settlement::restore_statuses() );
+$GLOBALS['vcap_test_options']['vcap_balance_deduct_statuses']  = array( 'wc-completed', 'on-hold', 'pending', 'completed' );
+$GLOBALS['vcap_test_options']['vcap_balance_restore_statuses'] = array( 'cancelled', 'processing' );
+$v05_r7[] = VCAP\Coupons\Settlement::deduct_statuses();
+$v05_r7[] = VCAP\Coupons\Settlement::restore_statuses();
+$GLOBALS['vcap_test_options']['vcap_balance_deduct_statuses']  = '';
+$GLOBALS['vcap_test_options']['vcap_balance_restore_statuses'] = array( 'processing' );
+$v05_r7[] = VCAP\Coupons\Settlement::deduct_statuses();
+$v05_r7[] = VCAP\Coupons\Settlement::restore_statuses();
+check(
+	'SET-VC-05: no. 7 statuses that charge and book back balances – setting takes effect (charge: paid statuses only, empty = processing/completed; book back: cancelled/refunded/failed only, empty = all three)',
+	array( array( 'processing', 'completed' ), array( 'cancelled', 'refunded', 'failed' ), array( 'completed' ), array( 'cancelled' ), array( 'processing', 'completed' ), array( 'cancelled', 'refunded', 'failed' ) ) === $v05_r7
+		&& ! isset( VCAP\Coupons\Settlement::deduct_choices()['pending'] ) && array( 'cancelled', 'refunded', 'failed' ) === array_keys( VCAP\Coupons\Settlement::restore_choices() )
+		&& str_contains( $v05_src( 'src/Coupons/Settlement.php' ), '$restore_statuses = self::restore_statuses();' ),
+	wp_json_encode( $v05_r7 )
+);
+$GLOBALS['vcap_test_options']['vcap_balance_deduct_statuses']  = array( 'completed' );
+$GLOBALS['vcap_test_options']['vcap_balance_restore_statuses'] = array( 'cancelled' );
+$v05_seen7 = array();
+add_filter( 'vcap_balance_deduct_statuses', static function ( $s ) use ( &$v05_seen7 ) { $v05_seen7[] = $s; return array( 'shipped' ); } );
+add_filter( 'vcap_balance_restore_statuses', static function ( $s ) use ( &$v05_seen7 ) { $v05_seen7[] = $s; return array( 'failed' ); } );
+$v05_f7 = array( VCAP\Coupons\Settlement::deduct_statuses(), VCAP\Coupons\Settlement::restore_statuses() );
+check( 'SET-VC-05: no. 7 statuses – filters vcap_balance_deduct_statuses and vcap_balance_restore_statuses get the setting and win', array( array( 'completed' ), array( 'cancelled' ) ) === $v05_seen7 && array( array( 'shipped' ), array( 'failed' ) ) === $v05_f7 );
+check( 'SET-VC-05: TAX.md section 5 describes the refund and cancellation settings (descriptive, to be checked)', str_contains( $v05_src( 'TAX.md' ), '### 5.3 Einstellungen „Erstattung & Storno“ (SET-VC-05) – zu prüfen' ) );
+$GLOBALS['vcap_test_filters'] = $v05_saved_filters;
+$GLOBALS['vcap_test_options'] = $v05_saved_opts;
+// SET-VC-12: consent checkbox at the voucher product (off by default; global setting, per-product switch, filter wins).
+echo "SET-VC-12 consent checkbox\n";
+$cn_saved_opts    = $GLOBALS['vcap_test_options'];
+$cn_saved_filters = $GLOBALS['vcap_test_filters'];
+VCAP\SettingsRegistry::reset();
+$cn_reg = VCAP\SettingsRegistry::all();
+check(
+	'SET-VC-12: register – vcap_consent_enabled (bool, default no) and vcap_consent_text (text, empty) are settings of "General" with legal weight, exported; product setting "consent" defaults to "use global" and is listed in wpml-config.xml',
+	'no' === $cn_reg['vcap_consent_enabled']['default'] && 'bool' === $cn_reg['vcap_consent_enabled']['type'] && '' === $cn_reg['vcap_consent_enabled']['section'] && $cn_reg['vcap_consent_enabled']['legal'] && $cn_reg['vcap_consent_enabled']['export']
+		&& '' === $cn_reg['vcap_consent_text']['default'] && 'text' === $cn_reg['vcap_consent_text']['type'] && $cn_reg['vcap_consent_text']['legal']
+		&& '' === ProductConfig::DEFAULTS['consent'] && str_contains( (string) file_get_contents( VCAP_PATH . 'wpml-config.xml' ), '<custom-field action="copy">_vcap_consent</custom-field>' )
+		&& in_array( 'vcap_consent_text', VCAP\Compat\Multilingual::OPTIONS, true )
+);
+$cn_fields = array_column( array_slice( VCAP\Consent::settings_fields(), 0, -1 ), null, 'id' );
+check(
+	'SET-VC-12: block "Consent checkbox" on "General" builds its fields with SettingsRegistry::field() (checkbox default no, textarea with the default text as placeholder) and says "Not legally checked"',
+	'checkbox' === $cn_fields['vcap_consent_enabled']['type'] && 'no' === $cn_fields['vcap_consent_enabled']['default'] && 'textarea' === $cn_fields['vcap_consent_text']['type'] && VCAP\Consent::default_text() === $cn_fields['vcap_consent_text']['placeholder']
+		&& str_contains( (string) $cn_fields['vcap_consent']['desc'], 'Not legally checked' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'src/Settings.php' ), 'Consent::settings_fields()' )
+);
+$cn_cfg     = static fn( array $over = array() ): array => array_merge( ProductConfig::DEFAULTS, $over );
+$cn_default = VCAP\Fields::builtin_definitions( $cn_cfg() );
+$cn_off     = ! VCAP\Consent::required_for( $cn_cfg() ) && ! isset( $cn_default['consent'] );
+$cn_product = VCAP\Consent::required_for( $cn_cfg( array( 'consent' => 'yes' ) ) );
+$GLOBALS['vcap_test_options']['vcap_consent_enabled'] = 'yes';
+$cn_global  = VCAP\Consent::required_for( $cn_cfg() ) && ! VCAP\Consent::required_for( $cn_cfg( array( 'consent' => 'no' ) ) );
+$cn_defs    = VCAP\Fields::builtin_definitions( $cn_cfg() );
+add_filter( 'vcap_consent_required', static fn( $required, $config ) => false, 10, 2 );
+$cn_filter  = ! VCAP\Consent::required_for( $cn_cfg( array( 'consent' => 'yes' ) ) );
+$GLOBALS['vcap_test_filters'] = $cn_saved_filters;
+check(
+	'SET-VC-12: default off – no checkbox (built-in fields as before); product "yes" shows it with the global setting off, the global setting shows it unless the product says "no"; the filter vcap_consent_required wins',
+	$cn_off && $cn_product && $cn_global && $cn_filter && array( 'recipient_name', 'recipient_email', 'message' ) === array_keys( $cn_default ),
+	json_encode( array( $cn_off, $cn_product, $cn_global, $cn_filter, array_keys( $cn_default ) ) )
+);
+check(
+	'SET-VC-12: the built-in field is a required checkbox, last of the built-in fields, labelled with the default text while the setting is empty',
+	isset( $cn_defs['consent'] ) && 'consent' === array_key_last( $cn_defs ) && 'checkbox' === $cn_defs['consent']['type'] && true === $cn_defs['consent']['required'] && VCAP\Consent::default_text() === $cn_defs['consent']['label']
+);
+$GLOBALS['vcap_test_options']['vcap_consent_text'] = "Ich möchte die sofortige\nZustellung <b>des Gutscheins</b>.";
+add_filter( 'vcap_consent_text', static fn( $text ) => $text . ' (AGB gelesen)' );
+$cn_text = VCAP\Consent::text();
+$GLOBALS['vcap_test_filters'] = $cn_saved_filters;
+check(
+	'SET-VC-12: own text – one line of plain text (no HTML), the filter vcap_consent_text wins; saving cleans and cuts it to 500 characters',
+	'Ich möchte die sofortige Zustellung des Gutscheins. (AGB gelesen)' === $cn_text && 500 === mb_strlen( VCAP\Consent::sanitize_text( str_repeat( 'ä', 600 ) ) ) && 'x' === VCAP\Consent::sanitize_text( '<i>x</i>' ),
+	$cn_text
+);
+$cn_cart    = array(
+	'recipient_name' => array( 'label' => 'Recipient name', 'value' => 'Anna' ),
+	'consent'        => array( 'label' => 'Terms read', 'value' => 'Yes' ),
+);
+$cn_stamped = VCAP\Consent::stamp( $cn_cart, 1795000000 );
+$cn_none    = VCAP\Consent::stamp( array( 'recipient_name' => $cn_cart['recipient_name'] ), 1795000000 );
+check(
+	'SET-VC-12: the order line keeps the text as shown and the time of the order (UTC) in "_vcap_fields" – classic and block checkout (woocommerce_checkout_create_order_line_item); without a consent nothing is added',
+	gmdate( 'Y-m-d H:i:s', 1795000000 ) === $cn_stamped['consent']['given_at'] && 'Terms read' === $cn_stamped['consent']['label'] && ! isset( $cn_none['consent'] )
+		&& array( 'text' => 'Terms read', 'given_at' => gmdate( 'Y-m-d H:i:s', 1795000000 ) ) === VCAP\Consent::of( $cn_stamped ) && null === VCAP\Consent::of( $cn_none ) && null === VCAP\Consent::of( 'x' )
+		&& str_contains( (string) file_get_contents( VCAP_PATH . 'src/Fields.php' ), "\$values['vcap_fields'] = Consent::stamp( (array) \$values['vcap_fields'] );" )
+);
+$cn_item  = new class( $cn_stamped ) {
+	public function __construct( private array $fields ) {}
+	public function get_meta( $k ) { return '_vcap_fields' === $k ? $this->fields : ''; }
+};
+$cn_again = ( new VCAP\Fields() )->order_again( array(), $cn_item, null );
+check(
+	'SET-VC-12: "order again" does not carry the consent over – it is asked anew (the field is required, validate() refuses the line without it)',
+	isset( $cn_again['vcap_fields']['recipient_name'] ) && ! isset( $cn_again['vcap_fields']['consent'] ) && str_contains( VCAP\Consent::missing_message( 'Terms read' ), 'Terms read' ),
+	json_encode( $cn_again )
+);
+$cn_voucher         = new VCAP\Voucher();
+$cn_voucher->fields = $cn_stamped;
+$cn_rows            = VCAP\Consent::export_rows( $cn_voucher->fields );
+$cn_privacy         = (string) file_get_contents( VCAP_PATH . 'src/Privacy.php' );
+check(
+	'SET-VC-12: the WordPress personal data export of a voucher lists the consent with its text and time (and not twice as a plain field)',
+	array( array( 'name' => 'Consent', 'value' => 'Terms read' ), array( 'name' => 'Consent given at (UTC)', 'value' => gmdate( 'Y-m-d H:i:s', 1795000000 ) ) ) === $cn_rows && array() === VCAP\Consent::export_rows( array() )
+		&& str_contains( $cn_privacy, 'Consent::export_rows( $voucher->fields )' ) && str_contains( $cn_privacy, 'if ( Consent::KEY === (string) $key ) {' ),
+	json_encode( $cn_rows )
+);
+$cn_labels = VCAP\Consent::event_labels( array() );
+$cn_note   = VCAP\Consent::note_text( 'x', VCAP\Consent::NOTE, array( 'Terms read', '2026-11-24 10:00:00' ) );
+check(
+	'SET-VC-12: the voucher history gets "Consent given" (event purchase_consent, reserved in CORE_EVENTS) with the text and the local time; the issuer writes it after "issued"',
+	'Consent given' === $cn_labels['purchase_consent'] && '"Terms read" confirmed with the order (24.11.2026 11:00).' === $cn_note && 'x' === VCAP\Consent::note_text( 'x', 'other', array() )
+		&& in_array( VCAP\Consent::EVENT, VCAP\API\V1\VoucherService::CORE_EVENTS, true ) && str_contains( (string) file_get_contents( VCAP_PATH . 'src/Issuer.php' ), 'Consent::log( $this->repo, $voucher, $order->get_id() );' ),
+	$cn_note
+);
+$cn_fields_src = (string) file_get_contents( VCAP_PATH . 'src/Fields.php' );
+$cn_ps_src     = (string) file_get_contents( VCAP_PATH . 'src/ProductSettings.php' );
+check(
+	'SET-VC-12: block cart/checkout – the Store API add-to-cart runs the same errors() (required checkbox), the checkout (classic and Store API: woocommerce_check_cart_items) stops a voucher line without the consent; the product screen offers global/yes/no and stores only those',
+	str_contains( $cn_fields_src, '$this->check_consent( $values );' ) && str_contains( $cn_fields_src, 'Consent::KEY === (string) $key ? Consent::missing_message( $label )' )
+		&& str_contains( $cn_ps_src, "'_vcap_consent', isset( Consent::product_choices()[ \$consent ] ) ? \$consent : ''" ) && array( '', 'yes', 'no' ) === array_keys( VCAP\Consent::product_choices() )
+);
+$GLOBALS['vcap_test_options'] = $cn_saved_opts;
+$GLOBALS['vcap_test_filters'] = $cn_saved_filters;
+
+// SET-VC-24: language-neutral defaults – code prefixes as settings, link parameter by site language for new
+// installations, the old parameter "gutschein" stays valid.
+echo "SET-VC-24 language-neutral defaults\n";
+$ln_saved_opts    = $GLOBALS['vcap_test_options'];
+$ln_saved_filters = $GLOBALS['vcap_test_filters'];
+$ln_saved_get     = $_GET;
+VCAP\SettingsRegistry::reset();
+check(
+	'SET-VC-24: register – prefixes of bonus and referral codes are settings of "Promotions" with the prefixes of 1.2.0 as default; the link parameter keeps "gutschein" for shops that never saved it; the PDF file name stays "voucher-{coupon_code}" (already neutral)',
+	'BONUS' === VCAP\SettingsRegistry::default( 'vcap_bonus_code_prefix' ) && 'FRIEND' === VCAP\SettingsRegistry::default( 'vcap_referral_code_prefix' ) && 'promotions' === VCAP\SettingsRegistry::get( 'vcap_bonus_code_prefix' )['section'] && 'promotions' === VCAP\SettingsRegistry::get( 'vcap_referral_code_prefix' )['section']
+		&& 'gutschein' === VCAP\SettingsRegistry::default( 'vcap_coupon_link_param' ) && 'voucher-{coupon_code}' === VCAP\SettingsRegistry::default( 'vcap_pdf_filename' )
+);
+$ln_bonus = (string) file_get_contents( VCAP_PATH . 'src/Discounts/Bonus.php' );
+$ln_ref   = (string) file_get_contents( VCAP_PATH . 'src/Referrals.php' );
+$GLOBALS['vcap_test_options']['vcap_bonus_code_prefix'] = 'BONO';
+$ln_setting = (string) apply_filters( 'vcap_bonus_code_prefix', (string) VCAP\Settings::value( 'vcap_bonus_code_prefix' ), array(), null );
+add_filter( 'vcap_bonus_code_prefix', static fn( $prefix ) => 'PROMO' );
+$ln_filter = (string) apply_filters( 'vcap_bonus_code_prefix', (string) VCAP\Settings::value( 'vcap_bonus_code_prefix' ), array(), null );
+$GLOBALS['vcap_test_filters'] = $ln_saved_filters;
+check(
+	'SET-VC-24: bonus and referral codes take their prefix from the setting, the filters vcap_bonus_code_prefix / vcap_referral_code_prefix get it and win',
+	'BONO' === $ln_setting && 'PROMO' === $ln_filter
+		&& str_contains( $ln_bonus, "apply_filters( 'vcap_bonus_code_prefix', (string) \\VCAP\\Settings::value( 'vcap_bonus_code_prefix' ), \$campaign, \$order )" )
+		&& str_contains( $ln_ref, "apply_filters( 'vcap_referral_code_prefix', (string) Settings::value( 'vcap_referral_code_prefix' ) )" )
+		&& ! str_contains( $ln_bonus, "'vcap_bonus_code_prefix', 'BONUS'" ) && ! str_contains( $ln_ref, "'vcap_referral_code_prefix', 'FRIEND'" )
+);
+$ln_settings = new VCAP\Settings();
+$ln_kept     = $ln_settings->sanitize_affix( 'B&B', array( 'id' => 'vcap_referral_code_prefix', 'title' => 'Prefix of referral codes' ) );
+check(
+	'SET-VC-24: a prefix is checked like the code prefix (letters, digits, dot, hyphen, underscore, up to 20): "B&B" is refused and the stored value kept; empty = no prefix is allowed',
+	'FRIEND' === $ln_kept && '' === $ln_settings->sanitize_affix( '', array( 'id' => 'vcap_bonus_code_prefix' ) ) && 'GIFT-2026' === $ln_settings->sanitize_affix( ' GIFT-2026 ', array( 'id' => 'vcap_bonus_code_prefix' ) )
+		&& str_contains( (string) file_get_contents( VCAP_PATH . 'src/Settings.php' ), "'vcap_code_separator', 'vcap_bonus_code_prefix', 'vcap_referral_code_prefix' ) as \$affix" ),
+	(string) $ln_kept
+);
+check(
+	'SET-VC-24 (E10 a): the parameter of a new installation follows the site language – German (de, de_DE, de_AT, de_CH, de_DE_formal) "gutschein", every other language "voucher"',
+	'gutschein' === VCAP\CouponLink::fresh_param( 'de_DE' ) && 'gutschein' === VCAP\CouponLink::fresh_param( 'de_AT' ) && 'gutschein' === VCAP\CouponLink::fresh_param( 'de_CH' ) && 'gutschein' === VCAP\CouponLink::fresh_param( 'de_DE_formal' ) && 'gutschein' === VCAP\CouponLink::fresh_param( 'de' )
+		&& 'voucher' === VCAP\CouponLink::fresh_param( 'en_US' ) && 'voucher' === VCAP\CouponLink::fresh_param( 'fr_FR' ) && 'voucher' === VCAP\CouponLink::fresh_param( 'nl_NL' ) && 'voucher' === VCAP\CouponLink::fresh_param( 'es_ES' )
+);
+$ln_install = (string) file_get_contents( VCAP_PATH . 'src/Install.php' );
+$ln_first   = (int) strpos( $ln_install, "add_option( 'vcap_coupon_link_param', CouponLink::fresh_param( self::site_locale() ), '', 'yes' );" );
+check(
+	'SET-VC-24: only a first installation stores it (inside "no version stored yet"), before Settings::store_request_defaults() would store "gutschein"; existing shops keep theirs (default unchanged)',
+	$ln_first > 0 && $ln_first < (int) strpos( $ln_install, 'self::upgrade_schema( $installed );' ) && $ln_first > (int) strpos( $ln_install, "if ( '' === self::stored_version() ) {\n\t\t\tadd_option( PaymentVouchers::OPTION" )
+		&& ! str_contains( (string) file_get_contents( VCAP_PATH . 'src/SettingsTransfer.php' ), 'fresh_param' )
+);
+if ( ! function_exists( 'is_multisite' ) ) {
+	function is_multisite() { return false; }
+}
+// A first installation on an English site and on a German site, an existing shop (option stored): add_option() as in activate_site().
+unset( $GLOBALS['vcap_test_options']['vcap_coupon_link_param'] );
+$GLOBALS['vcap_test_options']['WPLANG'] = 'en_GB';
+add_option( 'vcap_coupon_link_param', VCAP\CouponLink::fresh_param( VCAP\Install::site_locale() ), '', 'yes' );
+$ln_en = $GLOBALS['vcap_test_options']['vcap_coupon_link_param'];
+unset( $GLOBALS['vcap_test_options']['vcap_coupon_link_param'] );
+$GLOBALS['vcap_test_options']['WPLANG'] = 'de_AT';
+add_option( 'vcap_coupon_link_param', VCAP\CouponLink::fresh_param( VCAP\Install::site_locale() ), '', 'yes' );
+$ln_de = $GLOBALS['vcap_test_options']['vcap_coupon_link_param'];
+$GLOBALS['vcap_test_options']['vcap_coupon_link_param'] = 'gutschein';
+$GLOBALS['vcap_test_options']['WPLANG']                 = 'en_US';
+add_option( 'vcap_coupon_link_param', VCAP\CouponLink::fresh_param( VCAP\Install::site_locale() ), '', 'yes' );
+check(
+	'SET-VC-24: site language from WPLANG – an English site stores "voucher", an Austrian one "gutschein"; an existing shop keeps "gutschein" (add_option never overwrites)',
+	'voucher' === $ln_en && 'gutschein' === $ln_de && 'gutschein' === $GLOBALS['vcap_test_options']['vcap_coupon_link_param'],
+	json_encode( array( $ln_en, $ln_de ) )
+);
+// Old links keep working: with the parameter "voucher" set, ?gutschein=CODE is still read (alias), ?voucher=CODE first.
+$GLOBALS['vcap_test_options']['vcap_coupon_link_param'] = 'voucher';
+$ln_link = new VCAP\CouponLink( new VCAP\Settings() );
+$_GET    = array( 'gutschein' => 'SUMMER10' );
+$ln_old  = $ln_link->request_param();
+$_GET    = array( 'voucher' => 'SUMMER10', 'gutschein' => 'OTHER' );
+$ln_new  = $ln_link->request_param();
+$_GET    = array( 'coupon' => 'SUMMER10' );
+$ln_none = $ln_link->request_param();
+$_GET    = array( 'gutschein' => array( 'x' ) );
+$ln_arr  = $ln_link->request_param();
+$ln_both = $ln_link->params();
+$GLOBALS['vcap_test_options']['vcap_coupon_link_param'] = 'gutschein';
+$ln_same = ( new VCAP\CouponLink( new VCAP\Settings() ) )->params();
+$_GET    = $ln_saved_get;
+$ln_src  = (string) file_get_contents( VCAP_PATH . 'src/CouponLink.php' );
+check(
+	'SET-VC-24: old links work – with the parameter "voucher" a link ?gutschein=CODE is still applied (alias), the parameter set comes first, other parameters and arrays are ignored; with "gutschein" set there is one parameter; the redirect removes both',
+	'gutschein' === $ln_old && 'voucher' === $ln_new && null === $ln_none && null === $ln_arr && array( 'voucher', 'gutschein' ) === $ln_both && array( 'gutschein' ) === $ln_same
+		&& str_contains( $ln_src, '$param = $this->request_param();' ) && str_contains( $ln_src, 'wp_safe_redirect( remove_query_arg( $this->params() ) );' ),
+	json_encode( array( $ln_old, $ln_new, $ln_none, $ln_arr, $ln_same ) )
+);
+$GLOBALS['vcap_test_options'] = $ln_saved_opts;
+$GLOBALS['vcap_test_filters'] = $ln_saved_filters;
+check( 'SET-VC-06: a scheduled delivery after the validity date follows the expiry behaviour (grace period / never deliver, "expires" refuses as before)', str_contains( (string) file_get_contents( VCAP_PATH . 'src/Delivery.php' ), 'if ( $voucher->is_expired() ) { // SET-VC-06' ) );
+// SET-VC-06: expiry behaviour as a setting ("expires" = 1.2.0, grace period, never expires) and the extension limit
+// for staff; filters vcap_expiry_behaviour, vcap_expiry_grace_days, vcap_expiry_staff_extension_days win.
+echo "SET-VC-06 expiry behaviour\n";
+VCAP\SettingsRegistry::reset();
+$x6_opts    = $GLOBALS['vcap_test_options'] ?? array();
+$x6_filters = $GLOBALS['vcap_test_filters'] ?? array();
+$x6_set     = static function ( array $values ): void {
+	foreach ( $values as $k => $v ) {
+		if ( null === $v ) {
+			unset( $GLOBALS['vcap_test_options'][ $k ] );
+		} else {
+			$GLOBALS['vcap_test_options'][ $k ] = $v;
+		}
+	}
+};
+$x6_def = VCAP\Settings::defaults();
+check(
+	'SET-VC-06: defaults keep 1.2.0 – expires at the date, grace 30 days (only used with "grace"), staff extension without limit (0); General section, legal weight',
+	'expires' === $x6_def['vcap_expiry_behaviour'] && 30 === $x6_def['vcap_expiry_grace_days'] && 0 === $x6_def['vcap_expiry_staff_extension_days'] && 'expires' === VCAP\ExpiryPolicy::behaviour() && 0 === VCAP\ExpiryPolicy::grace_days() && 0 === VCAP\ExpiryPolicy::staff_extension_days()
+		&& '' === VCAP\SettingsRegistry::get( 'vcap_expiry_behaviour' )['section'] && VCAP\SettingsRegistry::get( 'vcap_expiry_behaviour' )['legal'] && VCAP\SettingsRegistry::get( 'vcap_expiry_grace_days' )['legal'] && VCAP\SettingsRegistry::get( 'vcap_expiry_staff_extension_days' )['legal']
+		&& array( 'expires', 'grace', 'never' ) === VCAP\SettingsRegistry::get( 'vcap_expiry_behaviour' )['choices'] && 1 === VCAP\SettingsRegistry::get( 'vcap_expiry_grace_days' )['min']
+);
+$x6_v5              = new Voucher();
+$x6_v5->status      = Voucher::STATUS_ACTIVE;
+$x6_v5->expires_at  = gmdate( 'Y-m-d H:i:s', time() - 5 * DAY_IN_SECONDS );
+$x6_v40             = new Voucher();
+$x6_v40->status     = Voucher::STATUS_ACTIVE;
+$x6_v40->expires_at = gmdate( 'Y-m-d H:i:s', time() - 40 * DAY_IN_SECONDS );
+$x6_state           = static fn() => array( $x6_v5->is_expired(), $x6_v40->is_expired(), $x6_v5->is_usable(), '' !== VCAP\ExpiryPolicy::notice( $x6_v5 ) );
+$x6_exp             = $x6_state();
+$x6_label           = $x6_v5->status_label();
+$x6_set( array( 'vcap_expiry_behaviour' => 'grace' ) );
+$x6_grace       = $x6_state();
+$x6_grace_note  = VCAP\ExpiryPolicy::notice( $x6_v5 );
+$x6_grace_label = $x6_v5->status_label();
+$x6_set( array( 'vcap_expiry_grace_days' => '3' ) );
+$x6_grace3 = $x6_state();
+$x6_set( array( 'vcap_expiry_behaviour' => 'never', 'vcap_expiry_grace_days' => null ) );
+$x6_never      = $x6_state();
+$x6_never_note = VCAP\ExpiryPolicy::notice( $x6_v40 );
+check(
+	'SET-VC-06: Voucher::is_expired() follows the behaviour – expires: both past-date vouchers expired; grace 30 days: 5 days past still redeemable with a notice, 40 days past expired; grace 3 days: both expired; never: none expired, notice only',
+	array( true, true, false, false ) === $x6_exp && array( false, true, true, true ) === $x6_grace && array( true, true, false, false ) === $x6_grace3 && array( false, false, true, true ) === $x6_never
+		&& 'Expired' === $x6_label && 'Active (validity date passed)' === $x6_grace_label
+		&& str_contains( $x6_grace_note, 'The shop still accepts it until ' ) && str_contains( $x6_never_note, 'The shop still accepts it.' ) && ! str_contains( $x6_never_note, 'until' ),
+	json_encode( array( $x6_exp, $x6_grace, $x6_grace3, $x6_never, $x6_label, $x6_grace_label, $x6_grace_note, $x6_never_note ) )
+);
+$x6_set( array( 'vcap_expiry_behaviour' => 'grace' ) );
+$x6_seen = array();
+add_filter( 'vcap_expiry_behaviour', static function ( $b ) use ( &$x6_seen ) { $x6_seen[] = $b; return 'never'; } );
+$x6_fb_never = array( VCAP\ExpiryPolicy::behaviour(), $x6_v40->is_expired() );
+$GLOBALS['vcap_test_filters']['vcap_expiry_behaviour'] = array( array( static fn() => 'bogus', 1 ) );
+$x6_fb_bogus = VCAP\ExpiryPolicy::behaviour();
+unset( $GLOBALS['vcap_test_filters']['vcap_expiry_behaviour'] );
+add_filter( 'vcap_expiry_grace_days', static fn() => 60 );
+$x6_fg = array( VCAP\ExpiryPolicy::grace_days(), $x6_v40->is_expired() );
+unset( $GLOBALS['vcap_test_filters']['vcap_expiry_grace_days'] );
+$x6_set( array( 'vcap_expiry_behaviour' => 'unknown' ) );
+$x6_stored_bogus = VCAP\ExpiryPolicy::behaviour();
+check(
+	'SET-VC-06: filter vcap_expiry_behaviour gets the setting and wins (unknown values = "expires"); filter vcap_expiry_grace_days wins (60 days keep a voucher 40 days past redeemable)',
+	array( 'grace', 'grace' ) === $x6_seen && array( 'never', false ) === $x6_fb_never && 'expires' === $x6_fb_bogus && array( 60, false ) === $x6_fg && 'expires' === $x6_stored_bogus,
+	json_encode( array( $x6_seen, $x6_fb_never, $x6_fb_bogus, $x6_fg, $x6_stored_bogus ) )
+);
+
+// Journal: the daily maintenance books the expiry off only when the grace period ended, never with "never".
+$x6_saved_wpdb = $GLOBALS['wpdb'] ?? null;
+$x6_fixtures   = array(
+	5  => array( 'id' => 5, 'code' => 'X6-FIVE', 'type' => 'giftcard', 'usage_mode' => 'balance', 'status' => 'active', 'initial_amount' => 50, 'balance' => 50, 'currency' => 'EUR', 'discount_type' => 'fixed_cart', 'expires_at' => $x6_v5->expires_at ),
+	40 => array( 'id' => 40, 'code' => 'X6-FORTY', 'type' => 'giftcard', 'usage_mode' => 'balance', 'status' => 'active', 'initial_amount' => 20, 'balance' => 20, 'currency' => 'EUR', 'discount_type' => 'fixed_cart', 'expires_at' => $x6_v40->expires_at ),
+	99 => array( 'id' => 99, 'code' => 'X6-FUTURE', 'type' => 'giftcard', 'usage_mode' => 'balance', 'status' => 'active', 'initial_amount' => 10, 'balance' => 10, 'currency' => 'EUR', 'discount_type' => 'fixed_cart', 'expires_at' => gmdate( 'Y-m-d H:i:s', time() + 30 * DAY_IN_SECONDS ) ),
+);
+$x6_db = new class( $x6_fixtures ) {
+	public string $prefix     = 'wp_';
+	public string $last_error = '';
+	public int $insert_id     = 0;
+	public array $log         = array();
+	public array $inserts     = array();
+	private array $expired    = array();
+	public function __construct( private array $rows ) {}
+	public function prepare( $query, ...$args ) {
+		$args = isset( $args[0] ) && is_array( $args[0] ) ? $args[0] : $args;
+		return vsprintf( str_replace( array( '%d', '%s', '%i' ), array( '%d', "'%s'", '%s' ), $query ), $args );
+	}
+	private function cutoff( string $q ): string {
+		return preg_match( "/expires_at <=? '([^']+)'/", $q, $m ) ? $m[1] : '';
+	}
+	private function due( string $q ): array {
+		$cut = $this->cutoff( $q );
+		return array_values( array_filter( $this->rows, static fn( $r ) => 'active' === $r['status'] && $r['expires_at'] < $cut ) );
+	}
+	public function get_col( $q, $i = 0 ) {
+		$this->log[] = $q;
+		return str_starts_with( $q, 'SELECT id FROM' ) ? array_column( $this->due( $q ), 'id' ) : array();
+	}
+	public function query( $q ) {
+		$this->log[] = $q;
+		if ( str_starts_with( $q, 'UPDATE' ) && str_contains( $q, "SET status = 'expired'" ) ) {
+			$due = $this->due( $q );
+			foreach ( $due as $r ) {
+				$this->rows[ $r['id'] ]['status'] = 'expired';
+				$this->expired[]                  = $r['id'];
+			}
+			return count( $due );
+		}
+		return 1;
+	}
+	public function get_results( $q, $o = null ) {
+		$this->log[] = $q;
+		if ( str_contains( $q, "status = 'expired' AND updated_at" ) ) {
+			$out = array();
+			foreach ( $this->expired as $id ) {
+				$out[] = $this->rows[ $id ];
+			}
+			$this->expired = array();
+			return $out;
+		}
+		if ( str_contains( $q, 'AS expired' ) ) { // Ledger::liability(): group the fixtures like the SQL does.
+			$cut = $this->cutoff( $q );
+			$out = array();
+			foreach ( $this->rows as $r ) {
+				$key         = (int) ( $r['expires_at'] <= $cut );
+				$out[ $key ] = array( 'currency' => 'EUR', 'type' => 'giftcard', 'expired' => $key, 'free' => 0, 'cnt' => ( $out[ $key ]['cnt'] ?? 0 ) + 1, 'amount' => ( $out[ $key ]['amount'] ?? 0 ) + $r['balance'] );
+			}
+			return array_values( $out );
+		}
+		return array();
+	}
+	public function get_var( $q ) { $this->log[] = $q; return null; }
+	public function get_row( $q, $o = null ) { $this->log[] = $q; return null; }
+	public function insert( $table, $row ) { $this->inserts[] = $row; return 1; }
+	public function esc_like( $s ) { return addcslashes( (string) $s, '_%\\' ); }
+	public function reset_rows( array $rows ): void { $this->rows = $rows; $this->inserts = array(); $this->log = array(); }
+};
+$GLOBALS['wpdb'] = $x6_db;
+$x6_repo         = new VCAP\VoucherRepository();
+$x6_run          = static function ( string $behaviour ) use ( $x6_db, $x6_repo, $x6_fixtures, $x6_set ): array {
+	$x6_set( array( 'vcap_expiry_behaviour' => $behaviour ) );
+	$x6_db->reset_rows( $x6_fixtures );
+	$count  = $x6_repo->expire_overdue();
+	$booked = array();
+	foreach ( $x6_db->inserts as $row ) {
+		if ( 'expired' === $row['event'] ) {
+			$booked[ $row['voucher_id'] ] = $row['amount'];
+		}
+	}
+	return array( $count, $booked, count( $x6_db->log ) );
+};
+$x6_j_exp   = $x6_run( 'expires' );
+$x6_j_grace = $x6_run( 'grace' );
+$x6_j_never = $x6_run( 'never' );
+check(
+	'SET-VC-06: journal – "expires" books both past-date cards off (50 + 20); "grace" (30 days) books only the card past its grace period (20), the card in its grace period stays open; "never" books nothing (no query)',
+	2 === $x6_j_exp[0] && array( 5 => 50.0, 40 => 20.0 ) == $x6_j_exp[1] && 1 === $x6_j_grace[0] && array( 40 => 20.0 ) == $x6_j_grace[1] && array( 0, array(), 0 ) === $x6_j_never,
+	json_encode( array( $x6_j_exp, $x6_j_grace, $x6_j_never ) )
+);
+if ( ! function_exists( 'get_gmt_from_date' ) ) {
+	function get_gmt_from_date( $date, $format = 'Y-m-d H:i:s' ) { return gmdate( $format, (int) strtotime( $date . ' UTC' ) ); } // phpcs:ignore
+}
+if ( ! function_exists( 'esc_sql' ) ) {
+	function esc_sql( $s ) { return addslashes( (string) $s ); } // phpcs:ignore
+}
+$x6_open = static function ( string $behaviour ) use ( $x6_db, $x6_fixtures, $x6_set ): array {
+	$x6_set( array( 'vcap_expiry_behaviour' => $behaviour ) );
+	$x6_db->reset_rows( $x6_fixtures );
+	$GLOBALS['vcap_test_transients'] = array();
+	$bucket = ( new VCAP\Ledger( new VCAP\VoucherRepository() ) )->liability( wp_date( 'Y-m-d' ) )['totals']['EUR']['giftcard'] ?? array();
+	return array( $bucket['amount'] ?? 0.0, $bucket['expired_amount'] ?? 0.0 );
+};
+$x6_o = array( $x6_open( 'expires' ), $x6_open( 'grace' ), $x6_open( 'never' ) );
+check(
+	'SET-VC-06: report "open voucher value" (Ledger::liability) – expires: 10 open / 70 expired; grace 30 days: 60 open / 20 expired; never: 80 open / 0 expired; Reports::overview shifts its "expired" figure the same way',
+	array( array( 10.0, 70.0 ), array( 60.0, 20.0 ), array( 80.0, 0.0 ) ) == $x6_o
+		&& str_contains( (string) file_get_contents( VCAP_PATH . 'src/Reports.php' ), 'ExpiryPolicy::sql_cutoff( $start ), ExpiryPolicy::sql_cutoff( $end )' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'src/Ledger.php' ), "'expired'     => \$v->expires_at && \$v->expires_at <= \$cutoff" ),
+	json_encode( $x6_o )
+);
+$GLOBALS['wpdb']                 = $x6_saved_wpdb;
+$GLOBALS['vcap_test_transients'] = array();
+
+// Redemption in the grace period: WooCommerce's own expiry check of a voucher coupon (cart, Store API, admin orders),
+// the cart/API checks (Voucher::is_expired()) and the counter's check-in query.
+if ( ! class_exists( 'WC_Coupon' ) ) {
+	eval( 'class WC_Coupon { public array $meta = array(); public ?DateTime $expires = null; public function get_meta( $key ) { return $this->meta[ $key ] ?? ""; } public function get_date_expires() { return $this->expires; } }' ); // phpcs:ignore Squiz.PHP.Eval -- test stub only when WooCommerce is missing.
+}
+$x6_c                        = new WC_Coupon();
+$x6_c->meta['_vcap_voucher'] = 'yes';
+$x6_c->expires               = new DateTime( '@' . ( time() - 5 * DAY_IN_SECONDS ) );
+$x6_other                    = new WC_Coupon();
+$x6_other->expires           = new DateTime( '@' . ( time() - 5 * DAY_IN_SECONDS ) );
+$x6_set( array( 'vcap_expiry_behaviour' => 'expires' ) );
+$x6_cv = array( VCAP\ExpiryPolicy::coupon_expired( true, $x6_c ) );
+$x6_set( array( 'vcap_expiry_behaviour' => 'grace' ) );
+$x6_cv[] = VCAP\ExpiryPolicy::coupon_expired( true, $x6_c );
+$x6_cv[] = VCAP\ExpiryPolicy::coupon_expired( true, $x6_other );
+$x6_set( array( 'vcap_expiry_grace_days' => '2' ) );
+$x6_cv[] = VCAP\ExpiryPolicy::coupon_expired( true, $x6_c );
+$x6_set( array( 'vcap_expiry_behaviour' => 'never', 'vcap_expiry_grace_days' => null ) );
+$x6_cv[]    = VCAP\ExpiryPolicy::coupon_expired( true, $x6_c );
+$x6_cv[]    = VCAP\ExpiryPolicy::coupon_expired( false, $x6_c );
+$x6_tickets = (string) file_get_contents( VCAP_PATH . 'src/Tickets.php' );
+check(
+	'SET-VC-06: redemption in the grace period – WooCommerce\'s expiry check of a voucher coupon follows the behaviour (expires: expired; grace 30: accepted; grace 2: expired; never: accepted), other coupons untouched; cart (CartCoupons), redemption API (RedemptionService) and check-in use Voucher::is_expired() / ExpiryPolicy::sql_cutoff()',
+	array( true, false, true, true, false, false ) === $x6_cv
+		&& str_contains( (string) file_get_contents( VCAP_PATH . 'src/Coupons/CartCoupons.php' ), 'Voucher::STATUS_EXPIRED === $voucher->status || $voucher->is_expired()' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'src/API/V1/RedemptionService.php' ), 'Voucher::STATUS_EXPIRED === $voucher->status || $voucher->is_expired()' )
+		&& str_contains( $x6_tickets, 'ExpiryPolicy::sql_cutoff( $now )' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'src/TaxAccounting.php' ), 'ExpiryPolicy::register();' ),
+	json_encode( $x6_cv )
+);
+
+// Staff extension limit.
+$x6_set( array( 'vcap_expiry_behaviour' => null ) );
+$x6_ve             = new Voucher();
+$x6_ve->expires_at = gmdate( 'Y-m-d H:i:s', time() + 10 * DAY_IN_SECONDS );
+$x6_never_v        = new Voucher();
+$x6_in             = static fn( int $days ): string => gmdate( 'Y-m-d H:i:s', time() + $days * DAY_IN_SECONDS );
+$x6_s0             = array( VCAP\ExpiryPolicy::staff_may_set( $x6_ve, $x6_in( 5000 ) ), VCAP\ExpiryPolicy::staff_may_set( $x6_ve, null ), null === VCAP\ExpiryPolicy::staff_extension_limit( $x6_ve ) );
+$x6_set( array( 'vcap_expiry_staff_extension_days' => '30' ) );
+$x6_s30 = array(
+	VCAP\ExpiryPolicy::staff_may_set( $x6_ve, $x6_in( 39 ) ),        // 10 + 29 days: allowed.
+	VCAP\ExpiryPolicy::staff_may_set( $x6_ve, $x6_in( 45 ) ),        // 10 + 35 days: too far.
+	VCAP\ExpiryPolicy::staff_may_set( $x6_ve, $x6_in( 2 ) ),         // Shortened: allowed.
+	VCAP\ExpiryPolicy::staff_may_set( $x6_ve, null ),                // "Never expires": unlimited extension.
+	VCAP\ExpiryPolicy::staff_may_set( $x6_v40, $x6_in( 29 ) ),       // Expired 40 days ago: counted from today.
+	VCAP\ExpiryPolicy::staff_may_set( $x6_never_v, $x6_in( 9000 ) ), // Gets a date: shorter than "never".
+);
+add_filter( 'vcap_expiry_staff_extension_days', static fn() => 0 );
+$x6_sf = VCAP\ExpiryPolicy::staff_may_set( $x6_ve, $x6_in( 45 ) );
+unset( $GLOBALS['vcap_test_filters']['vcap_expiry_staff_extension_days'] );
+$x6_admin = (string) file_get_contents( VCAP_PATH . 'src/Admin/VoucherAdmin.php' );
+check(
+	'SET-VC-06: staff extension – 0 = no limit (as before); 30 days: up to 30 days after the current expiry or today, shortening always allowed, removing the date refused; filter wins; voucher edit and bulk "Extend validity" check it',
+	array( true, true, true ) === $x6_s0 && array( true, false, true, false, true, true ) === $x6_s30 && $x6_sf
+		&& str_contains( $x6_admin, '$new_expires !== $v->expires_at && ! \\VCAP\\ExpiryPolicy::staff_may_set( $v, $new_expires )' ) && str_contains( $x6_admin, '! \\VCAP\\ExpiryPolicy::staff_may_set( $v, $new )' ),
+	json_encode( array( $x6_s0, $x6_s30, $x6_sf ) )
+);
+check(
+	'SET-VC-06: maintenance step, TAX.md and hooks – expiry step documented in Delivery, TAX.md marks the behaviour "zu prüfen", hooks documented',
+	str_contains( (string) file_get_contents( VCAP_PATH . 'src/Delivery.php' ), 'SET-VC-06: the expiry behaviour decides' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'TAX.md' ), 'SET-VC-06' )
+		&& str_contains( (string) file_get_contents( VCAP_PATH . 'docs/HOOKS.md' ), '| `vcap_expiry_behaviour` | 1.3.0 |' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'docs/HOOKS.md' ), '| `vcap_expiry_staff_extension_days` | 1.3.0 |' )
+);
+$GLOBALS['vcap_test_options'] = $x6_opts;
+$GLOBALS['vcap_test_filters'] = $x6_filters;
+VCAP\SettingsRegistry::reset();
+
+echo "Sequential voucher number (SET-VC-13)\n";
+/** Database of the voucher number tests: one counter store shared by "connections" (each with its own LAST_INSERT_ID). */
+final class VCAP_VN13_Wpdb {
+	public static array $counters = array();
+	public string $prefix      = 'wp_';
+	public string $options     = 'wp_options';
+	public string $last_error  = '';
+	public array $log          = array();
+	public array $numbers      = array();
+	public int $last_id        = 0;
+	public bool $refuse_number = false;
+	/** @var callable|null Runs right after this connection incremented a counter (another request "in between"). */
+	public $after_increment = null;
+	private ?array $snapshot = null;
+	public function prepare( $query, ...$args ) {
+		$args = isset( $args[0] ) && is_array( $args[0] ) ? $args[0] : $args;
+		return vsprintf( str_replace( array( '%d', '%s', '%i' ), array( '%d', "'%s'", '%s' ), $query ), $args );
+	}
+	public function suppress_errors( $s = true ) { return false; }
+	public function query( $q ) {
+		$this->log[] = $q;
+		if ( 'START TRANSACTION' === $q ) {
+			$this->snapshot = self::$counters;
+			return 1;
+		}
+		if ( 'ROLLBACK' === $q ) {
+			self::$counters = $this->snapshot ?? self::$counters;
+			$this->snapshot = null;
+			return 1;
+		}
+		if ( 'COMMIT' === $q ) {
+			$this->snapshot = null;
+			return 1;
+		}
+		if ( preg_match( "/^INSERT IGNORE INTO wp_options \(option_name, option_value, autoload\) VALUES \('([a-z0-9_]+)', '0', 'off'\)$/", $q, $m ) ) {
+			if ( isset( self::$counters[ $m[1] ] ) ) {
+				return 0;
+			}
+			self::$counters[ $m[1] ] = 0;
+			return 1;
+		}
+		if ( preg_match( "/^UPDATE wp_options SET option_value = LAST_INSERT_ID\(CAST\(option_value AS UNSIGNED\) \+ 1\) WHERE option_name = '([a-z0-9_]+)'$/", $q, $m ) ) {
+			if ( ! isset( self::$counters[ $m[1] ] ) ) {
+				return 0;
+			}
+			$this->last_id = ++self::$counters[ $m[1] ];
+			if ( $this->after_increment ) {
+				( $this->after_increment )();
+			}
+			return 1;
+		}
+		if ( preg_match( "/^UPDATE wp_vcap_vouchers SET voucher_number = '([^']*)' WHERE id = (\d+) AND voucher_number = ''$/", $q, $m ) ) {
+			if ( $this->refuse_number || '' !== ( $this->numbers[ (int) $m[2] ] ?? '' ) ) {
+				return 0;
+			}
+			$this->numbers[ (int) $m[2] ] = $m[1];
+			return 1;
+		}
+		return 1;
+	}
+	public function get_var( $q ) {
+		$this->log[] = $q;
+		if ( 'SELECT LAST_INSERT_ID()' === $q ) {
+			return (string) $this->last_id;
+		}
+		if ( str_starts_with( $q, 'SHOW COLUMNS FROM wp_vcap_vouchers' ) ) {
+			return 'voucher_number';
+		}
+		if ( preg_match( "/^SELECT option_value FROM wp_options WHERE option_name = '([a-z0-9_]+)'$/", $q, $m ) ) {
+			return isset( self::$counters[ $m[1] ] ) ? (string) self::$counters[ $m[1] ] : null;
+		}
+		return null;
+	}
+	public function get_row( $q, $o = null ) { return null; }
+	public function get_results( $q, $o = null ) { return array(); }
+	public function get_col( $q, $i = 0 ) { return array(); }
+}
+$vn_saved_opts    = $GLOBALS['vcap_test_options'];
+$vn_saved_filters = $GLOBALS['vcap_test_filters'] ?? array();
+$vn_saved_wpdb    = $GLOBALS['wpdb'] ?? null;
+$GLOBALS['vcap_test_options'] = array();
+VCAP\SettingsRegistry::reset();
+$vn_reg = array();
+foreach ( array( 'vcap_voucher_number_enabled', 'vcap_voucher_number_pattern', 'vcap_voucher_number_prefix', 'vcap_voucher_number_digits', 'vcap_voucher_number_reset' ) as $vn_key ) {
+	$vn_e              = VCAP\SettingsRegistry::get( $vn_key );
+	$vn_reg[ $vn_key ] = array( $vn_e['type'], $vn_e['default'], $vn_e['section'], $vn_e['min'], $vn_e['max'], $vn_e['legal'] );
+}
+$vn_fields = VCAP\Settings::general_part( ( new ReflectionMethod( VCAP\Settings::class, 'general_fields' ) )->invoke( new VCAP\Settings() ), 'codes' );
+$vn_ids    = array_values( array_filter( array_map( static fn( $f ) => (string) ( $f['id'] ?? '' ), $vn_fields ), static fn( $id ) => str_starts_with( $id, 'vcap_voucher_number' ) ) );
+check(
+	'SET-VC-13: register – voucher numbers off by default (E9 a), pattern {year}-{number}, no prefix, 5 digits [1–12], yearly restart; block "Voucher numbers" on "Codes"; the counters are internal state (never exported or reset)',
+	array(
+		'vcap_voucher_number_enabled' => array( 'bool', 'no', 'codes', null, null, true ),
+		'vcap_voucher_number_pattern' => array( 'string', '{year}-{number}', 'codes', null, null, false ),
+		'vcap_voucher_number_prefix'  => array( 'string', '', 'codes', null, null, false ),
+		'vcap_voucher_number_digits'  => array( 'int', 5, 'codes', 1, 12, false ),
+		'vcap_voucher_number_reset'   => array( 'select', 'yearly', 'codes', null, null, false ),
+	) === $vn_reg
+		&& array( 'vcap_voucher_numbers', 'vcap_voucher_number_enabled', 'vcap_voucher_number_pattern', 'vcap_voucher_number_prefix', 'vcap_voucher_number_digits', 'vcap_voucher_number_reset', 'vcap_voucher_numbers' ) === $vn_ids
+		&& VCAP\SettingsRegistry::is_internal( 'vcap_voucher_number_seq' ) && VCAP\SettingsRegistry::is_internal( 'vcap_voucher_number_seq_2026' )
+		&& ! VCAP\VoucherNumber::enabled(),
+	wp_json_encode( array( $vn_reg, $vn_ids ) )
+);
+$vn_cfg = array( 'pattern' => '{year}-{number}', 'prefix' => '', 'digits' => 5, 'reset' => 'yearly' );
+check(
+	'SET-VC-13: format – {year}, {number} with leading zeros, prefix in front or at {prefix}; a yearly restart puts the year in front of a pattern without {year}; "never" does not; an invalid pattern falls back to the default',
+	'2026-00042' === VCAP\VoucherNumber::format( 42, 2026, $vn_cfg )
+		&& 'GS-2026-00042' === VCAP\VoucherNumber::format( 42, 2026, array( 'prefix' => 'GS-' ) + $vn_cfg )
+		&& '2026/GS/007' === VCAP\VoucherNumber::format( 7, 2026, array( 'pattern' => '{year}/{prefix}/{number}', 'prefix' => 'GS', 'digits' => 3 ) + $vn_cfg )
+		&& '2027-000123' === VCAP\VoucherNumber::format( 123, 2027, array( 'pattern' => '{number}', 'digits' => 6 ) + $vn_cfg )
+		&& 'N-123' === VCAP\VoucherNumber::format( 123, 2027, array( 'pattern' => 'N-{number}', 'digits' => 1, 'reset' => 'never' ) + $vn_cfg )
+		&& '1234567' === VCAP\VoucherNumber::format( 1234567, 2026, array( 'pattern' => '{number}', 'digits' => 3, 'reset' => 'never' ) + $vn_cfg )
+		&& '2026-00001' === VCAP\VoucherNumber::format( 1, 2026, array( 'pattern' => 'no-number-token' ) + $vn_cfg )
+		&& 'vcap_voucher_number_seq_2026' === VCAP\VoucherNumber::sequence_option( 2026, 'yearly' ) && 'vcap_voucher_number_seq' === VCAP\VoucherNumber::sequence_option( 2026, 'never' ),
+	VCAP\VoucherNumber::format( 7, 2026, array( 'pattern' => '{year}/{prefix}/{number}', 'prefix' => 'GS', 'digits' => 3 ) + $vn_cfg )
+);
+$vn_bad_import = array( VCAP\SettingsTransfer::validate( 'vcap_voucher_number_pattern', 'GS-{year}' ), VCAP\SettingsTransfer::validate( 'vcap_voucher_number_prefix', 'B B' ) );
+$vn_ok_import  = array( VCAP\SettingsTransfer::validate( 'vcap_voucher_number_pattern', 'GS/{year}/{number}' ), VCAP\SettingsTransfer::validate( 'vcap_voucher_number_prefix', 'A#1' ) );
+$GLOBALS['vcap_test_options']['vcap_voucher_number_pattern'] = 'R-{number}';
+$vn_page = array(
+	VCAP\VoucherNumber::sanitize_setting( 'X {number}', array( 'id' => 'vcap_voucher_number_pattern' ) ),
+	VCAP\VoucherNumber::sanitize_setting( 'K-{year}-{number}', array( 'id' => 'vcap_voucher_number_pattern' ) ),
+	VCAP\VoucherNumber::sanitize_setting( 'B&B', array( 'id' => 'vcap_voucher_number_prefix' ) ),
+);
+check(
+	'SET-VC-13: pattern needs {number} and only letters, digits, . _ - / # besides the tokens; an invalid pattern or prefix is not saved on the settings page (stored value kept) and refused by import/WP-CLI',
+	VCAP\VoucherNumber::valid_pattern( '{year}-{number}' ) && ! VCAP\VoucherNumber::valid_pattern( '{year}' ) && ! VCAP\VoucherNumber::valid_pattern( 'A B{number}' ) && ! VCAP\VoucherNumber::valid_pattern( '{number}' . str_repeat( 'x', 40 ) )
+		&& VCAP\VoucherNumber::valid_prefix( '' ) && VCAP\VoucherNumber::valid_prefix( 'GS-' ) && ! VCAP\VoucherNumber::valid_prefix( 'Ä' )
+		&& array( 'R-{number}', 'K-{year}-{number}', '' ) === $vn_page
+		&& is_wp_error( $vn_bad_import[0] ) && is_wp_error( $vn_bad_import[1] ) && array( 'GS/{year}/{number}', 'A#1' ) === $vn_ok_import,
+	wp_json_encode( array( $vn_page, $vn_bad_import, $vn_ok_import ) )
+);
+$vn_v                 = new Voucher();
+$vn_v->voucher_number = 'GS-2026-00001';
+$vn_row               = $vn_v->to_row();
+$vn_back              = Voucher::from_row( array( 'id' => 3, 'voucher_number' => '2026-00007' ) );
+$vn_install           = (string) file_get_contents( VCAP_PATH . 'src/Install.php' );
+$vn_issuer            = (string) file_get_contents( VCAP_PATH . 'src/Issuer.php' );
+check(
+	'SET-VC-13: storage – column voucher_number (varchar 64, indexed) of schema 1.9.0; Voucher::to_row() never writes it (a save cannot clear a number, works before the column exists), from_row() reads it; Issuer gives the number in create_voucher() after the coupon and in issue_standalone() (imports, admin issues)',
+	! array_key_exists( 'voucher_number', $vn_row ) && '2026-00007' === $vn_back->voucher_number
+		&& '1.9.0' === VCAP\Install::VOUCHER_NUMBER_VERSION && str_contains( $vn_install, "voucher_number varchar(64) NOT NULL DEFAULT ''" ) && str_contains( $vn_install, 'KEY voucher_number (voucher_number)' )
+		&& str_contains( (string) file_get_contents( VCAP_PATH . 'voucher-captain.php' ), "define( 'VCAP_DB_VERSION', '1.9.0' )" )
+		&& 2 === substr_count( $vn_issuer, 'VoucherNumber::assign( $voucher );' )
+		&& strpos( $vn_issuer, 'VoucherNumber::assign( $voucher );' ) > strpos( $vn_issuer, '$this->coupons->set_coupon_enabled( $voucher, false );' )
+		&& strpos( (string) file_get_contents( VCAP_PATH . 'src/Admin/CardImport.php' ), 'issue_standalone( $args )' ) > 0
+);
+
+// Assignment with the counter database.
+VCAP_VN13_Wpdb::$counters = array();
+$vn_db                    = new VCAP_VN13_Wpdb();
+$GLOBALS['wpdb']          = $vn_db;
+VCAP\Db::reset();
+$GLOBALS['vcap_test_options'] = array( 'vcap_db_version' => '1.9.0', 'vcap_voucher_number_enabled' => 'yes', 'vcap_voucher_number_prefix' => 'GS-' );
+VCAP\SettingsRegistry::reset();
+$vn_make   = static function ( int $id, string $created = '2026-11-24 10:00:00', string $type = 'voucher' ): Voucher {
+	$v             = new Voucher();
+	$v->id         = $id;
+	$v->type       = $type;
+	$v->created_at = $created;
+	return $v;
+};
+$vn_a      = $vn_make( 11 );
+$vn_b      = $vn_make( 12 );
+$vn_c      = $vn_make( 13 );
+$vn_out    = array( VCAP\VoucherNumber::assign( $vn_a ), VCAP\VoucherNumber::assign( $vn_b ), VCAP\VoucherNumber::assign( $vn_c ), VCAP\VoucherNumber::assign( $vn_b ) );
+$vn_incr   = preg_grep( '/^UPDATE wp_options SET option_value = LAST_INSERT_ID/', $vn_db->log );
+$vn_reads  = preg_grep( '/^SELECT option_value FROM wp_options/', $vn_db->log );
+$vn_credit = VCAP\VoucherNumber::assign( $vn_make( 14, '2026-11-24 10:00:00', 'credit' ) );
+check(
+	'SET-VC-13: numbers are given in order without gaps (GS-2026-00001, -00002, -00003), stored on the voucher with one UPDATE … WHERE voucher_number = \'\'; a voucher keeps its number (no second one); store credit accounts get none; the counter is incremented in one statement (LAST_INSERT_ID, no read-then-write) inside a transaction',
+	array( 'GS-2026-00001', 'GS-2026-00002', 'GS-2026-00003', 'GS-2026-00002' ) === $vn_out && 'GS-2026-00002' === $vn_b->voucher_number
+		&& array( 11 => 'GS-2026-00001', 12 => 'GS-2026-00002', 13 => 'GS-2026-00003' ) === $vn_db->numbers && '' === $vn_credit
+		&& 3 === count( $vn_incr ) && array() === $vn_reads && 3 === count( array_keys( $vn_db->log, 'START TRANSACTION', true ) ) && 3 === count( array_keys( $vn_db->log, 'COMMIT', true ) )
+		&& 3 === VCAP_VN13_Wpdb::$counters['vcap_voucher_number_seq_2026'],
+	wp_json_encode( array( $vn_out, $vn_db->numbers ) )
+);
+// Two requests at the same moment: another connection increments right after this one, before it reads its value.
+$vn_other                   = new VCAP_VN13_Wpdb();
+$vn_other_got               = array();
+$GLOBALS['vcap_vn13_first'] = $vn_db;
+$vn_db->after_increment     = static function () use ( $vn_other, &$vn_other_got ) {
+	$vn_other->after_increment = null;
+	$GLOBALS['wpdb']           = $vn_other;
+	$v                         = new Voucher();
+	$v->id                     = 21;
+	$v->created_at             = '2026-11-24 10:00:01';
+	$vn_other_got[]            = VCAP\VoucherNumber::assign( $v );
+	$GLOBALS['wpdb']           = $GLOBALS['vcap_vn13_first'];
+};
+$vn_mine                = VCAP\VoucherNumber::assign( $vn_make( 20 ) );
+$vn_db->after_increment = null;
+check(
+	'SET-VC-13: concurrent orders never get the same number – a second request that increments between this request\'s increment and its read gets the next value (LAST_INSERT_ID is per connection), both numbers differ',
+	'GS-2026-00004' === $vn_mine && array( 'GS-2026-00005' ) === $vn_other_got && 5 === VCAP_VN13_Wpdb::$counters['vcap_voucher_number_seq_2026'],
+	wp_json_encode( array( $vn_mine, $vn_other_got ) )
+);
+VCAP\Db::reset();
+$vn_db->refuse_number = true;
+$vn_failed            = VCAP\VoucherNumber::assign( $vn_make( 30 ) );
+$vn_db->refuse_number = false;
+$vn_after             = VCAP\VoucherNumber::assign( $vn_make( 31 ) );
+check(
+	'SET-VC-13: when the number cannot be written onto the voucher the counter increment is rolled back (no gap): the next voucher gets the number that was not used',
+	'' === $vn_failed && 'GS-2026-00006' === $vn_after && in_array( 'ROLLBACK', $vn_db->log, true ),
+	wp_json_encode( array( $vn_failed, $vn_after ) )
+);
+$GLOBALS['vcap_test_options']['vcap_voucher_number_reset'] = 'never';
+$vn_never = array( VCAP\VoucherNumber::assign( $vn_make( 40, '2026-12-31 10:00:00' ) ), VCAP\VoucherNumber::assign( $vn_make( 41, '2027-01-02 10:00:00' ) ) );
+$vn_never_preview = VCAP\VoucherNumber::preview();
+$GLOBALS['vcap_test_options']['vcap_voucher_number_reset'] = 'yearly';
+$vn_new_year = VCAP\VoucherNumber::assign( $vn_make( 42, '2027-01-02 10:00:00' ) );
+check(
+	'SET-VC-13: restart – "never" counts on across the new year with its own counter, "yearly" starts again at 1 in 2027; the settings preview shows the next number',
+	array( 'GS-2026-00001', 'GS-2027-00002' ) === $vn_never && 'GS-2027-00001' === $vn_new_year && 1 === VCAP_VN13_Wpdb::$counters['vcap_voucher_number_seq_2027'] && 2 === VCAP_VN13_Wpdb::$counters['vcap_voucher_number_seq']
+		&& str_starts_with( $vn_never_preview, 'GS-' ) && str_ends_with( $vn_never_preview, '-00003' ),
+	wp_json_encode( array( $vn_never, $vn_new_year, $vn_never_preview ) )
+);
+add_filter( 'vcap_voucher_number_enabled', static fn() => false );
+$vn_filtered_off = VCAP\VoucherNumber::assign( $vn_make( 50 ) );
+$GLOBALS['vcap_test_filters']['vcap_voucher_number_enabled'] = array();
+$GLOBALS['vcap_test_options']['vcap_voucher_number_enabled'] = 'no';
+add_filter( 'vcap_voucher_number_enabled', static fn() => true );
+add_filter( 'vcap_voucher_number', static fn( $n, $seq, $year ) => 'X' . $year . '.' . $seq, 10, 3 );
+$vn_filtered_on = VCAP\VoucherNumber::assign( $vn_make( 51 ) );
+$GLOBALS['vcap_test_filters']['vcap_voucher_number_enabled'] = array();
+$GLOBALS['vcap_test_filters']['vcap_voucher_number']         = array();
+$vn_off = VCAP\VoucherNumber::assign( $vn_make( 52 ) );
+$GLOBALS['vcap_test_options']['vcap_voucher_number_enabled'] = 'yes';
+$GLOBALS['vcap_test_options']['vcap_db_version']             = '1.8.0';
+$vn_old_schema = VCAP\VoucherNumber::assign( $vn_make( 53 ) );
+check(
+	'SET-VC-13: the filter vcap_voucher_number_enabled wins in both directions, vcap_voucher_number changes the number; switched off (default) nothing is given; before schema 1.9.0 nothing is given',
+	'' === $vn_filtered_off && 'X2026.7' === $vn_filtered_on && '' === $vn_off && '' === $vn_old_schema,
+	wp_json_encode( array( $vn_filtered_off, $vn_filtered_on, $vn_off, $vn_old_schema ) )
+);
+$GLOBALS['wpdb'] = $vn_saved_wpdb;
+VCAP\Db::reset();
+
+// Placeholder, voucher list, journal and DATEV.
+$GLOBALS['vcap_test_options'] = array( 'vcap_datev_liability_account' => '3272', 'vcap_datev_clearing_account' => '1360', 'vcap_datev_income_account' => '2700', 'vcap_datev_consultant' => '12345', 'vcap_datev_client' => '99' );
+$vn_jrow      = array( 'created_at' => '2026-11-14 10:00:00', 'code' => 'ABC', 'type' => 'giftcard', 'currency' => 'EUR', 'event' => 'redeemed', 'amount' => 5, 'balance_after' => 10, 'order_id' => 0, 'till' => '', 'receipt' => '', 'note' => '', 'voucher_id' => 0, 'voucher_number' => 'GS-2026-00042' );
+$vn_off_head  = VCAP\Ledger::journal_header();
+$vn_off_line  = VCAP\Ledger::journal_line( $vn_jrow );
+$vn_off_datev = VCAP\DatevExport::booking( $vn_jrow, VCAP\DatevExport::config() );
+$GLOBALS['vcap_test_options']['vcap_voucher_number_enabled'] = 'yes';
+$vn_on_csv   = VCAP\Ledger::journal_csv( array( $vn_jrow ) );
+$vn_on_datev = VCAP\DatevExport::booking( $vn_jrow, VCAP\DatevExport::config() );
+$vn_long     = VCAP\DatevExport::booking( array( 'voucher_number' => 'GUTSCHEIN-2026/000042' ) + $vn_jrow, VCAP\DatevExport::config() );
+check(
+	'SET-VC-13: journal and DATEV are unchanged while the numbers are off (14 columns, "Belegfeld 2" empty); switched on the journal has "Voucher no." after "Code" and DATEV "Belegfeld 2" the number (DATEV length 12, cut)',
+	14 === count( $vn_off_head ) && 14 === count( $vn_off_line ) && ! in_array( 'Voucher no.', $vn_off_head, true ) && null !== $vn_off_datev && '' === $vn_off_datev[11]
+		&& 15 === count( $vn_on_csv[0] ) && 'Voucher no.' === $vn_on_csv[0][2] && 'GS-2026-00042' === $vn_on_csv[1][2]
+		&& null !== $vn_on_datev && 'GS-2026-0004' === $vn_on_datev[11] && 'ABC' === $vn_on_datev[10] && 'GUTSCHEIN-20' === $vn_long[11] && 14 === count( $vn_on_datev ),
+	wp_json_encode( array( $vn_on_csv, $vn_on_datev ) )
+);
+$vn_pv                 = new Voucher();
+$vn_pv->code           = 'CODE-1';
+$vn_pv->voucher_number = 'GS-2026-00042';
+$vn_pv->currency       = 'EUR';
+$vn_pv->created_at     = '2026-11-24 10:00:00';
+$vn_values             = Placeholders::values( $vn_pv );
+if ( ! class_exists( 'WP_List_Table' ) ) {
+	/** Minimal stand-in for the column list of VouchersListTable (no WordPress admin loaded). */
+	class WP_List_Table {
+		public function __construct( $args = array() ) {}
+	}
+}
+$vn_list               = new VCAP\Admin\VouchersListTable( new VCAP\VoucherRepository() );
+$vn_cols_on            = $vn_list->get_columns();
+$GLOBALS['vcap_test_options']['vcap_voucher_number_enabled'] = 'no';
+$vn_cols_off = $vn_list->get_columns();
+check(
+	'SET-VC-13: placeholder {voucher_number} (offered in the PDF designer and emails) prints the number; the voucher list has the column "Voucher no." after "Code" only while the numbers are on',
+	isset( Placeholders::definitions()['voucher_number'] ) && 'GS-2026-00042' === $vn_values['voucher_number']
+		&& array( 'cb', 'code', 'number', 'product' ) === array_slice( array_keys( $vn_cols_on ), 0, 4 ) && ! isset( $vn_cols_off['number'] ),
+	wp_json_encode( array( array_keys( $vn_cols_on ), $vn_values['voucher_number'] ?? null ) )
+);
+$GLOBALS['vcap_test_filters'] = $vn_saved_filters;
+$GLOBALS['vcap_test_options'] = $vn_saved_opts;
+VCAP\SettingsRegistry::reset();
+
 
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );

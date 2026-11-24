@@ -303,7 +303,7 @@ final class Bonus {
 			}
 		}
 		$max = max( 0.0, round( (float) $order->get_total() - $refunded - $used, wc_get_price_decimals() ) );
-		if ( ! $codes || $amount <= $max + 0.00001 || apply_filters( 'vcap_allow_refund_of_used_bonus', false, $order, $amount, $used ) ) {
+		if ( ! $codes || $amount <= $max + 0.00001 || apply_filters( 'vcap_allow_refund_of_used_bonus', 'yes' === \VCAP\Settings::value( 'vcap_allow_refund_of_used_bonus' ), $order, $amount, $used ) ) {
 			return;
 		}
 		throw new \Exception(
@@ -339,7 +339,7 @@ final class Bonus {
 		try {
 			$code = CodeIndex::unique(
 				array(
-					'prefix' => (string) apply_filters( 'vcap_bonus_code_prefix', 'BONUS', $campaign, $order ),
+					'prefix' => (string) apply_filters( 'vcap_bonus_code_prefix', (string) \VCAP\Settings::value( 'vcap_bonus_code_prefix' ), $campaign, $order ), // SET-VC-24: setting, the filter wins.
 					'length' => 10,
 				)
 			);
