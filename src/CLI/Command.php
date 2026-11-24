@@ -553,7 +553,8 @@ final class Command {
 
 	/** "wp vcap settings list". */
 	private function settings_list( array $assoc_args ): void {
-		$section = self::section_arg( (string) ( $assoc_args['section'] ?? '' ) );
+		$arg     = (string) ( $assoc_args['section'] ?? '' );
+		$section = 'hidden' === $arg ? 'hidden' : self::section_arg( $arg ); // Entries without a settings field (e.g. an add-on's option arrays).
 		if ( false === $section ) {
 			self::error( 'Unknown section.' );
 			return;
@@ -598,6 +599,10 @@ final class Command {
 	private function settings_set( string $key, string $value ): void {
 		if ( \VCAP\Admin\DataRemoval::OPTION === $key ) {
 			self::error( 'Use "wp vcap data-removal on|off" for this setting.' );
+			return;
+		}
+		if ( SettingsRegistry::locked( $key ) ) {
+			self::error( SettingsRegistry::locked_message( $key ) . ' Nothing was changed.' ); // SET-VC-34.
 			return;
 		}
 		$entry = SettingsRegistry::get( $key );
@@ -682,6 +687,10 @@ final class Command {
 		if ( false === $section ) {
 			self::error( 'Usage: wp vcap settings reset <section>|all [--dry-run] [--yes]' );
 			return;
+		}
+		$locked = SettingsTransfer::locked_resettable( $section );
+		if ( $locked ) {
+			self::warning( 'Set by the network administrator, not reset: ' . implode( ', ', $locked ) ); // SET-VC-34.
 		}
 		// PV-P1-3: back to the register default (what an existing shop runs on), shown as current -> default first.
 		$diff = SettingsTransfer::reset_preview( $section );

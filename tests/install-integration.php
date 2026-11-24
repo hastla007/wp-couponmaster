@@ -315,7 +315,34 @@ vcap_uninstall_user_meta();
 wp_cache_delete( $m67_user, 'user_meta' );
 vcap_inst_assert( '' === get_user_meta( $m67_user, VCAP\PersonalVoucher::META_VERIFIED, true ) && '' === get_user_meta( $m67_user, VCAP\PersonalVoucher::META_CHANGED, true ), 'M12-67: uninstall removes _vcap_verified_email and _vcap_email_changed of the users' );
 $m67_desc = VCAP\Settings::delete_on_uninstall_description();
-vcap_inst_assert( str_contains( $m67_desc, '10 years' ) && str_contains( $m67_desc, '7 years' ) && str_contains( $m67_desc, 'moved to the trash' ) && ! str_contains( $m67_desc, 'WooCommerce coupons are kept' ) && str_contains( html_entity_decode( $m67_desc ), 'action=vcap_report_csv&view=journal&from=' . VCAP\Admin\ReportsAdmin::JOURNAL_START ), 'M12-67: the option warns about the retention periods (DE 8/10, AT 7 years), says the voucher coupons go to the trash and links the complete journal export' );
+vcap_inst_assert( str_contains( $m67_desc, esc_html( VCAP\CountryProfiles::retention_hint() ) ) && str_contains( $m67_desc, 'moved to the trash' ) && ! str_contains( $m67_desc, 'WooCommerce coupons are kept' ) && str_contains( html_entity_decode( $m67_desc ), 'action=vcap_report_csv&view=journal&from=' . VCAP\Admin\ReportsAdmin::JOURNAL_START ), 'M12-67: the option warns about the retention periods (SET-VC-09: from the country profile), says the voucher coupons go to the trash and links the complete journal export' );
+// SET-VC-09: a shop based in Switzerland (no profile applied) sees no German or Austrian paragraph.
+$vc09_country = get_option( 'woocommerce_default_country' );
+$vc09_applied = get_option( VCAP\CountryProfiles::APPLIED_OPTION, false );
+delete_option( VCAP\CountryProfiles::APPLIED_OPTION );
+update_option( 'woocommerce_default_country', 'CH' );
+VCAP\CountryProfiles::reset();
+$vc09_desc = VCAP\Settings::delete_on_uninstall_description();
+vcap_inst_assert( str_contains( $vc09_desc, 'Accounting records are subject to statutory retention periods.' ) && ! str_contains( $vc09_desc, '§' ), 'SET-VC-09: a CH shop sees the neutral retention hint without § 147 AO / § 132 BAO' );
+update_option( 'woocommerce_default_country', $vc09_country );
+if ( false !== $vc09_applied ) {
+	update_option( VCAP\CountryProfiles::APPLIED_OPTION, $vc09_applied, false );
+}
+// SET-VC-11: with real WooCommerce the default issuer address is the formatted store address (with the country).
+$vc11_keep = array();
+foreach ( array( 'woocommerce_store_address', 'woocommerce_store_city', 'woocommerce_store_postcode', 'woocommerce_default_country', 'vcap_issuer_address' ) as $vc11_opt ) {
+	$vc11_keep[ $vc11_opt ] = get_option( $vc11_opt, false );
+}
+update_option( 'woocommerce_store_address', 'Musterstraße 1' );
+update_option( 'woocommerce_store_city', 'Berlin' );
+update_option( 'woocommerce_store_postcode', '10115' );
+update_option( 'woocommerce_default_country', 'DE:BE' );
+delete_option( 'vcap_issuer_address' );
+$vc11_address = VCAP\LegalInfo::issuer_address();
+vcap_inst_assert( str_contains( $vc11_address, 'Musterstraße 1' ) && str_contains( $vc11_address, '10115 Berlin' ) && str_contains( $vc11_address, 'Germany' ) && ! str_contains( $vc11_address, '<' ), 'SET-VC-11: the default issuer address is the WooCommerce store address as text lines with the country' );
+foreach ( $vc11_keep as $vc11_opt => $vc11_val ) {
+	false === $vc11_val ? delete_option( $vc11_opt ) : update_option( $vc11_opt, $vc11_val );
+}
 
 // A voucher coupon without its voucher (row deleted, data removed) is never redeemed as an ordinary coupon.
 $u_refused = 0;

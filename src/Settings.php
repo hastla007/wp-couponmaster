@@ -124,6 +124,8 @@ final class Settings {
 		( new Admin\CountryTableField() )->register();
 		// SET-VC-02: country profiles (preview, apply, cancel) in "General".
 		( new Admin\CountryProfilesAdmin() )->register();
+		// SET-VC-11: links of "Issuer and legal texts" only http(s), address and legal text as plain text.
+		LegalInfo::register_sanitizers();
 		// M12-84: "30, 7, 1" is stored normalised (largest first), anything else as 0 (no reminders).
 		add_filter(
 			'woocommerce_admin_settings_sanitize_option_vcap_expiry_reminder_days',
@@ -269,6 +271,7 @@ final class Settings {
 	public function save(): void {
 		global $current_section;
 		SettingsRegistry::hook_number_checks(); // SET-VC-01: every number is checked on the server, too.
+		SettingsRegistry::hook_lock_checks(); // SET-VC-34: a locked setting keeps its stored value.
 		\WC_Admin_Settings::save_fields( $this->fields( (string) $current_section ) );
 		update_option( 'vcap_flush_rewrite', 'yes' ); // The My Account tab may have been toggled.
 	}
@@ -607,7 +610,8 @@ final class Settings {
 			),
 			array( 'type' => 'sectionend', 'id' => 'vcap_suite_workflowcaptain' ),
 		);
-		return array_merge( $fields, self::integration_rule_fields(), DatevExport::settings_fields() ); // SET-VC-33, M12-69.
+		// SET-VC-33, SET-VC-20 (accounting export, country-neutral), M12-69 (DATEV block, only while shown).
+		return array_merge( $fields, self::integration_rule_fields(), AccountingExport::settings_fields(), DatevExport::settings_fields() );
 	}
 
 	/**
@@ -1427,7 +1431,8 @@ final class Settings {
 			array( 'type' => 'sectionend', 'id' => 'vcap_referral' ),
 		);
 		// SET-VC-02: the country profile comes first – it suggests values for the blocks below.
-		return array_merge( Admin\CountryProfilesAdmin::fields(), $fields, PaymentMethods::settings_fields() ); // SET-VC-19: block on "General".
+		// SET-VC-19: block "Payment methods for vouchers"; SET-VC-11: block "Issuer and legal texts".
+		return array_merge( Admin\CountryProfilesAdmin::fields(), $fields, PaymentMethods::settings_fields(), VoucherCurrency::settings_fields(), LegalInfo::settings_fields() ); // SET-VC-19, SET-VC-32, SET-VC-11: blocks on "General".
 	}
 
 	/**
@@ -1548,12 +1553,16 @@ final class Settings {
 
 	/**
 	 * Description of "Delete data on uninstall" (M12-67): what is deleted, what happens to the coupons, the
-	 * retention periods of bookkeeping records and a link to export the complete redemption journal first.
+	 * retention periods of bookkeeping records (SET-VC-09: from the country profile, CountryProfiles::retention_hint())
+	 * and a link to export the complete redemption journal first.
 	 */
 	public static function delete_on_uninstall_description(): string {
 		$text = __( 'Off (default): deleting the plugin keeps all data. On: deleting the plugin removes the voucher tables (including the redemption journal), templates, field groups, promotions, the voucher settings of products, the private PDF folder and all settings. The WooCommerce coupons of the vouchers are moved to the trash (restorable there), other coupons are kept.', 'voucher-captain' )
 			. ' ' . __( 'On a network each site decides for itself. Scheduled background jobs are always removed. This setting is not part of any export of settings.', 'voucher-captain' )
-			. ' ' . __( 'The journal is part of your bookkeeping records: retention periods are 8 or 10 years in Germany (§ 147 AO, § 257 HGB) and 7 years in Austria (§ 132 BAO). Export it before deleting the plugin.', 'voucher-captain' );
+			// SET-VC-09: the retention hint comes from the country profile (applied, else the shop's base country).
+			. ' ' . __( 'The journal is part of your bookkeeping records.', 'voucher-captain' )
+			. ' ' . CountryProfiles::retention_hint()
+			. ' ' . __( 'Export it before deleting the plugin.', 'voucher-captain' );
 		$url = Admin\ReportsAdmin::journal_csv_url( Admin\ReportsAdmin::JOURNAL_START, wp_date( 'Y-m-d' ) );
 		return esc_html( $text ) . ' <a href="' . esc_url( $url ) . '">' . esc_html__( 'Export the complete journal (CSV)', 'voucher-captain' ) . '</a>';
 	}

@@ -74,6 +74,23 @@ $md .= "| Einlösebedingungen (allgemein) | WooCommerce → Einstellungen → Gu
 $md .= "| Einlösebedingungen pro Land | ebenda → „Redemption conditions per country“: Tabelle mit einer Zeile je Land und Sprache (Spalten **Land**, **Sprache** – „All languages“ oder ein Sprachcode wie `de_AT` –, **Text**) | Rechnungsland entscheidet, innerhalb des Landes die Sprache des Kunden (sonst die Zeile „All languages“); Text wird am Gutschein festgeschrieben |\n";
 $md .= "| Gesetzliche Gültigkeit pro Land | ebenda → „Statutory validity per country“: Tabelle mit einer Zeile je Land (Spalten **Land**, **Jahre** – 0 = unbegrenzt –, **zum Jahresende**, **Quelle/Notiz**) | Ablaufdatum neuer Gutscheine mit gesetzlicher Gültigkeit; überschreibt die Standardwerte aus Abschnitt 2 |\n";
 $md .= "| Bedingungen je Produkt | Produkt → Gutschein → „Redemption conditions“ | ersetzt die allgemeinen Bedingungen |\n";
+// SET-VC-11: issuer and legal texts (block "Issuer and legal texts"; printed only where a template uses the placeholder).
+$legal_info = array(
+	'vcap_issuer_name'    => array( 'Aussteller: Name („Issuer name“)', '`{issuer}` (1. Zeile); leer = Name der Website' ),
+	'vcap_issuer_address' => array( 'Aussteller: Anschrift („Issuer address“)', '`{issuer}`; leer = Shop-Adresse aus WooCommerce (Einstellungen → Allgemein) mit Land' ),
+	'vcap_issuer_contact' => array( 'Aussteller: Kontakt („Issuer contact“)', '`{issuer}` (letzte Zeile); leer = keine Kontaktzeile' ),
+	'vcap_terms_url'      => array( 'Link AGB („Terms and conditions (link)“)', '`{terms_url}`; leer = AGB-Seite von WooCommerce' ),
+	'vcap_privacy_url'    => array( 'Link Datenschutz („Privacy policy (link)“)', '`{privacy_url}`; leer = Datenschutzseite von WordPress' ),
+	'vcap_withdrawal_url' => array( 'Link Widerruf („Right of withdrawal (link)“)', '`{withdrawal_url}`; leer = kein Link' ),
+	'vcap_legal_text'     => array( 'Freier Rechtstext für PDF und E-Mail („Legal text for PDF and email“)', '`{legal_text}`; leer = nichts' ),
+);
+foreach ( $legal_info as $option => $what ) {
+	if ( ! isset( $register[ $option ] ) ) {
+		$missing[] = $option;
+		continue;
+	}
+	$md .= '| ' . $cell( $what[0] ) . ' | ebenda → Block „Issuer and legal texts“ (`' . $option . '`, je Sprache über WPML/Polylang) | ' . $cell( $what[1] ) . "; nur wo eine Vorlage oder ein E-Mail-Text den Platzhalter nutzt – **Rechtsprüfung offen** |\n";
+}
 $md .= "| Restwert gekaufter Einmal-Wertgutscheine | Produkt → Gutschein → „Keep the rest“ (Standard aus) | aus: der nicht genutzte Rest verfällt, der Kunde wird im Warenkorb gewarnt (Text unten „Restwert“; Verfallklausel in AGB nach § 307 BGB bzw. ABGB prüfen); an: der Rest wird Kundenguthaben bzw. eine neue Geschenkkarte (TAX.md 4.3) |\n\n";
 $md .= "## 2. Gesetzliche Gültigkeit (Standardwerte, `config/markets.php`)\n\n| Land | Regel | Quelle | Rechtlich geprüft |\n|---|---|---|---|\n";
 foreach ( (array) $markets as $country => $m ) {
@@ -87,7 +104,7 @@ $md        .= "\n## 3. Vorschläge der Länderprofile (`config/country-profiles.
 $md        .= "Ein Länderprofil (Einstellungen → Gutscheine → Allgemein → „Country profile“) ändert nichts von selbst: Es zeigt\n";
 $md        .= "„aktuell → vorgeschlagen“, übernommen wird nur, was der Admin abhakt. Werte mit rechtlichem Gewicht tragen den\n";
 $md        .= "Hinweis „Rechtsprüfung“, bis die Prüfung im Profil vermerkt ist (`checked`). EU und OTHER sind neutral.\n\n";
-$md        .= "| Profil | Gesetzliche Gültigkeit (Zeile) | Gültigkeit ohne eigene Angabe | Belegnummer an der Kasse | Empfängerdaten anonymisieren nach | Rechtlich geprüft |\n|---|---|---|---|---|---|\n";
+$md        .= "| Profil | Gesetzliche Gültigkeit (Zeile) | Gültigkeit ohne eigene Angabe | Belegnummer an der Kasse | Empfängerdaten anonymisieren nach | Hinweis Aufbewahrung Buchhaltung (SET-VC-09) | Rechtlich geprüft |\n|---|---|---|---|---|---|---|\n";
 foreach ( (array) $profiles as $id => $p ) {
 	$country  = (string) ( $p['country'] ?? '' );
 	$settings = (array) ( $p['settings'] ?? array() );
@@ -112,7 +129,15 @@ foreach ( (array) $profiles as $id => $p ) {
 	}
 	$retention = $settings['vcap_retention_days'] ?? null;
 	$retention = null === $retention ? '– (bleibt)' : (int) $retention . ' Tage nach Ablauf/Einlösung';
-	$md       .= '| ' . $cell( (string) $id ) . ' | ' . $cell( $row ) . ' | ' . $cell( $rule_s ) . ' | ' . $cell( $receipt ) . ' | ' . $cell( $retention ) . ' | ' . ( empty( $p['checked'] ) ? '☐ nicht geprüft' : '☑' ) . " |\n";
+	// SET-VC-09: hint at "Delete data on uninstall" (texts in VCAP\CountryProfiles::retention_hint()).
+	$hint      = (string) ( $p['retention_hint'] ?? '' );
+	$hint      = array(
+		'de'      => '8 bzw. 10 Jahre (§ 147 AO, § 257 HGB)',
+		'at'      => '7 Jahre (§ 132 BAO)',
+		'neutral' => 'neutral: „Buchungsunterlagen unterliegen gesetzlichen Aufbewahrungsfristen.“ (kein Paragraf)',
+		''        => 'neutral: „Buchungsunterlagen unterliegen gesetzlichen Aufbewahrungsfristen.“ (kein Paragraf)',
+	)[ $hint ] ?? $hint;
+	$md       .= '| ' . $cell( (string) $id ) . ' | ' . $cell( $row ) . ' | ' . $cell( $rule_s ) . ' | ' . $cell( $receipt ) . ' | ' . $cell( $retention ) . ' | ' . $cell( $hint ) . ' | ' . ( empty( $p['checked'] ) ? '☐ nicht geprüft' : '☑' ) . " |\n";
 }
 
 // Section 4: retention periods (privacy settings with legal weight, defaults from the register).

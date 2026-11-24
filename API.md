@@ -508,7 +508,7 @@ Events (after the COMMIT, once per reference and event):
   eligible is revoked; revoked is final. With `erased`, `deleted` and `no_recipient` the reference is also unlinked
   from the voucher, so no address can be resolved for it any more.
 
-Payload (exactly these keys): `contract` (`1.1.0`; `1.0.0` before the `locale` addition), `event` (`eligible`/`revoked`), `event_id` (`{reference}:{event}`),
+Payload (exactly these keys): `contract` (`1.2.0`; `1.1.0` before `open_references()`, `1.0.0` before the `locale` addition), `event` (`eligible`/`revoked`), `event_id` (`{reference}:{event}`),
 `reference`, `source` (`voucher-captain`), `site_id`, `channel` (`counter`/`external`), `experience_id` (voucher
 product id), `occurred_at` (UTC), `reason`. No code, name, email, amount, till or receipt.
 
@@ -518,6 +518,10 @@ always has the same reference, a repeated event creates no duplicate. Stored as 
 voucher id, product, channel, times; removed on uninstall).
 
 Service methods: `contract()`, `get( $reference )` (current payload or `null`, for reconciliation),
+`open_reference( int $voucher_id ): string` (the voucher's eligible reference – the oldest one still eligible – or
+`''` when none is: never recorded, revoked, unknown voucher; at most one in first-only mode),
+`open_references( int $voucher_id ): string[]` (since contract 1.2.0: all eligible references of the voucher, oldest
+first, `[]` when none – for the mode "every redemption counts", `vcap_review_first_redemption_only` false),
 `recipient( $reference )` → `{reference, email, name, role, locale}` (`role` `recipient`, else `buyer`) or `WP_Error`.
 `locale` (since contract 1.1.0, additive – consumers of 1.0.0 ignore it) is the language for the invitation, in this
 order: the language of the voucher's order when known (WPML/Polylang, `vcap_order_language`, then the filter
@@ -678,7 +682,7 @@ works on the settings register (`config/settings.php`, `VCAP\SettingsRegistry`).
 
 | Command | Does |
 |---|---|
-| `wp vcap settings list [--section=<section>] [--format=table\|json\|csv\|yaml]` | Every setting with section, type, value, default and export flag (secrets masked). Sections: `general`, `redemption`, `promotions`, `codes`, `delivery`, `privacy`, `api` and those of add-ons. |
+| `wp vcap settings list [--section=<section>] [--format=table\|json\|csv\|yaml]` | Every setting with section, type, value, default and export flag (secrets masked). Sections: `general`, `redemption`, `promotions`, `codes`, `delivery`, `privacy`, `api` and those of add-ons; `hidden` lists the entries without a settings field (e.g. option arrays of an add-on). |
 | `wp vcap settings get <option> [--format=plain\|json]` | Stored value (default where nothing is saved); a table row by row (`AT 30 note; …`). Secrets are refused. |
 | `wp vcap settings set <option> <value>` | Checked like the page (see *Checks*); tables and lists take a JSON array (lists also comma-separated values); refused values change nothing (exit code 1). "Remove all data" stays with `wp vcap data-removal`. |
 | `wp vcap settings export [--file=<path>] [--backup[=<time>]]` | The export JSON (or an automatic backup) to the output or a file. |
@@ -689,6 +693,28 @@ works on the settings register (`config/settings.php`, `VCAP\SettingsRegistry`).
 | `wp vcap settings profile apply [--country=<profile>] [--dry-run] [--yes] [--all]` | Applies the values marked `*` after a confirmation and a backup; `--all` also replaces own values and the link parameter; `--dry-run` only lists. |
 
 Every change made this way is in the change log with the source "WP-CLI" (profile: "WP-CLI (country profile)").
+
+### Issuer and legal texts (SET-VC-11)
+
+`VCAP\LegalInfo` – block "Issuer and legal texts" in *Settings → Vouchers → General*. Settings (register, section
+General, `legal` = true, all empty by default): `vcap_issuer_name`, `vcap_issuer_address` (lines), `vcap_issuer_contact`,
+`vcap_terms_url`, `vcap_privacy_url`, `vcap_withdrawal_url` (http(s) only, checked on the page and on import/WP-CLI),
+`vcap_legal_text` (plain text). Placeholders in PDF templates and voucher emails (`Placeholders::definitions()`, so also
+the PDF designer list and "Available placeholders" of the email settings):
+
+| Placeholder | Value | Empty setting |
+|---|---|---|
+| `{issuer}` | name, address, contact – one per line | site name; WooCommerce store address with country; no contact |
+| `{legal_text}` | free legal text | nothing |
+| `{terms_url}` | terms and conditions link | WooCommerce terms page (`wc_terms_and_conditions_page_id()`) |
+| `{privacy_url}` | privacy policy link | WordPress privacy page (`get_privacy_policy_url()`) |
+| `{withdrawal_url}` | right of withdrawal link | nothing |
+
+The defaults are taken when the voucher is rendered. No default template or email text uses them, so existing vouchers
+and emails stay unchanged. Translation: WPML via `wpml-config.xml` (admin-texts), Polylang via
+`Compat\Multilingual::OPTIONS` (string translation). The texts are not legally checked (LEGAL_TEXTS.md section 1).
+Accessors: `LegalInfo::issuer()`, `issuer_name()`, `issuer_address()`, `issuer_contact()`, `legal_text()`,
+`terms_url()`, `privacy_url()`, `withdrawal_url()`, `placeholders()`.
 
 ### Country profiles (SET-VC-02)
 
@@ -711,6 +737,11 @@ mark "Legal check pending" until `checked` is set for that profile.
 - Admin: block "Country profile" at the top of *Settings → Vouchers → General* and the first step of the setup
   checklist; preview with one checkbox per value, *Apply ticked values* / *Cancel*. Actions `vcap_country_profile_preview`,
   `vcap_country_profile_apply`, `vcap_country_profile_cancel` (admin-post, `manage_woocommerce`, own nonce).
+- `CountryProfiles::current()` – the profile applied last, else the one of the shop's base country;
+  `CountryProfiles::retention_hint( ?$id )` (SET-VC-09) – the hint on the retention of bookkeeping records shown at
+  *Delete data on uninstall*, from the profile key `retention_hint`: `de` (§ 147 AO, § 257 HGB), `at` (§ 132 BAO) – both
+  with the mark "Legal check pending" while the profile is not checked –, `neutral` ("Accounting records are subject to
+  statutory retention periods.", CH, EU, OTHER); a profile added by the filter may give its own text.
 
 ## Extension points for add-ons (public API since 1.2.0)
 
@@ -752,6 +783,8 @@ counter columns, payment methods, retention days) and the Form Captain hooks bel
 | `vcap_country_profiles` | filter | `array $profiles` (id ⇒ `country`, `checked`, `settings`, `expiry_row`, `tax`, `accounting`, `label`) | 1.3.0 | SET-VC-02: add country profiles or change suggested values (see *Country profiles*). Only exportable settings can be suggested (never secrets or "Remove all data"); a profile is always applied after the preview. Set `checked` only after the legal and tax check for that country. |
 | `vcap_pro_hints_hidden` | filter | `bool $hidden`, `int $user_id` | 1.3.0 | Whether the hint lines are hidden for the current user (default: the user's setting "Hide hints on extensions"). |
 | `vcap_voucher_excluded_gateways` | filter | `string[] $ids` (setting `vcap_voucher_excluded_gateways` "Do not sell vouchers with", default none) | 1.3.0 | SET-VC-19: payment gateway ids not offered while the cart (or the order paid on "Pay for order") contains a voucher product (`PaymentMethods::excluded()`); the filter wins over the setting. |
+| `vcap_vouchers_shop_currency_only` | filter | `bool $only` (setting `vcap_vouchers_shop_currency_only` "Sell vouchers only in the shop currency", default no) | 1.3.0 | SET-VC-32: while true, voucher products cannot be added to the cart or checked out when the active currency (`get_woocommerce_currency()`, set by a currency switcher) differs from the shop base currency (`VoucherCurrency::refused()`); the filter wins over the setting. |
+| `vcap_setting_locked` | filter | `bool $locked` (default false), `string $option` | 1.3.0 | SET-VC-34: a locked setting is shown read-only with the note "Set by the network administrator." (`SettingsRegistry::field()`), its save is ignored (stored value kept), an import skips it with a warning, WP-CLI `settings set` refuses it, `settings reset` and the reset button leave it, a country profile shows it with an error and does not apply it. The core locks nothing; network-wide defaults are an add-on's job. |
 | `vcap_product_settings_fields` / `vcap_product_settings_save` | action | – / `WC_Product`, `array $post` | 1.1.0 | Own fields in the product's *Voucher* tab and saving them. |
 | `vcap_template_design` | filter | `array $design`, `int $template_id` | 1.0.0 | The design a PDF template prints with. |
 | `vcap_sanitize_design` | filter | `array $clean`, `array $posted` | 1.0.0 | Keep own element keys when a design is saved. |

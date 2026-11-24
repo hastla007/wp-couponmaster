@@ -13,6 +13,13 @@ Spalte „Rechtlich geprüft“ nicht abgehakt ist.
 | Einlösebedingungen pro Land | ebenda → „Redemption conditions per country“: Tabelle mit einer Zeile je Land und Sprache (Spalten **Land**, **Sprache** – „All languages“ oder ein Sprachcode wie `de_AT` –, **Text**) | Rechnungsland entscheidet, innerhalb des Landes die Sprache des Kunden (sonst die Zeile „All languages“); Text wird am Gutschein festgeschrieben |
 | Gesetzliche Gültigkeit pro Land | ebenda → „Statutory validity per country“: Tabelle mit einer Zeile je Land (Spalten **Land**, **Jahre** – 0 = unbegrenzt –, **zum Jahresende**, **Quelle/Notiz**) | Ablaufdatum neuer Gutscheine mit gesetzlicher Gültigkeit; überschreibt die Standardwerte aus Abschnitt 2 |
 | Bedingungen je Produkt | Produkt → Gutschein → „Redemption conditions“ | ersetzt die allgemeinen Bedingungen |
+| Aussteller: Name („Issuer name“) | ebenda → Block „Issuer and legal texts“ (`vcap_issuer_name`, je Sprache über WPML/Polylang) | `{issuer}` (1. Zeile); leer = Name der Website; nur wo eine Vorlage oder ein E-Mail-Text den Platzhalter nutzt – **Rechtsprüfung offen** |
+| Aussteller: Anschrift („Issuer address“) | ebenda → Block „Issuer and legal texts“ (`vcap_issuer_address`, je Sprache über WPML/Polylang) | `{issuer}`; leer = Shop-Adresse aus WooCommerce (Einstellungen → Allgemein) mit Land; nur wo eine Vorlage oder ein E-Mail-Text den Platzhalter nutzt – **Rechtsprüfung offen** |
+| Aussteller: Kontakt („Issuer contact“) | ebenda → Block „Issuer and legal texts“ (`vcap_issuer_contact`, je Sprache über WPML/Polylang) | `{issuer}` (letzte Zeile); leer = keine Kontaktzeile; nur wo eine Vorlage oder ein E-Mail-Text den Platzhalter nutzt – **Rechtsprüfung offen** |
+| Link AGB („Terms and conditions (link)“) | ebenda → Block „Issuer and legal texts“ (`vcap_terms_url`, je Sprache über WPML/Polylang) | `{terms_url}`; leer = AGB-Seite von WooCommerce; nur wo eine Vorlage oder ein E-Mail-Text den Platzhalter nutzt – **Rechtsprüfung offen** |
+| Link Datenschutz („Privacy policy (link)“) | ebenda → Block „Issuer and legal texts“ (`vcap_privacy_url`, je Sprache über WPML/Polylang) | `{privacy_url}`; leer = Datenschutzseite von WordPress; nur wo eine Vorlage oder ein E-Mail-Text den Platzhalter nutzt – **Rechtsprüfung offen** |
+| Link Widerruf („Right of withdrawal (link)“) | ebenda → Block „Issuer and legal texts“ (`vcap_withdrawal_url`, je Sprache über WPML/Polylang) | `{withdrawal_url}`; leer = kein Link; nur wo eine Vorlage oder ein E-Mail-Text den Platzhalter nutzt – **Rechtsprüfung offen** |
+| Freier Rechtstext für PDF und E-Mail („Legal text for PDF and email“) | ebenda → Block „Issuer and legal texts“ (`vcap_legal_text`, je Sprache über WPML/Polylang) | `{legal_text}`; leer = nichts; nur wo eine Vorlage oder ein E-Mail-Text den Platzhalter nutzt – **Rechtsprüfung offen** |
 | Restwert gekaufter Einmal-Wertgutscheine | Produkt → Gutschein → „Keep the rest“ (Standard aus) | aus: der nicht genutzte Rest verfällt, der Kunde wird im Warenkorb gewarnt (Text unten „Restwert“; Verfallklausel in AGB nach § 307 BGB bzw. ABGB prüfen); an: der Rest wird Kundenguthaben bzw. eine neue Geschenkkarte (TAX.md 4.3) |
 
 ## 2. Gesetzliche Gültigkeit (Standardwerte, `config/markets.php`)
@@ -57,13 +64,13 @@ Ein Länderprofil (Einstellungen → Gutscheine → Allgemein → „Country pro
 „aktuell → vorgeschlagen“, übernommen wird nur, was der Admin abhakt. Werte mit rechtlichem Gewicht tragen den
 Hinweis „Rechtsprüfung“, bis die Prüfung im Profil vermerkt ist (`checked`). EU und OTHER sind neutral.
 
-| Profil | Gesetzliche Gültigkeit (Zeile) | Gültigkeit ohne eigene Angabe | Belegnummer an der Kasse | Empfängerdaten anonymisieren nach | Rechtlich geprüft |
-|---|---|---|---|---|---|
-| DE | 3 Jahre zum Jahresende – Quelle: §§ 195, 199 BGB (3 Jahre zum Jahresende) | gesetzlich (Zeile links) | Pflicht (Länderdaten `fiscal_receipt`) | 1095 Tage nach Ablauf/Einlösung | ☐ nicht geprüft |
-| AT | 30 Jahre – Quelle: OGH-Rechtsprechung (30 Jahre) | gesetzlich (Zeile links) | Pflicht (Länderdaten `fiscal_receipt`) | 1095 Tage nach Ablauf/Einlösung | ☐ nicht geprüft |
-| CH | 10 Jahre – Notiz: Art. 127 OR (10 Jahre) | gesetzlich (Zeile links) | – (kein Vorschlag) | 1095 Tage nach Ablauf/Einlösung | ☐ nicht geprüft |
-| EU | – (kein Vorschlag) | – (bleibt) | – (bleibt) | – (bleibt) | ☐ nicht geprüft |
-| OTHER | – (kein Vorschlag) | – (bleibt) | – (bleibt) | – (bleibt) | ☐ nicht geprüft |
+| Profil | Gesetzliche Gültigkeit (Zeile) | Gültigkeit ohne eigene Angabe | Belegnummer an der Kasse | Empfängerdaten anonymisieren nach | Hinweis Aufbewahrung Buchhaltung (SET-VC-09) | Rechtlich geprüft |
+|---|---|---|---|---|---|---|
+| DE | 3 Jahre zum Jahresende – Quelle: §§ 195, 199 BGB (3 Jahre zum Jahresende) | gesetzlich (Zeile links) | Pflicht (Länderdaten `fiscal_receipt`) | 1095 Tage nach Ablauf/Einlösung | 8 bzw. 10 Jahre (§ 147 AO, § 257 HGB) | ☐ nicht geprüft |
+| AT | 30 Jahre – Quelle: OGH-Rechtsprechung (30 Jahre) | gesetzlich (Zeile links) | Pflicht (Länderdaten `fiscal_receipt`) | 1095 Tage nach Ablauf/Einlösung | 7 Jahre (§ 132 BAO) | ☐ nicht geprüft |
+| CH | 10 Jahre – Notiz: Art. 127 OR (10 Jahre) | gesetzlich (Zeile links) | – (kein Vorschlag) | 1095 Tage nach Ablauf/Einlösung | neutral: „Buchungsunterlagen unterliegen gesetzlichen Aufbewahrungsfristen.“ (kein Paragraf) | ☐ nicht geprüft |
+| EU | – (kein Vorschlag) | – (bleibt) | – (bleibt) | – (bleibt) | neutral: „Buchungsunterlagen unterliegen gesetzlichen Aufbewahrungsfristen.“ (kein Paragraf) | ☐ nicht geprüft |
+| OTHER | – (kein Vorschlag) | – (bleibt) | – (bleibt) | – (bleibt) | neutral: „Buchungsunterlagen unterliegen gesetzlichen Aufbewahrungsfristen.“ (kein Paragraf) | ☐ nicht geprüft |
 
 ## 4. Aufbewahrungsfristen (Einstellungen → Gutscheine → „Privacy & advanced“ → „Retention“)
 
@@ -87,9 +94,9 @@ Abschnitt 3).
 
 | Englisch (Quelltext) | Deutsch (DE, du) | Deutsch (DE, Sie) | Deutsch (AT) | Fundstelle | Freigabe |
 |---|---|---|---|---|---|
-| Valid until %s | Gültig bis %s | Gültig bis %s | Gültig bis %s | src/Placeholders.php:107 templates/emails/plain/voucher-bundle.php:46 | ☐ |
+| Valid until %s | Gültig bis %s | Gültig bis %s | Gültig bis %s | src/Placeholders.php:114 templates/emails/plain/voucher-bundle.php:46 | ☐ |
 | Valid until: %s | Gültig bis: %s | Gültig bis: %s | Gültig bis: %s | src/Downloads.php:1025 | ☐ |
-| unlimited | unbegrenzt | unbegrenzt | unbegrenzt | src/Downloads.php:1025 src/Placeholders.php:105 | ☐ |
+| unlimited | unbegrenzt | unbegrenzt | unbegrenzt | src/Downloads.php:1025 src/Placeholders.php:112 | ☐ |
 | no expiry | unbegrenzt | unbegrenzt | unbegrenzt | src/Emails/BonusEmail.php:109 | ☐ |
 | Your voucher from {site_title} expires on {expiry_date} | Dein Gutschein von {site_title} läuft am {expiry_date} ab | Ihr Gutschein von {site_title} läuft am {expiry_date} ab | Ihr Gutschein von {site_title} läuft am {expiry_date} ab | src/Emails/ExpiryReminderEmail.php:24 | ☐ |
 | Your voucher {coupon_code} is valid until {expiry_date}. Remaining value: {coupon_balance}. | Dein Gutschein {coupon_code} ist bis {expiry_date} gültig. Restwert: {coupon_balance}. | Ihr Gutschein {coupon_code} ist bis {expiry_date} gültig. Restwert: {coupon_balance}. | Ihr Gutschein {coupon_code} ist bis {expiry_date} gültig. Restwert: {coupon_balance}. | src/Emails/ExpiryReminderEmail.php:32 | ☐ |
@@ -109,7 +116,7 @@ Abschnitt 3).
 | Englisch (Quelltext) | Deutsch (DE, du) | Deutsch (DE, Sie) | Deutsch (AT) | Fundstelle | Freigabe |
 |---|---|---|---|---|---|
 | Balance: %s | Restwert: %s | Restwert: %s | Restwert: %s | src/Downloads.php:1019 templates/myaccount/vouchers-table.php:50 | ☐ |
-| Remaining balance | Restwert | Restwert | Restwert | src/Placeholders.php:20 | ☐ |
+| Remaining balance | Restwert | Restwert | Restwert | src/Placeholders.php:21 | ☐ |
 | Voucher %1$s: only %2$s of %3$s is used in this order. The voucher can be redeemed only once – the remaining %4$s will be lost. Add more items to use its full value. | Gutschein %1$s: In dieser Bestellung werden nur %2$s von %3$s angerechnet. Der Gutschein kann nur einmal eingelöst werden – der Restwert von %4$s verfällt. Lege weitere Artikel in den Warenkorb, um den vollen Wert zu nutzen. | Gutschein %1$s: In dieser Bestellung werden nur %2$s von %3$s angerechnet. Der Gutschein kann nur einmal eingelöst werden – der Restwert von %4$s verfällt. Legen Sie weitere Artikel in den Warenkorb, um den vollen Wert zu nutzen. | Gutschein %1$s: In dieser Bestellung werden nur %2$s von %3$s angerechnet. Der Gutschein kann nur einmal eingelöst werden – der Restwert von %4$s verfällt. Legen Sie weitere Artikel in den Warenkorb, um den vollen Wert zu nutzen. | src/ProductChecks.php:244 | ☐ |
 
 ### Erstattung und Widerruf

@@ -26,7 +26,11 @@
  *               null (no row suggested); only this country's row is added or replaced. While the profile is not
  *               checked, the note gets the mark "Legal check pending",
  * - tax:        key of the hint on the default tax type (no setting is changed; see TAX.md),
- * - accounting: key of the hint on the accounting format (no setting is changed).
+ * - accounting: key of the hint on the accounting format (no setting is changed),
+ * - retention_hint: key of the hint on the retention of bookkeeping records (SET-VC-09; shown at "Delete data on
+ *               uninstall", no setting is changed): 'de' (§ 147 AO, § 257 HGB), 'at' (§ 132 BAO) – both marked
+ *               "Legal check pending" while the profile is not checked –, 'neutral' ("Accounting records are subject
+ *               to statutory retention periods.", no paragraph); a filter may give an own text instead of a key.
  */
 
 defined( 'ABSPATH' ) || exit;
@@ -44,7 +48,8 @@ return array(
 		),
 		'expiry_row' => 'market',
 		'tax'        => 'de',
-		'accounting' => 'datev',
+		'accounting'     => 'datev',
+		'retention_hint' => 'de',
 	),
 	'AT'    => array(
 		'country'    => 'AT',
@@ -58,7 +63,8 @@ return array(
 		),
 		'expiry_row' => 'market',
 		'tax'        => 'at',
-		'accounting' => 'at',
+		'accounting'     => 'at',
+		'retention_hint' => 'at',
 	),
 	'CH'    => array(
 		'country'    => 'CH',
@@ -78,7 +84,8 @@ return array(
 			'note'        => 'Art. 127 OR (10 Jahre)',
 		),
 		'tax'        => 'ch',
-		'accounting' => 'ch',
+		'accounting'     => 'ch',
+		'retention_hint' => 'neutral',
 	),
 	// Neutral profiles: no value with legal weight is suggested (validity, receipt duty and retention stay as they are).
 	'EU'    => array(
@@ -89,7 +96,8 @@ return array(
 		),
 		'expiry_row' => null,
 		'tax'        => 'eu',
-		'accounting' => 'csv',
+		'accounting'     => 'csv',
+		'retention_hint' => 'neutral',
 	),
 	'OTHER' => array(
 		'country'    => '',
@@ -99,6 +107,7 @@ return array(
 		),
 		'expiry_row' => null,
 		'tax'        => 'other',
-		'accounting' => 'csv',
+		'accounting'     => 'csv',
+		'retention_hint' => 'neutral',
 	),
 );

@@ -87,7 +87,7 @@ function wp_timezone() { return new DateTimeZone( 'Europe/Vienna' ); }
 function wp_timezone_string() { return 'Europe/Vienna'; }
 function wp_date( $f, $ts = null, $tz = null ) { $d = new DateTime( '@' . ( $ts ?? time() ) ); $d->setTimezone( $tz ?: wp_timezone() ); return $d->format( $f ); }
 function get_date_from_gmt( $s, $f = 'Y-m-d H:i:s' ) { return wp_date( $f, strtotime( $s . ' UTC' ) ); }
-function get_woocommerce_currency() { return 'EUR'; }
+function get_woocommerce_currency() { return (string) apply_filters( 'woocommerce_currency', 'EUR' ); } // SET-VC-32: a currency switcher filters it.
 function get_woocommerce_currency_symbol() { return '€'; }
 function wc_get_price_decimals() { return 2; }
 function wc_format_decimal( $n, $dp = false ) { $n = str_replace( ',', '.', (string) $n ); return false === $dp ? $n : (string) round( (float) $n, (int) $dp ); }

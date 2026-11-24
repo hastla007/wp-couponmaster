@@ -11,7 +11,7 @@ defined( 'ABSPATH' ) || exit;
  *
  * - Order language: WPML order meta "wpml_language", Polylang pll_get_post_language(), filter "vcap_order_language".
  * - Email locale: the locale of that language, else the site language; filter "vcap_email_locale".
- * - Settings texts (redemption conditions, the email texts): WPML translates the options listed in wpml-config.xml
+ * - Settings texts (redemption conditions, issuer, legal links and legal text, the email texts): WPML translates the options listed in wpml-config.xml
  *   (<admin-texts>) itself; for Polylang they are registered as strings (Languages → Translations) and translated
  *   here while a mail is being prepared.
  */
@@ -19,8 +19,8 @@ final class Multilingual {
 	/** Group of the strings in Polylang's string translation. */
 	public const GROUP = 'Voucher Captain';
 
-	/** Options with customer-facing texts. */
-	public const OPTIONS = array( 'vcap_default_terms', 'vcap_terms_by_country' );
+	/** Options with customer-facing texts (SET-VC-11: issuer, links and legal text of "Issuer and legal texts"). */
+	public const OPTIONS = array( 'vcap_default_terms', 'vcap_terms_by_country', 'vcap_issuer_name', 'vcap_issuer_address', 'vcap_issuer_contact', 'vcap_terms_url', 'vcap_privacy_url', 'vcap_withdrawal_url', 'vcap_legal_text' );
 
 	/** Customer emails whose texts can be translated (WooCommerce option "woocommerce_{id}_settings"). */
 	public const EMAIL_IDS = array( 'vcap_voucher_buyer', 'vcap_voucher_recipient', 'vcap_voucher_bundle', 'vcap_voucher_expiry', 'vcap_bonus_voucher', 'vcap_referral_reward', 'vcap_gift_delivered', 'vcap_gift_used' );

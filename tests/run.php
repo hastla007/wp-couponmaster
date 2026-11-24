@@ -2536,7 +2536,7 @@ do_action( 'vcap_voucher_redeemed', $cs_counter );
 check( 'Captain Suite review: without a listening review plugin a redemption records nothing (missing connector changes nothing)', ! ReviewSource::active() && null === $cs_source->get( ReviewSource::reference( 'counter:701' ) ) );
 add_action( ReviewSource::EVENT_ELIGIBLE, static function ( $p ) use ( &$cs_events ) { $cs_events[] = $p; } );
 add_action( ReviewSource::EVENT_REVOKED, static function ( $p ) use ( &$cs_events ) { $cs_events[] = $p; } );
-check( 'Captain Suite review: versioned service through vcap_review_source_v1 (contract 1.1.0: recipient() adds locale)', $cs_source === apply_filters( 'vcap_review_source_v1', null ) && '1.1.0' === $cs_source->contract() && '1' === strtok( $cs_source->contract(), '.' ) && ReviewSource::active() );
+check( 'Captain Suite review: versioned service through vcap_review_source_v1 (contract 1.2.0: recipient() adds locale, open_references())', $cs_source === apply_filters( 'vcap_review_source_v1', null ) && '1.2.0' === $cs_source->contract() && '1' === strtok( $cs_source->contract(), '.' ) && ReviewSource::active() );
 do_action( 'vcap_voucher_redeemed', $cs_counter );
 $cs_ref = ReviewSource::reference( 'counter:701' );
 $cs_first = $cs_events[0] ?? array();
@@ -2612,6 +2612,8 @@ add_filter( 'vcap_review_first_redemption_only', static fn() => false );
 do_action( 'vcap_voucher_redeemed', array( 'voucher_id' => 16, 'event_id' => 907 ) + $cs_counter );
 check( 'Decision D4: filter vcap_review_first_redemption_only false – every confirmed redemption counts on its own again', $cs_before + 5 === count( $cs_events ) && ReviewSource::reference( 'counter:907' ) === end( $cs_events )['reference'] && 'eligible' === $cs_source->get( ReviewSource::reference( 'counter:903' ) )['event'] );
 array_pop( $GLOBALS['vcap_test_filters']['vcap_review_first_redemption_only'] );
+$cs_open = $cs_source->open_references( 16 );
+check( 'Review source 1.2.0: open_references() lists every eligible reference of a voucher, oldest first (every redemption counts), open_reference() the oldest; none for an unknown voucher', count( $cs_open ) >= 2 && ReviewSource::reference( 'counter:907' ) === end( $cs_open ) && $cs_open[0] === $cs_source->open_reference( 16 ) && array() === $cs_source->open_references( 987654 ) && '' === $cs_source->open_reference( 987654 ) && str_contains( (string) file_get_contents( VCAP_PATH . 'API.md' ), '`open_references( int $voucher_id ): string[]`' ), wp_json_encode( $cs_open ) );
 array_pop( $GLOBALS['vcap_test_filters']['vcap_review_external_target_prefixes'] );
 $cs_source->forget_voucher( 17, 'deleted' );
 check( 'Decision D4: the claim of a voucher goes with its references (erased or deleted voucher)', false === get_option( ReviewSource::CLAIM_PREFIX . 17, false ) );
@@ -3793,6 +3795,7 @@ if ( ! function_exists( 'wc_get_order_statuses' ) ) {
 }
 $sr_settings = new VCAP\Settings();
 add_filter( 'vcap_settings_partner_active', static fn() => true ); // SET-VC-33: partner rules are shown while the partner is active.
+add_filter( 'vcap_setting_vcap_show_datev', static fn() => 'yes' ); // SET-VC-20: the DATEV block is shown on request.
 $sr_bad      = array();
 $sr_seen     = array();
 foreach ( array_keys( $sr_settings->section_list() ) as $sr_sec ) {
@@ -3819,7 +3822,7 @@ foreach ( array_keys( $sr_settings->section_list() ) as $sr_sec ) {
 		}
 	}
 }
-unset( $GLOBALS['vcap_test_filters']['vcap_settings_partner_active'] );
+unset( $GLOBALS['vcap_test_filters']['vcap_settings_partner_active'], $GLOBALS['vcap_test_filters']['vcap_setting_vcap_show_datev'] );
 $sr_missing = array_diff( array_keys( $sr_fielded ), $sr_seen );
 check( 'SET-VC-01: each option field is registered for its section with the register default and min/max; each registered setting with a section has a field there', array() === $sr_bad && array() === $sr_missing, implode( ', ', array_merge( $sr_bad, $sr_missing ) ) );
 check( 'SET-VC-01: field() puts min and max before step, keeps a default the field computes at runtime and leaves unregistered fields alone', array( 'min' => 0, 'max' => 23, 'step' => 1 ) === VCAP\SettingsRegistry::field( 'vcap_delivery_hour', array( 'type' => 'number', 'custom_attributes' => array( 'step' => 1 ) ) )['custom_attributes'] && 'days' === VCAP\SettingsRegistry::field( 'vcap_default_expiry_rule', array( 'type' => 'select', 'default' => 'days' ) )['default'] && array( 'id' => 'vcap_addon_x', 'type' => 'number' ) === VCAP\SettingsRegistry::field( 'vcap_addon_x', array( 'type' => 'number' ) ) );
@@ -4331,6 +4334,7 @@ echo "SET-VC-23 help texts and checks\n";
 $h23_settings = new VCAP\Settings();
 $h23_fields   = array();
 add_filter( 'vcap_settings_partner_active', static fn() => true ); // SET-VC-33: partner rules shown.
+add_filter( 'vcap_setting_vcap_show_datev', static fn() => 'yes' ); // SET-VC-20: DATEV block shown.
 foreach ( array_keys( $h23_settings->section_list() ) as $h23_sec ) {
 	$h23_list = $h23_settings->fields( (string) $h23_sec );
 	if ( 'api' === $h23_sec ) {
@@ -4343,7 +4347,7 @@ foreach ( array_keys( $h23_settings->section_list() ) as $h23_sec ) {
 		}
 	}
 }
-unset( $GLOBALS['vcap_test_filters']['vcap_settings_partner_active'] );
+unset( $GLOBALS['vcap_test_filters']['vcap_settings_partner_active'], $GLOBALS['vcap_test_filters']['vcap_setting_vcap_show_datev'] );
 $h23_text    = static fn( $f ): string => trim( wp_strip_all_tags( ( is_string( $f['desc'] ?? null ) ? $f['desc'] : '' ) . ' ' . ( is_string( $f['desc_tip'] ?? null ) ? $f['desc_tip'] : '' ) ) );
 $h23_without = array_keys( array_filter( $h23_fields, static fn( $f ) => strlen( $h23_text( $f ) ) < 12 ) );
 check( 'SET-VC-23: every register field has a help text (desc or desc_tip with at least a short sentence)', array() === $h23_without && count( $h23_fields ) === count( array_filter( VCAP\SettingsRegistry::all(), static fn( $e ) => VCAP\SettingsRegistry::HIDDEN !== $e['section'] ) ), implode( ', ', $h23_without ) . ' / ' . count( $h23_fields ) );
@@ -4559,6 +4563,9 @@ $st_cli( array( 'list' ), array( 'section' => 'codes', 'format' => 'json' ) );
 $st_rows = $GLOBALS['vcap_cli_rows'] ?? array();
 $st_cli( array( 'list' ) );
 $st_all_rows = $GLOBALS['vcap_cli_rows'] ?? array();
+$st_cli( array( 'list' ), array( 'section' => 'hidden', 'format' => 'json' ) );
+$st_hidden_rows = $GLOBALS['vcap_cli_rows'] ?? array();
+check( 'SET-VC-27: "wp vcap settings list --section=hidden" lists the entries without a settings field (the secrets here, masked)', array() !== $st_hidden_rows && array() === array_filter( $st_hidden_rows, static fn( $r ) => 'hidden' !== $r['section'] ) && in_array( 'vcap_secret', array_column( $st_hidden_rows, 'key' ), true ) && ! str_contains( (string) wp_json_encode( $st_hidden_rows ), 'cli-secret' ), wp_json_encode( $st_hidden_rows ) );
 $st_r_export = $st_cli( array( 'export' ) );
 $st_tmp      = sys_get_temp_dir() . '/vcap-settings-' . getmypid() . '.json';
 file_put_contents( $st_tmp, $st_doc( array( 'vcap_code_length' => '22', 'vcap_attach_pdf' => 'no' ) ) );
@@ -5874,6 +5881,429 @@ check(
 );
 $GLOBALS['vcap_test_transients'] = $pvc_saved_tr;
 $GLOBALS['vcap_test_options']    = $pvc_saved;
+VCAP\CountryProfiles::reset();
+
+// SET-VC-20: accounting export country-neutral (journal accounts, CSV format, financial year start, DATEV block).
+echo "SET-VC-20 accounting export\n";
+$a20_saved = $GLOBALS['vcap_test_options'];
+$GLOBALS['vcap_test_options'] = array();
+VCAP\Csv::reset();
+$a20_default = array( VCAP\Csv::format(), VCAP\Csv::charset(), VCAP\Csv::date_format(), VCAP\Csv::headers( 'j.csv' )[0], VCAP\Csv::date( '2026-11-14 10:00:00' ), VCAP\Csv::date( '2026-11-14 10:00:00', false ), VCAP\Csv::encode_row( array( 'ä', 1 ) ) );
+check(
+	'SET-VC-20: CSV defaults are the output of 1.2.0 – separators by language (de_DE: ";" and ","), UTF-8 with BOM, dates Y-m-d (H:i)',
+	array( array( 'separator' => ';', 'decimal' => ',' ), 'utf-8-bom', 'Y-m-d', 'Content-Type: text/csv; charset=utf-8', '2026-11-14 11:00', '2026-11-14', array( 'ä', 1 ) ) === $a20_default
+		&& '' === VCAP\SettingsRegistry::default( 'vcap_csv_separator' ) && 'utf-8-bom' === VCAP\SettingsRegistry::default( 'vcap_csv_charset' ) && 'Y-m-d' === VCAP\SettingsRegistry::default( 'vcap_csv_date_format' ) && 'no' === VCAP\SettingsRegistry::default( 'vcap_journal_account_columns' ),
+	wp_json_encode( $a20_default )
+);
+$GLOBALS['vcap_test_options'] = array( 'vcap_csv_separator' => 'tab', 'vcap_csv_decimal' => '.', 'vcap_csv_charset' => 'windows-1252', 'vcap_csv_date_format' => 'd.m.Y' );
+VCAP\Csv::reset();
+$a20_set = array( VCAP\Csv::format(), VCAP\Csv::number( 12.5 ), VCAP\Csv::headers( 'j.csv' )[0], VCAP\Csv::date( '2026-11-14 10:00:00' ), VCAP\Csv::encode_row( array( 'ä', 1 ) ) );
+add_filter( 'vcap_csv_format', static fn( $f ) => array( 'separator' => '|', 'decimal' => ',' ) );
+VCAP\Csv::reset();
+$a20_filter = VCAP\Csv::format();
+unset( $GLOBALS['vcap_test_filters']['vcap_csv_format'] );
+VCAP\Csv::reset();
+check(
+	'SET-VC-20: separator, decimal separator, character set and date format follow the settings (tab, point, Windows-1252, d.m.Y); the filter vcap_csv_format still wins',
+	array( array( 'separator' => "\t", 'decimal' => '.' ), '12.50', 'Content-Type: text/csv; charset=windows-1252', '14.11.2026 11:00', array( "\xE4", 1 ) ) === $a20_set
+		&& array( 'separator' => '|', 'decimal' => ',' ) === $a20_filter,
+	wp_json_encode( array( $a20_set[0], $a20_set[1], $a20_set[2], $a20_set[3] ) )
+);
+$GLOBALS['vcap_test_options'] = array( 'vcap_datev_liability_account' => '3272', 'vcap_datev_clearing_account' => '1360', 'vcap_datev_income_account' => '2700' );
+$a20_row     = array( 'created_at' => '2026-11-14 10:00:00', 'code' => 'ABC', 'type' => 'giftcard', 'currency' => 'EUR', 'event' => 'redeemed', 'amount' => 5, 'balance_after' => 10, 'order_id' => 0, 'till' => '', 'receipt' => '', 'note' => '', 'voucher_id' => 0 );
+$a20_off     = array( VCAP\Ledger::journal_header( VCAP\AccountingExport::journal_accounts() ), VCAP\Ledger::journal_csv( array( $a20_row ) ) );
+$GLOBALS['vcap_test_options']['vcap_journal_account_columns'] = 'yes';
+$a20_acc     = VCAP\AccountingExport::journal_accounts();
+$a20_csv     = VCAP\Ledger::journal_csv( array( $a20_row, array( 'event' => 'expired' ) + $a20_row, array( 'event' => 'restored' ) + $a20_row, array( 'amount' => 0 ) + $a20_row ) );
+check(
+	'SET-VC-20: the journal CSV keeps its 14 columns by default (also with accounts set); switched on it adds "Debit account" and "Credit account" – redemption liability → clearing, expiry liability → income, value added clearing → liability, no booking empty',
+	14 === count( $a20_off[0] ) && VCAP\Ledger::journal_header() === $a20_off[0] && 14 === count( $a20_off[1][1] )
+		&& array( 'liability' => '3272', 'clearing' => '1360', 'income' => '2700' ) === $a20_acc && array( 'Debit account', 'Credit account' ) === array_slice( $a20_csv[0], 14 )
+		&& array( '3272', '1360' ) === array_slice( $a20_csv[1], 14 ) && array( '3272', '2700' ) === array_slice( $a20_csv[2], 14 ) && array( '1360', '3272' ) === array_slice( $a20_csv[3], 14 ) && array( '', '' ) === array_slice( $a20_csv[4], 14 ),
+	wp_json_encode( $a20_csv )
+);
+$GLOBALS['vcap_test_options'] += array( 'vcap_datev_consultant' => '12345', 'vcap_datev_client' => '99' );
+$a20_datev = VCAP\DatevExport::booking( $a20_row, VCAP\DatevExport::config() );
+check( 'SET-VC-20: the DATEV booking batch reads the same accounts (redemption: debit liability, credit clearing)', null !== $a20_datev && '3272' === $a20_datev[6] && '1360' === $a20_datev[7] && VCAP\DatevExport::configured() );
+$GLOBALS['vcap_test_options'] = array();
+$a20_fy = array( VCAP\AccountingExport::fy_start(), VCAP\DatevExport::config()['fy_start'] );
+$GLOBALS['vcap_test_options'] = array( 'vcap_datev_fy_start' => '0701' );
+$a20_fy[] = VCAP\DatevExport::config()['fy_start'];
+$GLOBALS['vcap_test_options'] = array( 'vcap_datev_fy_start' => '1340' );
+$a20_fy[] = VCAP\AccountingExport::fy_start();
+add_filter( 'vcap_setting_vcap_datev_fy_start', static fn() => '0401' );
+$a20_fy[] = VCAP\DatevExport::config()['fy_start'];
+unset( $GLOBALS['vcap_test_filters']['vcap_setting_vcap_datev_fy_start'] );
+$GLOBALS['vcap_test_options'] = array( 'woocommerce_default_country' => 'AT' );
+$a20_at_ids   = array_column( ( new VCAP\Settings() )->fields( 'api' ), 'id' );
+$a20_at_datev = VCAP\DatevExport::settings_fields();
+check(
+	'SET-VC-20: the financial year start is a general field (option name of 1.2.0 kept) that DATEV reads – default 0101, a saved 0701 is used, an invalid date counts as 0101, the filter wins',
+	array( '0101', '0101', '0701', '0101', '0401' ) === $a20_fy && in_array( VCAP\AccountingExport::OPTION_FY_START, $a20_at_ids, true ) && 'api' === VCAP\SettingsRegistry::get( 'vcap_datev_fy_start' )['section'],
+	wp_json_encode( $a20_fy )
+);
+$a20_show = array( VCAP\AccountingExport::show_datev() );
+$GLOBALS['vcap_test_options'] = array( 'woocommerce_default_country' => 'DE:BY' );
+$a20_show[] = VCAP\AccountingExport::show_datev();
+$GLOBALS['vcap_test_options'] = array( 'woocommerce_default_country' => 'CH', 'vcap_datev_consultant' => '12345' );
+$a20_show[] = VCAP\AccountingExport::show_datev();
+$GLOBALS['vcap_test_options'] = array( 'woocommerce_default_country' => 'AT', VCAP\CountryProfiles::APPLIED_OPTION => array( 'id' => 'DE', 'time' => 1, 'user' => 1 ) );
+$a20_show[] = VCAP\AccountingExport::show_datev();
+$GLOBALS['vcap_test_options'] = array( 'woocommerce_default_country' => 'DE', 'vcap_show_datev' => 'no' );
+$a20_show[] = VCAP\AccountingExport::show_datev();
+$GLOBALS['vcap_test_options'] = array( 'woocommerce_default_country' => 'CH', 'vcap_show_datev' => 'yes' );
+$a20_show[] = VCAP\AccountingExport::show_datev();
+check(
+	'SET-VC-20: the DATEV block shows automatically for shops based in Germany, with the country profile DE or with DATEV values saved; AT/CH without DATEV values do not see it; "Show"/"Hide" override',
+	array( false, true, true, true, false, true ) === $a20_show && 'auto' === VCAP\SettingsRegistry::default( 'vcap_show_datev' ),
+	wp_json_encode( $a20_show )
+);
+check(
+	'SET-VC-20: an AT shop exports the journal without DATEV fields – Integrations has the accounts, the journal columns, the financial year start and the CSV format, but no consultant/client number; the reports page offers no DATEV link',
+	array() === array_diff( array( 'vcap_datev_liability_account', 'vcap_datev_clearing_account', 'vcap_datev_income_account', 'vcap_journal_account_columns', 'vcap_csv_separator', 'vcap_csv_decimal', 'vcap_csv_charset', 'vcap_csv_date_format', 'vcap_show_datev' ), $a20_at_ids )
+		&& ! in_array( 'vcap_datev_consultant', $a20_at_ids, true ) && ! in_array( 'vcap_datev_client', $a20_at_ids, true ) && ! in_array( 'vcap_datev_account_length', $a20_at_ids, true ) && array() === $a20_at_datev
+		&& str_contains( (string) file_get_contents( VCAP_PATH . 'src/Admin/ReportsAdmin.php' ), '! \VCAP\AccountingExport::show_datev()' ),
+	implode( ', ', array_filter( $a20_at_ids ) )
+);
+$GLOBALS['vcap_test_options'] = $a20_saved;
+VCAP\Csv::reset();
+// SET-VC-09: the retention hint of "Delete data on uninstall" comes from the country profile, no longer fixed DE/AT.
+echo "SET-VC-09 retention hint from the country profile\n";
+$vc09_saved = $GLOBALS['vcap_test_options'];
+$vc09_hint  = static function ( string $base, ?string $applied = null ): string {
+	$GLOBALS['vcap_test_options'] = array( 'woocommerce_default_country' => $base );
+	if ( null !== $applied ) {
+		$GLOBALS['vcap_test_options'][ VCAP\CountryProfiles::APPLIED_OPTION ] = array( 'id' => $applied, 'time' => time(), 'user' => 1 );
+	}
+	VCAP\CountryProfiles::reset();
+	return VCAP\CountryProfiles::retention_hint();
+};
+$vc09_cfg = ( static fn() => include VCAP_PATH . 'config/country-profiles.php' )();
+$vc09     = array(
+	'de'    => $vc09_hint( 'DE:BE' ),
+	'at'    => $vc09_hint( 'AT' ),
+	'ch'    => $vc09_hint( 'CH' ),
+	'fr'    => $vc09_hint( 'FR' ),
+	'us'    => $vc09_hint( 'US:CA' ),
+	'none'  => $vc09_hint( '' ),
+	'de_ch' => $vc09_hint( 'DE:BE', 'CH' ),
+	'ch_at' => $vc09_hint( 'CH', 'AT' ),
+);
+$vc09_neutral = 'Accounting records are subject to statutory retention periods.';
+check(
+	'SET-VC-09: config/country-profiles.php gives each profile a retention_hint – DE and AT their paragraphs, CH, EU and OTHER the neutral text',
+	array( 'DE' => 'de', 'AT' => 'at', 'CH' => 'neutral', 'EU' => 'neutral', 'OTHER' => 'neutral' ) === array_map( static fn( $p ) => $p['retention_hint'] ?? null, $vc09_cfg ),
+	wp_json_encode( array_map( static fn( $p ) => $p['retention_hint'] ?? null, $vc09_cfg ) )
+);
+check(
+	'SET-VC-09: without an applied profile the shop\'s base country decides – DE names § 147 AO and § 257 HGB, AT § 132 BAO, both marked "Legal check pending"; CH, an EU country, other countries and no country get the neutral sentence without any paragraph',
+	str_contains( $vc09['de'], '§ 147 AO, § 257 HGB' ) && str_ends_with( $vc09['de'], '(Legal check pending)' ) && ! str_contains( $vc09['de'], 'BAO' )
+		&& str_contains( $vc09['at'], '§ 132 BAO' ) && str_ends_with( $vc09['at'], '(Legal check pending)' ) && ! str_contains( $vc09['at'], 'HGB' )
+		&& $vc09_neutral === $vc09['ch'] && $vc09_neutral === $vc09['fr'] && $vc09_neutral === $vc09['us'] && $vc09_neutral === $vc09['none'],
+	wp_json_encode( $vc09 )
+);
+check(
+	'SET-VC-09: the applied profile (option vcap_country_profile) wins over the base country – a German shop that applied CH sees the neutral text, a Swiss shop that applied AT the Austrian one',
+	$vc09_neutral === $vc09['de_ch'] && str_contains( $vc09['ch_at'], '§ 132 BAO' ),
+	wp_json_encode( $vc09 )
+);
+$vc09_hint( 'CH' );
+$vc09_desc_ch = VCAP\Settings::delete_on_uninstall_description();
+$vc09_hint( 'DE:BE' );
+$vc09_desc_de = VCAP\Settings::delete_on_uninstall_description();
+$GLOBALS['vcap_test_filters']['vcap_country_profiles'] = array(
+	array(
+		static function ( $profiles ) {
+			$profiles['CH']['retention_hint'] = 'Aufbewahrung nach Art. 958f OR prüfen.';
+			$profiles['CH']['checked']        = true;
+			return $profiles;
+		},
+		1,
+	),
+);
+$vc09_own = $vc09_hint( 'CH' );
+unset( $GLOBALS['vcap_test_filters']['vcap_country_profiles'] );
+check(
+	'SET-VC-09: "Delete data on uninstall" – a CH shop sees no German or Austrian paragraph (no §), a DE shop the German one; the journal export link stays; a filter may give a profile its own text (checked: no mark)',
+	! str_contains( $vc09_desc_ch, '§' ) && str_contains( $vc09_desc_ch, $vc09_neutral ) && str_contains( $vc09_desc_ch, 'Export it before deleting the plugin.' ) && str_contains( $vc09_desc_ch, 'view=journal' )
+		&& str_contains( $vc09_desc_de, '§ 147 AO' ) && ! str_contains( $vc09_desc_de, '§ 132 BAO' )
+		&& 'Aufbewahrung nach Art. 958f OR prüfen.' === $vc09_own,
+	$vc09_desc_ch . ' | ' . $vc09_own
+);
+$GLOBALS['vcap_test_options'] = $vc09_saved;
+VCAP\CountryProfiles::reset();
+
+// SET-VC-11: issuer and legal texts in "General" – placeholders {issuer}, {legal_text}, {terms_url}, {privacy_url},
+// {withdrawal_url}; empty = shop details at render time; translatable with WPML (admin-texts) and Polylang.
+echo "SET-VC-11 issuer and legal texts\n";
+if ( ! function_exists( 'wc_terms_and_conditions_page_id' ) ) {
+	function wc_terms_and_conditions_page_id() { return (int) ( $GLOBALS['vcap_test_terms_page'] ?? 0 ); }
+}
+if ( ! function_exists( 'get_privacy_policy_url' ) ) {
+	function get_privacy_policy_url() { return (string) ( $GLOBALS['vcap_test_privacy_url'] ?? '' ); }
+}
+$vc11_saved = $GLOBALS['vcap_test_options'];
+$vc11_reg   = array();
+foreach ( VCAP\LegalInfo::OPTIONS as $vc11_key ) {
+	$vc11_entry           = VCAP\SettingsRegistry::get( $vc11_key );
+	$vc11_reg[ $vc11_key ] = null !== $vc11_entry ? array( $vc11_entry['type'], $vc11_entry['default'], $vc11_entry['section'], $vc11_entry['legal'], $vc11_entry['export'], $vc11_entry['secret'] ) : null;
+}
+$vc11_fields = array_values( array_filter( VCAP\LegalInfo::settings_fields(), static fn( $f ) => ! in_array( $f['type'], array( 'title', 'sectionend' ), true ) ) );
+$vc11_set_src = (string) file_get_contents( VCAP_PATH . 'src/Settings.php' );
+check(
+	'SET-VC-11: register – issuer name/address/contact, links terms/privacy/withdrawal and the legal text are settings of "General" with legal weight, empty by default, exported, no secret; the block "Issuer and legal texts" builds each field with SettingsRegistry::field() and shows its help visibly',
+	array(
+		'vcap_issuer_name'    => array( 'string', '', '', true, true, false ),
+		'vcap_issuer_address' => array( 'text', '', '', true, true, false ),
+		'vcap_issuer_contact' => array( 'string', '', '', true, true, false ),
+		'vcap_terms_url'      => array( 'string', '', '', true, true, false ),
+		'vcap_privacy_url'    => array( 'string', '', '', true, true, false ),
+		'vcap_withdrawal_url' => array( 'string', '', '', true, true, false ),
+		'vcap_legal_text'     => array( 'text', '', '', true, true, false ),
+	) === $vc11_reg
+		&& VCAP\LegalInfo::OPTIONS === array_column( $vc11_fields, 'id' ) && array() === array_filter( $vc11_fields, static fn( $f ) => isset( $f['desc_tip'] ) || '' === trim( (string) ( $f['desc'] ?? '' ) ) || ! str_contains( (string) $f['desc'], 'Not legally checked' ) )
+		&& str_contains( $vc11_set_src, 'VoucherCurrency::settings_fields(), LegalInfo::settings_fields()' ) && str_contains( $vc11_set_src, 'LegalInfo::register_sanitizers();' ),
+	wp_json_encode( $vc11_reg )
+);
+// Defaults: the shop details at render time.
+$GLOBALS['vcap_test_options'] = array(
+	'woocommerce_default_country' => 'DE:BE',
+	'woocommerce_store_address'   => 'Musterstraße 1',
+	'woocommerce_store_postcode'  => '10115',
+	'woocommerce_store_city'      => 'Berlin',
+);
+$GLOBALS['vcap_test_privacy_url'] = 'https://shop.test/datenschutz/';
+$GLOBALS['vcap_test_terms_page']  = 0;
+$vc11_default  = Placeholders::replace( '{issuer}|{legal_text}|{terms_url}|{privacy_url}|{withdrawal_url}', $v );
+$vc11_no_store = ( static function () use ( $v ) {
+	$GLOBALS['vcap_test_options'] = array( 'woocommerce_default_country' => 'DE:BE' );
+	return Placeholders::replace( '{issuer}', $v );
+} )();
+check(
+	'SET-VC-11: empty settings take the shop details when the voucher is rendered – {issuer} = site name and WooCommerce store address (with country), {privacy_url} = the WordPress privacy page, {terms_url} = the WooCommerce terms page (none here), {legal_text} and {withdrawal_url} stay empty; without a store address only the name',
+	"Café Süß & Co\nMusterstraße 1\n10115 Berlin\nDE||" . '|https://shop.test/datenschutz/|' === $vc11_default && 'Café Süß & Co' === $vc11_no_store,
+	$vc11_default . ' / ' . $vc11_no_store
+);
+// Own values win; the links are only http(s).
+$GLOBALS['vcap_test_options'] = array(
+	'woocommerce_default_country' => 'DE:BE',
+	'woocommerce_store_address'   => 'Musterstraße 1',
+	'vcap_issuer_name'            => 'Gutschein GmbH',
+	'vcap_issuer_address'         => "Hauptstraße 5\n1010 Wien",
+	'vcap_issuer_contact'         => 'Tel. 01 234, gutschein@example.com',
+	'vcap_terms_url'              => 'https://shop.test/agb/',
+	'vcap_privacy_url'            => 'https://shop.test/privacy/',
+	'vcap_withdrawal_url'         => 'https://shop.test/widerruf/',
+	'vcap_legal_text'             => 'Rechtlicher Hinweis',
+);
+$vc11_own = Placeholders::values( $v );
+$GLOBALS['vcap_test_options']['vcap_terms_url'] = 'javascript:alert(1)';
+$vc11_bad_stored = VCAP\LegalInfo::terms_url();
+// Polylang translates the texts in the mail/visitor language (WPML translates the options itself).
+$GLOBALS['vcap_test_pll']      = array( 'en' => array( 'Rechtlicher Hinweis' => 'Legal notice', 'Gutschein GmbH' => 'Voucher Ltd' ) );
+$GLOBALS['vcap_test_pll_lang'] = 'en';
+$vc11_en                       = Placeholders::replace( '{issuer}|{legal_text}', $v );
+$GLOBALS['vcap_test_pll_lang'] = '';
+check(
+	'SET-VC-11: own values replace the defaults in PDF and email placeholders (Placeholders::values() and email_map()); a stored link that is no http(s) URL prints nothing; with Polylang the issuer and the legal text are printed in the current language',
+	"Gutschein GmbH\nHauptstraße 5\n1010 Wien\nTel. 01 234, gutschein@example.com" === $vc11_own['issuer'] && 'Rechtlicher Hinweis' === $vc11_own['legal_text'] && 'https://shop.test/agb/' === $vc11_own['terms_url']
+		&& 'https://shop.test/privacy/' === $vc11_own['privacy_url'] && 'https://shop.test/widerruf/' === $vc11_own['withdrawal_url'] && '' === $vc11_bad_stored
+		&& str_starts_with( $vc11_en, "Voucher Ltd\nHauptstraße 5" ) && str_ends_with( $vc11_en, '|Legal notice' )
+		&& array() === array_diff( array( '{issuer}', '{legal_text}', '{terms_url}', '{privacy_url}', '{withdrawal_url}' ), array_keys( Placeholders::email_map( null ) ) ),
+	wp_json_encode( array( $vc11_own, $vc11_en ) )
+);
+$vc11_url_errors = array(
+	VCAP\LegalInfo::sanitize_url_option( 'ftp://shop.test/agb', array( 'id' => 'vcap_terms_url', 'title' => 'Terms' ) ),
+	VCAP\LegalInfo::sanitize_url_option( ' https://shop.test/agb/ ', array( 'id' => 'vcap_terms_url' ) ),
+	VCAP\LegalInfo::sanitize_url_option( '', array( 'id' => 'vcap_terms_url' ) ),
+	VCAP\SettingsTransfer::validate( 'vcap_withdrawal_url', 'javascript:alert(1)' ),
+	VCAP\SettingsTransfer::validate( 'vcap_withdrawal_url', 'https://shop.test/widerruf/' ),
+	VCAP\SettingsTransfer::validate( 'vcap_legal_text', "<b>Hinweis</b>\nZeile 2" ),
+	VCAP\LegalInfo::sanitize_text( "<b>Hinweis</b>\nZeile 2" ),
+);
+check(
+	'SET-VC-11: links are checked on the settings page and on import/WP-CLI – an invalid link is not saved (the stored value stays) or refused, a valid one stored, empty = default page; address and legal text are plain text with line breaks',
+	null === $vc11_url_errors[0] && 'https://shop.test/agb/' === $vc11_url_errors[1] && '' === $vc11_url_errors[2] && is_wp_error( $vc11_url_errors[3] ) && 'https://shop.test/widerruf/' === $vc11_url_errors[4]
+		&& "Hinweis\nZeile 2" === $vc11_url_errors[5] && "Hinweis\nZeile 2" === $vc11_url_errors[6],
+	wp_json_encode( $vc11_url_errors )
+);
+// Existing vouchers and emails stay unchanged: no default template or default email text uses the new placeholders.
+$vc11_used = array();
+foreach ( VCAP\TemplatePostType::default_designs() as $vc11_design ) {
+	foreach ( (array) ( $vc11_design['elements'] ?? array() ) as $vc11_el ) {
+		$vc11_used[] = (string) ( $vc11_el['text'] ?? '' );
+	}
+}
+foreach ( array_merge( glob( VCAP_PATH . 'src/Emails/*.php' ), glob( VCAP_PATH . 'templates/emails/*.php' ), glob( VCAP_PATH . 'templates/emails/plain/*.php' ) ) as $vc11_file ) {
+	$vc11_used[] = (string) file_get_contents( $vc11_file );
+}
+$vc11_new_tokens = '/\{(issuer|legal_text|terms_url|privacy_url|withdrawal_url)\}/';
+$vc11_wpml       = (string) file_get_contents( VCAP_PATH . 'wpml-config.xml' );
+check(
+	'SET-VC-11: existing vouchers and emails are unchanged – no default PDF design, email class or email template uses the new placeholders; the PDF designer and the email settings offer them (definitions()); WPML (wpml-config.xml admin-texts) and Polylang (Multilingual::OPTIONS) translate all seven settings',
+	array() === preg_grep( $vc11_new_tokens, $vc11_used ) && array() === array_diff( array( 'issuer', 'legal_text', 'terms_url', 'privacy_url', 'withdrawal_url' ), array_keys( Placeholders::definitions() ) )
+		&& array() === array_diff( VCAP\LegalInfo::OPTIONS, VCAP\Compat\Multilingual::OPTIONS )
+		&& array() === array_filter( VCAP\LegalInfo::OPTIONS, static fn( $key ) => ! str_contains( $vc11_wpml, '<key name="' . $key . '" />' ) ),
+	wp_json_encode( preg_grep( $vc11_new_tokens, $vc11_used ) )
+);
+unset( $GLOBALS['vcap_test_privacy_url'], $GLOBALS['vcap_test_terms_page'] );
+$GLOBALS['vcap_test_options'] = $vc11_saved;
+
+
+echo "Multi-currency status and setting locks (SET-VC-32, SET-VC-34)\n";
+$mc_saved_opts    = $GLOBALS['vcap_test_options'];
+$mc_saved_filters = $GLOBALS['vcap_test_filters'];
+if ( ! function_exists( 'wc_add_notice' ) ) {
+	function wc_add_notice( $message, $type = 'success' ) { $GLOBALS['vcap_test_notices'][] = array( $type, (string) $message ); }
+}
+if ( ! class_exists( 'WC_Product' ) ) {
+	// Minimal product for the add-to-cart check (declared only here, after every other test).
+	class WC_Product {
+		public function __construct( private array $meta = array() ) {}
+		public function get_meta( $k ) { return $this->meta[ $k ] ?? ''; }
+		public function is_type( $t ) { return 'simple' === $t; }
+		public function get_id() { return 1; }
+	}
+}
+// A stubbed second currency plugin (WOOCS-like): lists USD with a rate; the active currency is switched by its filter.
+final class VCAP_Test_Woocs {
+	public function get_currencies() { return array( 'EUR' => array( 'rate' => 1 ), 'USD' => array( 'rate' => 1.08 ) ); }
+}
+$GLOBALS['vcap_test_options'] = array( 'woocommerce_currency' => 'EUR' );
+$GLOBALS['vcap_test_notices'] = array();
+$mc_voucher                   = new WC_Product( array( '_vcap_enabled' => 'yes' ) );
+$mc_other                     = new WC_Product( array() );
+$mc_status_none               = array_values( VCAP\VoucherCurrency::status() );
+check(
+	'SET-VC-32: register – "Sell vouchers only in the shop currency" is a bool on "General", default no (as before); General has the block "Currencies" with a display-only status line (is_option false) and the checkbox',
+	'no' === VCAP\SettingsRegistry::default( VCAP\VoucherCurrency::OPTION ) && 'bool' === VCAP\SettingsRegistry::get( VCAP\VoucherCurrency::OPTION )['type'] && '' === VCAP\SettingsRegistry::get( VCAP\VoucherCurrency::OPTION )['section']
+		&& ( static function (): bool {
+			$by_id = array_column( VCAP\VoucherCurrency::settings_fields(), null, 'id' );
+			return false === ( $by_id['vcap_currency_status']['is_option'] ?? null ) && VCAP\VoucherCurrency::FIELD_TYPE === $by_id['vcap_currency_status']['type'] && 'checkbox' === $by_id[ VCAP\VoucherCurrency::OPTION ]['type'] && 'no' === $by_id[ VCAP\VoucherCurrency::OPTION ]['default'];
+		} )()
+		&& str_contains( (string) file_get_contents( VCAP_PATH . 'src/Settings.php' ), 'VoucherCurrency::settings_fields()' )
+);
+check(
+	'SET-VC-32: status without a currency switcher – none detected, leading currency EUR, automatic commands limited to 100 EUR',
+	str_starts_with( $mc_status_none[0], 'None detected' ) && str_starts_with( $mc_status_none[1], 'EUR (shop base currency)' ) && str_contains( $mc_status_none[2], 'at most 100 EUR' ),
+	json_encode( $mc_status_none )
+);
+check(
+	'SET-VC-32: the commands hint follows F-05a (CommandLimits, no rule of its own) – CHF/USD/GBP the same number 100, SEK needs an own maximum, with an own maximum in SEK that one applies',
+	str_contains( VCAP\VoucherCurrency::commands_hint( 'CHF' ), 'at most 100 CHF' ) && str_contains( VCAP\VoucherCurrency::commands_hint( 'USD' ), 'same number as in EUR' )
+		&& ( static function (): bool {
+			$GLOBALS['vcap_test_options']['woocommerce_currency'] = 'SEK';
+			$without = VCAP\VoucherCurrency::commands_hint( 'SEK' );
+			$GLOBALS['vcap_test_options'][ VCAP\API\V1\CommandLimits::option( 'voucher.issue', 'max_amount' ) ]          = '900';
+			$GLOBALS['vcap_test_options'][ VCAP\API\V1\CommandLimits::option( 'voucher.issue', 'max_amount_currency' ) ] = 'SEK';
+			$with                         = VCAP\VoucherCurrency::commands_hint( 'SEK' );
+			$GLOBALS['vcap_test_options'] = array( 'woocommerce_currency' => 'EUR' );
+			return str_contains( $without, 'enter your own maximum amount' ) && str_contains( $with, 'Your own maximum amount in SEK applies' );
+		} )()
+);
+// Second currency plugin active, the customer switched to USD.
+$GLOBALS['WOOCS'] = new VCAP_Test_Woocs(); // phpcs:ignore WordPress.NamingConventions.ValidVariableName
+$GLOBALS['vcap_test_filters']['woocommerce_currency'] = array( array( static fn() => 'USD', 1 ) );
+$mc_status_woocs = array_values( VCAP\VoucherCurrency::status() );
+$mc_default      = array( VCAP\VoucherCurrency::refused(), VCAP\VoucherCurrency::allow_product( true, $mc_voucher ), $GLOBALS['vcap_test_notices'] );
+check(
+	'SET-VC-32: with a second currency plugin (stubbed WOOCS) the status names it as supported; with the default (off) a voucher can be bought in USD as before',
+	str_starts_with( $mc_status_woocs[0], 'WOOCS (supported' ) && 'USD' === VCAP\VoucherCurrency::active_currency() && 'EUR' === VCAP\VoucherCurrency::base_currency()
+		&& false === $mc_default[0] && true === $mc_default[1] && array() === $mc_default[2],
+	json_encode( $mc_status_woocs )
+);
+$GLOBALS['vcap_test_options'][ VCAP\VoucherCurrency::OPTION ] = 'yes';
+$mc_refused = array( VCAP\VoucherCurrency::refused(), VCAP\VoucherCurrency::allow_product( true, $mc_voucher ), VCAP\VoucherCurrency::allow_product( true, $mc_other ), VCAP\VoucherCurrency::allow_product( false, $mc_voucher ), $GLOBALS['vcap_test_notices'] );
+check(
+	'SET-VC-32: setting on and USD active – adding a voucher product is refused with an error notice naming both currencies; other products and an already refused add stay as they are',
+	true === $mc_refused[0] && false === $mc_refused[1] && true === $mc_refused[2] && false === $mc_refused[3]
+		&& 1 === count( $mc_refused[4] ) && 'error' === $mc_refused[4][0][0] && str_contains( $mc_refused[4][0][1], 'only be bought in EUR' ) && str_contains( $mc_refused[4][0][1], 'from USD to EUR' ),
+	json_encode( $mc_refused )
+);
+$GLOBALS['vcap_test_filters']['woocommerce_currency'] = array( array( static fn() => 'EUR', 1 ) );
+$mc_base = array( VCAP\VoucherCurrency::refused(), VCAP\VoucherCurrency::allow_product( true, $mc_voucher ) );
+$GLOBALS['vcap_test_filters']['woocommerce_currency']             = array( array( static fn() => 'USD', 1 ) );
+$GLOBALS['vcap_test_filters']['vcap_vouchers_shop_currency_only'] = array( array( static fn() => false, 1 ) );
+$mc_filter = VCAP\VoucherCurrency::refused();
+$mc_src    = (string) file_get_contents( VCAP_PATH . 'src/VoucherCurrency.php' );
+check(
+	'SET-VC-32: back in the shop currency the voucher can be bought; the filter vcap_vouchers_shop_currency_only wins over the setting; checkout (classic and block) is refused through woocommerce_check_cart_items',
+	false === $mc_base[0] && true === $mc_base[1] && false === $mc_filter
+		&& str_contains( $mc_src, "add_action( 'woocommerce_check_cart_items', array( self::class, 'check_cart' ) )" ) && str_contains( $mc_src, "add_filter( 'woocommerce_add_to_cart_validation'" )
+		&& str_contains( (string) file_get_contents( VCAP_PATH . 'src/Plugin.php' ), '( new VoucherCurrency() )->register();' )
+);
+unset( $GLOBALS['WOOCS'] );
+$GLOBALS['vcap_test_filters'] = $mc_saved_filters;
+
+// SET-VC-34: a multisite-like simulation – the "network" locks settings per site through vcap_setting_locked.
+$GLOBALS['vcap_test_filters']['vcap_setting_locked'] = array(
+	array(
+		static fn( $locked, $option ) => 2 === get_current_blog_id() && in_array( $option, array( 'vcap_code_length', 'vcap_attach_pdf', 'vcap_retention_days', VCAP\Markets::EXPIRY_OPTION ), true ) ? true : $locked,
+		2,
+	),
+);
+VCAP\SettingsRegistry::reset_flags();
+$GLOBALS['vcap_test_blog_id'] = 1;
+$GLOBALS['vcap_test_options'] = array( 'vcap_code_length' => '14' );
+$lk_site1_field               = VCAP\SettingsRegistry::field( 'vcap_code_length', array( 'title' => 'Code length', 'type' => 'number', 'desc_tip' => 'Help.' ) );
+$lk_site1_save                = VCAP\SettingsRegistry::sanitize_locked( '20', array( 'id' => 'vcap_code_length' ) );
+$GLOBALS['vcap_test_blog_id'] = 2;
+$lk_field                     = VCAP\SettingsRegistry::field( 'vcap_code_length', array( 'title' => 'Code length', 'type' => 'number', 'desc_tip' => 'Help.' ) );
+$lk_check                     = VCAP\SettingsRegistry::field( 'vcap_attach_pdf', array( 'title' => 'PDF', 'type' => 'checkbox', 'desc' => 'Attach the PDF' ) );
+$lk_save                      = VCAP\SettingsRegistry::sanitize_locked( '20', array( 'id' => 'vcap_code_length' ) );
+check(
+	'SET-VC-34: the core locks nothing (filter default false); on the locked site a field is disabled and read-only, not saved (is_option false) and says "Set by the network administrator."; the other site keeps an ordinary field',
+	! VCAP\SettingsRegistry::locked( 'vcap_code_prefix' ) && VCAP\SettingsRegistry::locked( 'vcap_code_length' )
+		&& 'disabled' === ( $lk_field['custom_attributes']['disabled'] ?? '' ) && 'readonly' === ( $lk_field['custom_attributes']['readonly'] ?? '' ) && false === $lk_field['is_option'] && str_contains( $lk_field['desc'], 'Set by the network administrator.' ) && 'Help.' === $lk_field['desc_tip'] && '8' === (string) ( $lk_field['custom_attributes']['min'] ?? '' )
+		&& 'disabled' === ( $lk_check['custom_attributes']['disabled'] ?? '' ) && str_starts_with( $lk_check['desc'], 'Attach the PDF ' )
+		&& ! isset( $lk_site1_field['custom_attributes']['disabled'] ) && ! isset( $lk_site1_field['is_option'] ) && '20' === $lk_site1_save && null === $lk_save,
+	json_encode( array( $lk_field, $lk_site1_field ) )
+);
+check(
+	'SET-VC-34: saving the tab hooks the lock check after every other sanitizer (null = WooCommerce keeps the stored value), also for fields an add-on built without field()',
+	str_contains( (string) file_get_contents( VCAP_PATH . 'src/Settings.php' ), 'SettingsRegistry::hook_lock_checks();' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'src/SettingsRegistry.php' ), "array( self::class, 'sanitize_locked' ), PHP_INT_MAX, 2" )
+);
+// Import on the locked site: the locked values are skipped with a message, the rest is imported.
+$GLOBALS['vcap_test_options'] = array( 'vcap_code_length' => '14', 'vcap_attach_pdf' => 'yes' );
+$lk_parsed  = VCAP\SettingsTransfer::parse( (string) json_encode( array( 'format' => 'voucher-captain-settings', 'version' => 1, 'settings' => array( 'vcap_code_length' => '20', 'vcap_attach_pdf' => 'no', 'vcap_code_prefix' => 'GS' ) ) ) );
+$lk_changed = is_array( $lk_parsed ) ? VCAP\SettingsTransfer::apply( $lk_parsed['settings'], VCAP\SettingsLog::VIA_IMPORT ) : array();
+$lk_forced  = VCAP\SettingsTransfer::apply( array( 'vcap_code_length' => '30' ), VCAP\SettingsLog::VIA_CLI );
+check(
+	'SET-VC-34: import – locked settings are not imported (warning "set by the network administrator"), the others are; SettingsTransfer::apply() never stores a locked value',
+	is_array( $lk_parsed ) && array( 'vcap_code_prefix' => 'GS' ) === $lk_parsed['settings'] && 2 === count( array_filter( $lk_parsed['warnings'], static fn( $w ) => str_contains( $w, 'is set by the network administrator' ) ) )
+		&& array( 'vcap_code_prefix' ) === $lk_changed && array() === $lk_forced && '14' === get_option( 'vcap_code_length' ) && 'yes' === get_option( 'vcap_attach_pdf' ) && 'GS' === get_option( 'vcap_code_prefix' ),
+	json_encode( $lk_parsed )
+);
+$lk_reset_preview = VCAP\SettingsTransfer::reset_preview( 'codes' );
+$lk_reset         = VCAP\SettingsTransfer::reset( 'codes' );
+$lk_cli           = (string) file_get_contents( VCAP_PATH . 'src/CLI/Command.php' );
+check(
+	'SET-VC-34: reset leaves a locked setting alone (and lists it); WP-CLI "settings set" refuses it with the message, "settings reset" names the locked ones',
+	! isset( $lk_reset_preview['vcap_code_length'] ) && isset( $lk_reset_preview['vcap_code_prefix'] ) && '14' === get_option( 'vcap_code_length' ) && false === get_option( 'vcap_code_prefix' ) && in_array( 'vcap_code_prefix', $lk_reset['changed'], true )
+		&& in_array( 'vcap_code_length', VCAP\SettingsTransfer::locked_resettable( 'codes' ), true ) && ! in_array( 'vcap_code_length', VCAP\SettingsTransfer::resettable( 'codes' ), true )
+		&& preg_match( '/if \( SettingsRegistry::locked\( \$key \) \) \{\s*self::error\( SettingsRegistry::locked_message\( \$key \)/', $lk_cli ) && str_contains( $lk_cli, "'Set by the network administrator, not reset: '" ),
+	json_encode( array_keys( $lk_reset_preview ) )
+);
+VCAP\CountryProfiles::reset();
+$lk_profile = VCAP\CountryProfiles::preview( 'DE' );
+$lk_apply   = VCAP\CountryProfiles::apply( 'DE', array( 'vcap_retention_days' ) );
+check(
+	'SET-VC-34: country profile – a locked value is shown with the message, never preselected, and applying it is refused (nothing changes)',
+	is_array( $lk_profile ) && str_contains( $lk_profile['vcap_retention_days']['error'], 'set by the network administrator' ) && ! $lk_profile['vcap_retention_days']['preselected'] && ! $lk_profile['vcap_retention_days']['changed']
+		&& str_contains( $lk_profile['expiry_row']['error'], 'set by the network administrator' ) && ! $lk_profile['expiry_row']['preselected']
+		&& is_wp_error( $lk_apply ) && false === get_option( 'vcap_retention_days' ),
+	json_encode( $lk_profile )
+);
+$GLOBALS['vcap_test_blog_id'] = 1;
+$lk_site1_profile             = VCAP\CountryProfiles::preview( 'DE' );
+check(
+	'SET-VC-34: the same network on site 1 (nothing locked there) – the profile value is offered as usual',
+	is_array( $lk_site1_profile ) && '' === $lk_site1_profile['vcap_retention_days']['error'] && $lk_site1_profile['vcap_retention_days']['preselected']
+);
+unset( $GLOBALS['vcap_test_blog_id'] );
+$GLOBALS['vcap_test_filters'] = $mc_saved_filters;
+$GLOBALS['vcap_test_options'] = $mc_saved_opts;
+VCAP\SettingsRegistry::reset_flags();
 VCAP\CountryProfiles::reset();
 
 echo "\n$passed passed, $failed failed. Output: $out\n";

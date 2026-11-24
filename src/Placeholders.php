@@ -6,7 +6,8 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Dynamic placeholders used in PDF templates and emails.
  *
- * Static tokens: {coupon_code}, {coupon_value}, … (see definitions()).
+ * Static tokens: {coupon_code}, {coupon_value}, … (see definitions()); issuer and legal texts {issuer}, {legal_text},
+ * {terms_url}, {privacy_url}, {withdrawal_url} from LegalInfo (SET-VC-11).
  * Dynamic tokens: {field:KEY} personalisation field, {item_meta:KEY} order item meta (e.g. Flexible Product Fields),
  * {order_meta:KEY} order meta (e.g. Flexible Checkout Fields), {billing_FIELD} / {shipping_FIELD} address fields.
  * Extend with the `vcap_placeholder_definitions` and `vcap_placeholders` filters.
@@ -46,6 +47,12 @@ final class Placeholders {
 			'redeem_instructions' => __( 'How to redeem (from the redemption channels)', 'voucher-captain' ),
 			'redemption_terms'  => __( 'Redemption conditions', 'voucher-captain' ),
 			'transferable'      => __( 'Transferability', 'voucher-captain' ),
+			// SET-VC-11: issuer and legal texts (Settings → General → "Issuer and legal texts"; empty = shop details).
+			'issuer'            => __( 'Issuer (name, address, contact)', 'voucher-captain' ),
+			'legal_text'        => __( 'Legal text for PDF and email', 'voucher-captain' ),
+			'terms_url'         => __( 'Terms and conditions link', 'voucher-captain' ),
+			'privacy_url'       => __( 'Privacy policy link', 'voucher-captain' ),
+			'withdrawal_url'    => __( 'Right of withdrawal link', 'voucher-captain' ),
 		);
 		/** Placeholders offered in the PDF designer and the email texts (arg: array of token => label); fill them in vcap_placeholders. */
 		return apply_filters( 'vcap_placeholder_definitions', $defs );
@@ -134,7 +141,7 @@ final class Placeholders {
 			'redeem_instructions' => Channels::instructions( $voucher ),
 			'redemption_terms'  => '' !== $voucher->terms ? $voucher->terms : ProductConfig::terms( $config ),
 			'transferable'      => $voucher->transferable_label(),
-		);
+		) + LegalInfo::placeholders(); // SET-VC-11: issuer and legal texts.
 		/** Values of the placeholders for a voucher (args: array of token => text, Voucher); texts are escaped when printed. */
 		return apply_filters( 'vcap_placeholders', $values, $voucher );
 	}

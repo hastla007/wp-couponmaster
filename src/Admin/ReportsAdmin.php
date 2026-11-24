@@ -304,7 +304,9 @@ final class ReportsAdmin {
 				<label><?php esc_html_e( 'until', 'voucher-captain' ); ?> <input type="date" name="to" value="<?php echo esc_attr( $to ); ?>" /></label>
 				<button class="button"><?php esc_html_e( 'Show', 'voucher-captain' ); ?></button>
 				<a class="button" href="<?php echo esc_url( $csv ); ?>"><?php esc_html_e( 'Export CSV', 'voucher-captain' ); ?></a>
-				<?php if ( \VCAP\DatevExport::configured() ) : ?>
+				<?php if ( ! \VCAP\AccountingExport::show_datev() ) : ?>
+					<?php // SET-VC-20: no DATEV link while the DATEV block is hidden (country profile not DE). ?>
+				<?php elseif ( \VCAP\DatevExport::configured() ) : ?>
 					<a class="button" href="<?php echo esc_url( add_query_arg( 'format', 'datev', $csv ) ); ?>"><?php esc_html_e( 'Export DATEV (EXTF)', 'voucher-captain' ); ?></a>
 				<?php else : ?>
 					<a href="<?php echo esc_url( admin_url( 'admin.php?page=wc-settings&tab=vcap&section=api' ) ); ?>"><?php esc_html_e( 'Set up the DATEV export', 'voucher-captain' ); ?></a>
