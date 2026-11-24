@@ -6618,6 +6618,7 @@ check(
 );
 $GLOBALS['vcap_test_options'] = $ln_saved_opts;
 $GLOBALS['vcap_test_filters'] = $ln_saved_filters;
+check( 'SET-VC-06: a scheduled delivery after the validity date follows the expiry behaviour (grace period / never deliver, "expires" refuses as before)', str_contains( (string) file_get_contents( VCAP_PATH . 'src/Delivery.php' ), 'if ( $voucher->is_expired() ) { // SET-VC-06' ) );
 // SET-VC-06: expiry behaviour as a setting ("expires" = 1.2.0, grace period, never expires) and the extension limit
 // for staff; filters vcap_expiry_behaviour, vcap_expiry_grace_days, vcap_expiry_staff_extension_days win.
 echo "SET-VC-06 expiry behaviour\n";
