@@ -42,7 +42,7 @@ defined( 'ABSPATH' ) || exit;
  */
 final class ReviewSource {
 	/** 1.1.0: recipient() also answers `locale` (additive). */
-	public const CONTRACT         = '1.1.0';
+	public const CONTRACT         = '1.2.0';
 	public const SOURCE           = 'voucher-captain';
 	public const PRODUCT_META     = '_vcap_review_service';
 	public const EVENT_ELIGIBLE   = 'vcap_review_redemption_eligible';
@@ -244,18 +244,34 @@ final class ReviewSource {
 	}
 
 	/**
-	 * The eligible reference of a voucher, '' when none is eligible (any more).
+	 * The eligible (open) reference of a voucher: the oldest one that is still eligible, '' when none is (any more –
+	 * never recorded, revoked, unknown voucher). Contract method since 1.0.0, documented since review-source contract
+	 * 1.2.0. In first-only mode there is at most one.
 	 *
+	 * @since 1.2.0
 	 * @param int $voucher_id Voucher id.
 	 */
 	public function open_reference( int $voucher_id ): string {
+		return $this->open_references( $voucher_id )[0] ?? '';
+	}
+
+	/**
+	 * All eligible (open) references of a voucher, oldest first; an empty list when none is. For the mode "every
+	 * redemption counts" (vcap_review_first_redemption_only false), where a voucher can have several.
+	 *
+	 * @since 1.3.0 (review-source contract 1.2.0)
+	 * @param int $voucher_id Voucher id.
+	 * @return string[]
+	 */
+	public function open_references( int $voucher_id ): array {
+		$open = array();
 		foreach ( (array) get_option( self::INDEX_PREFIX . $voucher_id, array() ) as $reference ) {
 			$record = self::record( (string) $reference );
 			if ( $record && 'eligible' === $record['state'] ) {
-				return (string) $reference;
+				$open[] = (string) $reference;
 			}
 		}
-		return '';
+		return $open;
 	}
 
 	/**

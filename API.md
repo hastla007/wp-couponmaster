@@ -508,7 +508,7 @@ Events (after the COMMIT, once per reference and event):
   eligible is revoked; revoked is final. With `erased`, `deleted` and `no_recipient` the reference is also unlinked
   from the voucher, so no address can be resolved for it any more.
 
-Payload (exactly these keys): `contract` (`1.1.0`; `1.0.0` before the `locale` addition), `event` (`eligible`/`revoked`), `event_id` (`{reference}:{event}`),
+Payload (exactly these keys): `contract` (`1.2.0`; `1.1.0` before `open_references()`, `1.0.0` before the `locale` addition), `event` (`eligible`/`revoked`), `event_id` (`{reference}:{event}`),
 `reference`, `source` (`voucher-captain`), `site_id`, `channel` (`counter`/`external`), `experience_id` (voucher
 product id), `occurred_at` (UTC), `reason`. No code, name, email, amount, till or receipt.
 
@@ -518,6 +518,10 @@ always has the same reference, a repeated event creates no duplicate. Stored as 
 voucher id, product, channel, times; removed on uninstall).
 
 Service methods: `contract()`, `get( $reference )` (current payload or `null`, for reconciliation),
+`open_reference( int $voucher_id ): string` (the voucher's eligible reference – the oldest one still eligible – or
+`''` when none is: never recorded, revoked, unknown voucher; at most one in first-only mode),
+`open_references( int $voucher_id ): string[]` (since contract 1.2.0: all eligible references of the voucher, oldest
+first, `[]` when none – for the mode "every redemption counts", `vcap_review_first_redemption_only` false),
 `recipient( $reference )` → `{reference, email, name, role, locale}` (`role` `recipient`, else `buyer`) or `WP_Error`.
 `locale` (since contract 1.1.0, additive – consumers of 1.0.0 ignore it) is the language for the invitation, in this
 order: the language of the voucher's order when known (WPML/Polylang, `vcap_order_language`, then the filter
