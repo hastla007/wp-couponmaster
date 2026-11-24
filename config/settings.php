@@ -220,7 +220,8 @@ $vcap_settings = array(
 
 	/* ---- Integrations (API) ---- */
 	'vcap_redemption_ttl'            => array( 'type' => 'int', 'default' => 15, 'min' => 1, 'max' => 1440, 'section' => 'api' ),
-	'vcap_redemption_max_failures'   => array( 'type' => 'int', 'default' => 10, 'min' => 0, 'section' => 'api' ),
+	// OD-7 (owner decision 24.11.2026): at least 1 – 0 no longer switches the per-user count off; a stored 0 reads as 1.
+	'vcap_redemption_max_failures'   => array( 'type' => 'int', 'default' => 10, 'min' => 1, 'section' => 'api' ),
 	// SET-VC-31 (1.12 no. 23): invalid codes per 15 minutes across all API callers (brake); floor as above.
 	'vcap_redemption_site_wide_failures' => array( 'type' => 'int', 'default' => 300, 'min' => 50, 'max' => 10000, 'section' => 'api' ),
 	// SET-VC-20: accounting export, country-neutral (block "Accounting export", AccountingExport). The three accounts

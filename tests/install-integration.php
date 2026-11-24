@@ -710,6 +710,18 @@ vcap_uninstall_caps();
 vcap_inst_assert( ! get_role( 'administrator' )->has_cap( 'vcap_manage_vouchers' ) && ! get_role( 'editor' )->has_cap( 'vcap_manage_vouchers' ) && ! get_role( 'shop_manager' )->has_cap( 'vcap_scan_tickets' ), 'SET-VC-21: uninstall removes the rights from every role' );
 VCAP\Install::add_caps();
 vcap_inst_assert( get_role( 'shop_manager' )->has_cap( 'vcap_increase_balance' ) && get_role( VCAP\Install::CASHIER_ROLE )->has_cap( 'vcap_scan_tickets' ), 'SET-VC-21: a new installation gives the default rights again' );
+// OD-6: an uninstall that keeps the data keeps the rights and the saved table (Install::resume() undoes the rest).
+$od6_delete = get_option( 'vcap_delete_on_uninstall', 'no' );
+update_option( 'vcap_delete_on_uninstall', 'no' );
+VCAP\Admin\RoleCaps::apply( array( 'editor' => array( 'vcap_manage_vouchers' => '1' ) ), wp_roles()->role_objects );
+update_option( VCAP\Admin\RoleCaps::CUSTOMISED_OPTION, 'yes' );
+$od6_opted = vcap_uninstall_site();
+vcap_inst_assert( false === $od6_opted && get_role( 'editor' )->has_cap( 'vcap_manage_vouchers' ) && get_role( 'administrator' )->has_cap( 'vcap_increase_balance' ) && 'yes' === get_option( VCAP\Admin\RoleCaps::CUSTOMISED_OPTION ), 'OD-6: an uninstall that keeps the data keeps the role rights and the saved "Rights per role" table' );
+VCAP\Install::resume();
+get_role( 'editor' )->remove_cap( 'vcap_manage_vouchers' );
+delete_option( VCAP\Admin\RoleCaps::CUSTOMISED_OPTION );
+update_option( 'vcap_delete_on_uninstall', $od6_delete );
+VCAP\Install::add_caps();
 
 // AP-W1-2 / AP-Q2-7: an outdated theme copy of a voucher template (no @version, e.g. without the check-in key)
 // is reported in Site Health; a current copy is not.

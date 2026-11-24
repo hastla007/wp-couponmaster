@@ -615,7 +615,7 @@ final class Settings {
 					'title'             => __( 'Invalid code attempts', 'voucher-captain' ),
 					'type'              => 'number',
 					'custom_attributes' => array( 'step' => 1 ),
-					'desc_tip'          => __( 'Number of invalid codes a user may enter within 15 minutes before further attempts are blocked. 0 = no limit.', 'voucher-captain' ),
+					'desc_tip'          => __( 'Number of invalid codes a user may enter within 15 minutes before further attempts are blocked (default 10, at least 1).', 'voucher-captain' ),
 				)
 			),
 			SettingsRegistry::field(
@@ -927,7 +927,7 @@ final class Settings {
 					'type'    => 'multiselect',
 					'class'   => 'wc-enhanced-select',
 					'options' => Coupons\Settlement::restore_choices(),
-					'desc'    => __( 'Balances charged by an order are booked back (if "Restore balance on cancellation" is on) and reservations released when it reaches one of these statuses (default: all three). Empty = all three.', 'voucher-captain' ) . $note,
+					'desc'    => __( 'Balances charged by an order are booked back (if "Restore balance on cancellation" is on) and reservations released when it reaches one of these statuses (default: Cancelled, Refunded, Failed). Any order status except the paid ones can be chosen; empty = the default.', 'voucher-captain' ) . $note,
 				)
 			),
 			array( 'type' => 'sectionend', 'id' => 'vcap_refund_rules' ),

@@ -3791,7 +3791,7 @@ check( 'SET-VC-01: Settings::get() returns a saved value unchanged (also one out
 unset( $GLOBALS['vcap_test_options']['vcap_delivery_hour'] );
 // Fields: every option field of a core section is registered for that section, with the register's default and bounds.
 if ( ! function_exists( 'wc_get_order_statuses' ) ) {
-	function wc_get_order_statuses() { return array( 'wc-processing' => 'Processing', 'wc-completed' => 'Completed' ); }
+	function wc_get_order_statuses() { return apply_filters( 'wc_order_statuses', array( 'wc-processing' => 'Processing', 'wc-completed' => 'Completed' ) ); } // phpcs:ignore
 }
 $sr_settings = new VCAP\Settings();
 add_filter( 'vcap_settings_partner_active', static fn() => true ); // SET-VC-33: partner rules are shown while the partner is active.
@@ -4061,6 +4061,20 @@ $GLOBALS['vcap_test_options']['vcap_redemption_site_wide_failures'] = '600';
 $s31_tmf->invoke( $s31_rs, 5 );
 unset( $GLOBALS['vcap_test_options']['vcap_redemption_site_wide_failures'], $GLOBALS['vcap_test_filters']['vcap_redemption_site_wide_failures'], $GLOBALS['vcap_test_filters']['vcap_rate_limit_redemption'], $GLOBALS['vcap_test_filters']['vcap_rate_limit_code'] );
 check( 'SET-VC-31: redemption API – the site-wide brake follows the setting (300 by default, 20 stored reads as the floor 50, 600) and filter vcap_redemption_site_wide_failures gets it', false === $s31_r1 && array( 300, 50, 600 ) === $s31_seen );
+// OD-7: invalid code attempts per user at least 1 – saving 0 stores 1, a stored 0 (earlier versions, import) reads as 1.
+$od7_max  = new ReflectionMethod( VCAP\API\V1\RedemptionService::class, 'max_failures' );
+$od7_read = array( $od7_max->invoke( $s31_rs ) );
+$GLOBALS['vcap_test_options']['vcap_redemption_max_failures'] = '0';
+$od7_read[] = $od7_max->invoke( $s31_rs );
+$GLOBALS['vcap_test_options']['vcap_redemption_max_failures'] = '25';
+$od7_read[] = $od7_max->invoke( $s31_rs );
+unset( $GLOBALS['vcap_test_options']['vcap_redemption_max_failures'] );
+$od7_help = (string) ( array_values( array_filter( ( new VCAP\Settings() )->fields( 'api' ), static fn( $f ) => 'vcap_redemption_max_failures' === ( $f['id'] ?? '' ) ) )[0]['desc_tip'] ?? '' );
+check(
+	'OD-7: "Invalid code attempts" has the floor 1 – saving 0 stores 1, a stored 0 reads as 1 (10 by default, 25 set); the help text names the floor instead of "0 = no limit"',
+	1 === $s31_floor( 'vcap_redemption_max_failures' ) && '1' === $s31_san( '0', 'vcap_redemption_max_failures' ) && array( 10, 1, 25 ) === $od7_read
+		&& str_contains( $od7_help, 'at least 1' ) && ! str_contains( $od7_help, '0 = no limit' )
+);
 $s31_p = array( VCAP\PersonalVoucher::link_lifetime(), VCAP\PersonalVoucher::send_per_hour(), VCAP\PersonalVoucher::validity_sentence() );
 $GLOBALS['vcap_test_options']['vcap_email_confirm_link_hours'] = '24';
 $GLOBALS['vcap_test_options']['vcap_email_confirm_per_hour']   = '0';
@@ -4314,17 +4328,19 @@ $rc_kept = ! $GLOBALS['vcap_test_roles']['shop_manager']->has_cap( 'vcap_increas
 delete_option( VCAP\Admin\RoleCaps::CUSTOMISED_OPTION );
 VCAP\Install::add_caps();
 check( 'SET-VC-21: an upgrade gives administrator and shop manager the rights; once the table was saved it only ensures the administrator\'s and keeps the saved assignment; the cashier role gets the scanner right back after an uninstall', $rc_default && $rc_kept && $GLOBALS['vcap_test_roles']['vcap_cashier']->has_cap( 'vcap_scan_tickets' ) );
-// Uninstall: the rights go from every role (also roles the table gave them), on every uninstall.
+// Uninstall: the rights go from every role (also roles the table gave them), only together with the data (OD-6).
 $rc_reset();
 $GLOBALS['vcap_test_roles']['editor']->add_cap( 'vcap_manage_vouchers' );
 VCAP\Admin\RoleCaps::remove_all( $GLOBALS['vcap_test_roles'] );
 $rc_left = array_filter( $GLOBALS['vcap_test_roles'], static fn( $r ) => array() !== array_intersect( $rc_all, array_keys( $r->capabilities ) ) );
 $rc_un   = (string) file_get_contents( VCAP_PATH . 'uninstall.php' );
 check(
-	'SET-VC-21: uninstall removes the three rights from every role and forgets the saved table, on every uninstall (also when the data is kept)',
+	'SET-VC-21 / OD-6: uninstall with data deletion removes the three rights from every role and forgets the saved table; when the data is kept, rights and table stay',
 	array() === $rc_left && $GLOBALS['vcap_test_roles']['administrator']->has_cap( 'manage_options' )
 		&& str_contains( $rc_un, 'VCAP\Admin\RoleCaps::remove_all( (array) wp_roles()->role_objects );' ) && str_contains( $rc_un, 'delete_option( VCAP\Admin\RoleCaps::CUSTOMISED_OPTION );' )
-		&& strpos( $rc_un, 'vcap_uninstall_caps(); // Every uninstall' ) < strpos( $rc_un, "if ( ! \$delete_data ) {\n\t\treturn false;" )
+		&& false !== strpos( $rc_un, "\tvcap_uninstall_caps(); // OD-6" )
+		&& strpos( $rc_un, "\tvcap_uninstall_caps(); // OD-6" ) > strpos( $rc_un, "if ( ! \$delete_data ) {\n\t\treturn false;" )
+		&& 1 === substr_count( $rc_un, "\tvcap_uninstall_caps();" )
 );
 unset( $GLOBALS['vcap_test_roles'] );
 
@@ -6428,6 +6444,25 @@ add_filter( 'vcap_balance_deduct_statuses', static function ( $s ) use ( &$v05_s
 add_filter( 'vcap_balance_restore_statuses', static function ( $s ) use ( &$v05_seen7 ) { $v05_seen7[] = $s; return array( 'failed' ); } );
 $v05_f7 = array( VCAP\Coupons\Settlement::deduct_statuses(), VCAP\Coupons\Settlement::restore_statuses() );
 check( 'SET-VC-05: no. 7 statuses – filters vcap_balance_deduct_statuses and vcap_balance_restore_statuses get the setting and win', array( array( 'completed' ), array( 'cancelled' ) ) === $v05_seen7 && array( array( 'shipped' ), array( 'failed' ) ) === $v05_f7 );
+// OD-8: book back at any registered status except the paid ones (custom statuses too); the default stays the three.
+$GLOBALS['vcap_test_filters'] = $v05_saved_filters;
+add_filter( 'wc_order_statuses', static fn( $s ) => $s + array( 'wc-pending' => 'Pending payment', 'wc-on-hold' => 'On hold', 'wc-cancelled' => 'Cancelled', 'wc-refunded' => 'Refunded', 'wc-failed' => 'Failed', 'wc-awaiting-return' => 'Awaiting return', 'wc-paid-later' => 'Paid later' ) );
+add_filter( 'woocommerce_order_is_paid_statuses', static fn( $s ) => array_merge( $s, array( 'paid-later' ) ) );
+$od8_choices = VCAP\Coupons\Settlement::restore_choices();
+$GLOBALS['vcap_test_options']['vcap_balance_restore_statuses'] = array( 'wc-on-hold', 'awaiting-return', 'processing', 'paid-later', 'nonexistent' );
+$od8_set = VCAP\Coupons\Settlement::restore_statuses();
+$GLOBALS['vcap_test_options']['vcap_balance_restore_statuses'] = array( 'completed' );
+$od8_paid = VCAP\Coupons\Settlement::restore_statuses();
+unset( $GLOBALS['vcap_test_options']['vcap_balance_restore_statuses'] );
+$od8_def = VCAP\Coupons\Settlement::restore_statuses();
+$od8_opt = array_values( array_filter( ( new VCAP\Settings() )->fields( 'redemption' ), static fn( $f ) => VCAP\Coupons\Settlement::RESTORE_OPTION === ( $f['id'] ?? '' ) ) )[0]['options'] ?? array();
+check(
+	'OD-8: book-back statuses – every registered order status except the paid ones can be chosen (pending, on-hold, custom statuses; not processing/completed/custom paid); a paid or unknown stored status is dropped; empty stays cancelled/refunded/failed; the field offers the same list',
+	array( 'pending', 'on-hold', 'cancelled', 'refunded', 'failed', 'awaiting-return' ) === array_keys( $od8_choices ) && 'Awaiting return' === $od8_choices['awaiting-return']
+		&& array( 'on-hold', 'awaiting-return' ) === $od8_set && array( 'cancelled', 'refunded', 'failed' ) === $od8_paid && array( 'cancelled', 'refunded', 'failed' ) === $od8_def
+		&& array( 'cancelled', 'refunded', 'failed' ) === VCAP\Settings::defaults()['vcap_balance_restore_statuses'] && array_keys( $od8_choices ) === array_keys( (array) $od8_opt ),
+	wp_json_encode( array( $od8_choices, $od8_set, $od8_paid, $od8_def ) )
+);
 check( 'SET-VC-05: TAX.md section 5 describes the refund and cancellation settings (descriptive, to be checked)', str_contains( $v05_src( 'TAX.md' ), '### 5.3 Einstellungen „Erstattung & Storno“ (SET-VC-05) – zu prüfen' ) );
 $GLOBALS['vcap_test_filters'] = $v05_saved_filters;
 $GLOBALS['vcap_test_options'] = $v05_saved_opts;
