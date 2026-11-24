@@ -711,6 +711,11 @@ mark "Legal check pending" until `checked` is set for that profile.
 - Admin: block "Country profile" at the top of *Settings → Vouchers → General* and the first step of the setup
   checklist; preview with one checkbox per value, *Apply ticked values* / *Cancel*. Actions `vcap_country_profile_preview`,
   `vcap_country_profile_apply`, `vcap_country_profile_cancel` (admin-post, `manage_woocommerce`, own nonce).
+- `CountryProfiles::current()` – the profile applied last, else the one of the shop's base country;
+  `CountryProfiles::retention_hint( ?$id )` (SET-VC-09) – the hint on the retention of bookkeeping records shown at
+  *Delete data on uninstall*, from the profile key `retention_hint`: `de` (§ 147 AO, § 257 HGB), `at` (§ 132 BAO) – both
+  with the mark "Legal check pending" while the profile is not checked –, `neutral` ("Accounting records are subject to
+  statutory retention periods.", CH, EU, OTHER); a profile added by the filter may give its own text.
 
 ## Extension points for add-ons (public API since 1.2.0)
 

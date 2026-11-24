@@ -1,0 +1,27 @@
+{
+	"Retention periods for bookkeeping records in Germany: 8 or 10 years (§ 147 AO, § 257 HGB).": {
+		"du": "Aufbewahrungsfristen für Buchführungsunterlagen in Deutschland: 8 oder 10 Jahre (§ 147 AO, § 257 HGB).",
+		"sie": "Aufbewahrungsfristen für Buchführungsunterlagen in Deutschland: 8 oder 10 Jahre (§ 147 AO, § 257 HGB).",
+		"at": "Aufbewahrungsfristen für Buchführungsunterlagen in Deutschland: 8 oder 10 Jahre (§ 147 AO, § 257 HGB)."
+	},
+	"Retention period for bookkeeping records in Austria: 7 years (§ 132 BAO).": {
+		"du": "Aufbewahrungsfrist für Buchführungsunterlagen in Österreich: 7 Jahre (§ 132 BAO).",
+		"sie": "Aufbewahrungsfrist für Buchführungsunterlagen in Österreich: 7 Jahre (§ 132 BAO).",
+		"at": "Aufbewahrungsfrist für Buchführungsunterlagen in Österreich: 7 Jahre (§ 132 BAO)."
+	},
+	"Accounting records are subject to statutory retention periods.": {
+		"du": "Buchungsunterlagen unterliegen gesetzlichen Aufbewahrungsfristen.",
+		"sie": "Buchungsunterlagen unterliegen gesetzlichen Aufbewahrungsfristen.",
+		"at": "Buchungsunterlagen unterliegen gesetzlichen Aufbewahrungsfristen."
+	},
+	"The journal is part of your bookkeeping records.": {
+		"du": "Das Journal gehört zu deinen Buchführungsunterlagen.",
+		"sie": "Das Journal gehört zu Ihren Buchführungsunterlagen.",
+		"at": "Das Journal gehört zu Ihren Buchführungsunterlagen."
+	},
+	"Export it before deleting the plugin.": {
+		"du": "Exportiere es, bevor du das Plugin löschst.",
+		"sie": "Exportieren Sie es, bevor Sie das Plugin löschen.",
+		"at": "Exportieren Sie es, bevor Sie das Plugin löschen."
+	}
+}

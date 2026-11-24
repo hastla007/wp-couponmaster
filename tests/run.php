@@ -5965,6 +5965,71 @@ check(
 );
 $GLOBALS['vcap_test_options'] = $a20_saved;
 VCAP\Csv::reset();
+// SET-VC-09: the retention hint of "Delete data on uninstall" comes from the country profile, no longer fixed DE/AT.
+echo "SET-VC-09 retention hint from the country profile\n";
+$vc09_saved = $GLOBALS['vcap_test_options'];
+$vc09_hint  = static function ( string $base, ?string $applied = null ): string {
+	$GLOBALS['vcap_test_options'] = array( 'woocommerce_default_country' => $base );
+	if ( null !== $applied ) {
+		$GLOBALS['vcap_test_options'][ VCAP\CountryProfiles::APPLIED_OPTION ] = array( 'id' => $applied, 'time' => time(), 'user' => 1 );
+	}
+	VCAP\CountryProfiles::reset();
+	return VCAP\CountryProfiles::retention_hint();
+};
+$vc09_cfg = ( static fn() => include VCAP_PATH . 'config/country-profiles.php' )();
+$vc09     = array(
+	'de'    => $vc09_hint( 'DE:BE' ),
+	'at'    => $vc09_hint( 'AT' ),
+	'ch'    => $vc09_hint( 'CH' ),
+	'fr'    => $vc09_hint( 'FR' ),
+	'us'    => $vc09_hint( 'US:CA' ),
+	'none'  => $vc09_hint( '' ),
+	'de_ch' => $vc09_hint( 'DE:BE', 'CH' ),
+	'ch_at' => $vc09_hint( 'CH', 'AT' ),
+);
+$vc09_neutral = 'Accounting records are subject to statutory retention periods.';
+check(
+	'SET-VC-09: config/country-profiles.php gives each profile a retention_hint – DE and AT their paragraphs, CH, EU and OTHER the neutral text',
+	array( 'DE' => 'de', 'AT' => 'at', 'CH' => 'neutral', 'EU' => 'neutral', 'OTHER' => 'neutral' ) === array_map( static fn( $p ) => $p['retention_hint'] ?? null, $vc09_cfg ),
+	wp_json_encode( array_map( static fn( $p ) => $p['retention_hint'] ?? null, $vc09_cfg ) )
+);
+check(
+	'SET-VC-09: without an applied profile the shop\'s base country decides – DE names § 147 AO and § 257 HGB, AT § 132 BAO, both marked "Legal check pending"; CH, an EU country, other countries and no country get the neutral sentence without any paragraph',
+	str_contains( $vc09['de'], '§ 147 AO, § 257 HGB' ) && str_ends_with( $vc09['de'], '(Legal check pending)' ) && ! str_contains( $vc09['de'], 'BAO' )
+		&& str_contains( $vc09['at'], '§ 132 BAO' ) && str_ends_with( $vc09['at'], '(Legal check pending)' ) && ! str_contains( $vc09['at'], 'HGB' )
+		&& $vc09_neutral === $vc09['ch'] && $vc09_neutral === $vc09['fr'] && $vc09_neutral === $vc09['us'] && $vc09_neutral === $vc09['none'],
+	wp_json_encode( $vc09 )
+);
+check(
+	'SET-VC-09: the applied profile (option vcap_country_profile) wins over the base country – a German shop that applied CH sees the neutral text, a Swiss shop that applied AT the Austrian one',
+	$vc09_neutral === $vc09['de_ch'] && str_contains( $vc09['ch_at'], '§ 132 BAO' ),
+	wp_json_encode( $vc09 )
+);
+$vc09_hint( 'CH' );
+$vc09_desc_ch = VCAP\Settings::delete_on_uninstall_description();
+$vc09_hint( 'DE:BE' );
+$vc09_desc_de = VCAP\Settings::delete_on_uninstall_description();
+$GLOBALS['vcap_test_filters']['vcap_country_profiles'] = array(
+	array(
+		static function ( $profiles ) {
+			$profiles['CH']['retention_hint'] = 'Aufbewahrung nach Art. 958f OR prüfen.';
+			$profiles['CH']['checked']        = true;
+			return $profiles;
+		},
+		1,
+	),
+);
+$vc09_own = $vc09_hint( 'CH' );
+unset( $GLOBALS['vcap_test_filters']['vcap_country_profiles'] );
+check(
+	'SET-VC-09: "Delete data on uninstall" – a CH shop sees no German or Austrian paragraph (no §), a DE shop the German one; the journal export link stays; a filter may give a profile its own text (checked: no mark)',
+	! str_contains( $vc09_desc_ch, '§' ) && str_contains( $vc09_desc_ch, $vc09_neutral ) && str_contains( $vc09_desc_ch, 'Export it before deleting the plugin.' ) && str_contains( $vc09_desc_ch, 'view=journal' )
+		&& str_contains( $vc09_desc_de, '§ 147 AO' ) && ! str_contains( $vc09_desc_de, '§ 132 BAO' )
+		&& 'Aufbewahrung nach Art. 958f OR prüfen.' === $vc09_own,
+	$vc09_desc_ch . ' | ' . $vc09_own
+);
+$GLOBALS['vcap_test_options'] = $vc09_saved;
+VCAP\CountryProfiles::reset();
 
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );

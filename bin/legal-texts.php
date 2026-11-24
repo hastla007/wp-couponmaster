@@ -87,7 +87,7 @@ $md        .= "\n## 3. Vorschläge der Länderprofile (`config/country-profiles.
 $md        .= "Ein Länderprofil (Einstellungen → Gutscheine → Allgemein → „Country profile“) ändert nichts von selbst: Es zeigt\n";
 $md        .= "„aktuell → vorgeschlagen“, übernommen wird nur, was der Admin abhakt. Werte mit rechtlichem Gewicht tragen den\n";
 $md        .= "Hinweis „Rechtsprüfung“, bis die Prüfung im Profil vermerkt ist (`checked`). EU und OTHER sind neutral.\n\n";
-$md        .= "| Profil | Gesetzliche Gültigkeit (Zeile) | Gültigkeit ohne eigene Angabe | Belegnummer an der Kasse | Empfängerdaten anonymisieren nach | Rechtlich geprüft |\n|---|---|---|---|---|---|\n";
+$md        .= "| Profil | Gesetzliche Gültigkeit (Zeile) | Gültigkeit ohne eigene Angabe | Belegnummer an der Kasse | Empfängerdaten anonymisieren nach | Hinweis Aufbewahrung Buchhaltung (SET-VC-09) | Rechtlich geprüft |\n|---|---|---|---|---|---|---|\n";
 foreach ( (array) $profiles as $id => $p ) {
 	$country  = (string) ( $p['country'] ?? '' );
 	$settings = (array) ( $p['settings'] ?? array() );
@@ -112,7 +112,15 @@ foreach ( (array) $profiles as $id => $p ) {
 	}
 	$retention = $settings['vcap_retention_days'] ?? null;
 	$retention = null === $retention ? '– (bleibt)' : (int) $retention . ' Tage nach Ablauf/Einlösung';
-	$md       .= '| ' . $cell( (string) $id ) . ' | ' . $cell( $row ) . ' | ' . $cell( $rule_s ) . ' | ' . $cell( $receipt ) . ' | ' . $cell( $retention ) . ' | ' . ( empty( $p['checked'] ) ? '☐ nicht geprüft' : '☑' ) . " |\n";
+	// SET-VC-09: hint at "Delete data on uninstall" (texts in VCAP\CountryProfiles::retention_hint()).
+	$hint      = (string) ( $p['retention_hint'] ?? '' );
+	$hint      = array(
+		'de'      => '8 bzw. 10 Jahre (§ 147 AO, § 257 HGB)',
+		'at'      => '7 Jahre (§ 132 BAO)',
+		'neutral' => 'neutral: „Buchungsunterlagen unterliegen gesetzlichen Aufbewahrungsfristen.“ (kein Paragraf)',
+		''        => 'neutral: „Buchungsunterlagen unterliegen gesetzlichen Aufbewahrungsfristen.“ (kein Paragraf)',
+	)[ $hint ] ?? $hint;
+	$md       .= '| ' . $cell( (string) $id ) . ' | ' . $cell( $row ) . ' | ' . $cell( $rule_s ) . ' | ' . $cell( $receipt ) . ' | ' . $cell( $retention ) . ' | ' . $cell( $hint ) . ' | ' . ( empty( $p['checked'] ) ? '☐ nicht geprüft' : '☑' ) . " |\n";
 }
 
 // Section 4: retention periods (privacy settings with legal weight, defaults from the register).

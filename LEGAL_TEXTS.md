@@ -57,13 +57,13 @@ Ein Länderprofil (Einstellungen → Gutscheine → Allgemein → „Country pro
 „aktuell → vorgeschlagen“, übernommen wird nur, was der Admin abhakt. Werte mit rechtlichem Gewicht tragen den
 Hinweis „Rechtsprüfung“, bis die Prüfung im Profil vermerkt ist (`checked`). EU und OTHER sind neutral.
 
-| Profil | Gesetzliche Gültigkeit (Zeile) | Gültigkeit ohne eigene Angabe | Belegnummer an der Kasse | Empfängerdaten anonymisieren nach | Rechtlich geprüft |
-|---|---|---|---|---|---|
-| DE | 3 Jahre zum Jahresende – Quelle: §§ 195, 199 BGB (3 Jahre zum Jahresende) | gesetzlich (Zeile links) | Pflicht (Länderdaten `fiscal_receipt`) | 1095 Tage nach Ablauf/Einlösung | ☐ nicht geprüft |
-| AT | 30 Jahre – Quelle: OGH-Rechtsprechung (30 Jahre) | gesetzlich (Zeile links) | Pflicht (Länderdaten `fiscal_receipt`) | 1095 Tage nach Ablauf/Einlösung | ☐ nicht geprüft |
-| CH | 10 Jahre – Notiz: Art. 127 OR (10 Jahre) | gesetzlich (Zeile links) | – (kein Vorschlag) | 1095 Tage nach Ablauf/Einlösung | ☐ nicht geprüft |
-| EU | – (kein Vorschlag) | – (bleibt) | – (bleibt) | – (bleibt) | ☐ nicht geprüft |
-| OTHER | – (kein Vorschlag) | – (bleibt) | – (bleibt) | – (bleibt) | ☐ nicht geprüft |
+| Profil | Gesetzliche Gültigkeit (Zeile) | Gültigkeit ohne eigene Angabe | Belegnummer an der Kasse | Empfängerdaten anonymisieren nach | Hinweis Aufbewahrung Buchhaltung (SET-VC-09) | Rechtlich geprüft |
+|---|---|---|---|---|---|---|
+| DE | 3 Jahre zum Jahresende – Quelle: §§ 195, 199 BGB (3 Jahre zum Jahresende) | gesetzlich (Zeile links) | Pflicht (Länderdaten `fiscal_receipt`) | 1095 Tage nach Ablauf/Einlösung | 8 bzw. 10 Jahre (§ 147 AO, § 257 HGB) | ☐ nicht geprüft |
+| AT | 30 Jahre – Quelle: OGH-Rechtsprechung (30 Jahre) | gesetzlich (Zeile links) | Pflicht (Länderdaten `fiscal_receipt`) | 1095 Tage nach Ablauf/Einlösung | 7 Jahre (§ 132 BAO) | ☐ nicht geprüft |
+| CH | 10 Jahre – Notiz: Art. 127 OR (10 Jahre) | gesetzlich (Zeile links) | – (kein Vorschlag) | 1095 Tage nach Ablauf/Einlösung | neutral: „Buchungsunterlagen unterliegen gesetzlichen Aufbewahrungsfristen.“ (kein Paragraf) | ☐ nicht geprüft |
+| EU | – (kein Vorschlag) | – (bleibt) | – (bleibt) | – (bleibt) | neutral: „Buchungsunterlagen unterliegen gesetzlichen Aufbewahrungsfristen.“ (kein Paragraf) | ☐ nicht geprüft |
+| OTHER | – (kein Vorschlag) | – (bleibt) | – (bleibt) | – (bleibt) | neutral: „Buchungsunterlagen unterliegen gesetzlichen Aufbewahrungsfristen.“ (kein Paragraf) | ☐ nicht geprüft |
 
 ## 4. Aufbewahrungsfristen (Einstellungen → Gutscheine → „Privacy & advanced“ → „Retention“)
 

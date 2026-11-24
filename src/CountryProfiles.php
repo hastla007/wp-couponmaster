@@ -43,7 +43,7 @@ final class CountryProfiles {
 	/**
 	 * All profiles (id => profile), checked: unknown settings, secrets and settings that are never exported are left out.
 	 *
-	 * @return array<string, array{country: string, checked: bool, settings: array<string, mixed>, expiry_row: mixed, tax: string, accounting: string, label: string}>
+	 * @return array<string, array{country: string, checked: bool, settings: array<string, mixed>, expiry_row: mixed, tax: string, accounting: string, retention_hint: string, label: string}>
 	 */
 	public static function all(): array {
 		if ( null !== self::$cache ) {
@@ -75,13 +75,15 @@ final class CountryProfiles {
 				}
 			}
 			$out[ $id ] = array(
-				'country'    => Markets::is_country_code( $country ) ? $country : '',
-				'checked'    => ! empty( $profile['checked'] ),
-				'settings'   => $settings,
-				'expiry_row' => $profile['expiry_row'] ?? null,
-				'tax'        => sanitize_key( (string) ( $profile['tax'] ?? '' ) ),
-				'accounting' => sanitize_key( (string) ( $profile['accounting'] ?? '' ) ),
-				'label'      => sanitize_text_field( (string) ( $profile['label'] ?? '' ) ),
+				'country'        => Markets::is_country_code( $country ) ? $country : '',
+				'checked'        => ! empty( $profile['checked'] ),
+				'settings'       => $settings,
+				'expiry_row'     => $profile['expiry_row'] ?? null,
+				'tax'            => sanitize_key( (string) ( $profile['tax'] ?? '' ) ),
+				'accounting'     => sanitize_key( (string) ( $profile['accounting'] ?? '' ) ),
+				// SET-VC-09: a key ('de', 'at', 'neutral') or an own text from the filter; missing = neutral.
+				'retention_hint' => sanitize_text_field( (string) ( $profile['retention_hint'] ?? '' ) ),
+				'label'          => sanitize_text_field( (string) ( $profile['label'] ?? '' ) ),
 			);
 		}
 		self::$cache = $out;
@@ -424,6 +426,38 @@ final class CountryProfiles {
 			);
 		}
 		return $out;
+	}
+
+	/**
+	 * SET-VC-09: the profile that decides country-dependent hints – the profile applied last (option
+	 * "vcap_country_profile"), else the one that fits the shop's base country (for_base_country()).
+	 */
+	public static function current(): string {
+		$applied = self::applied();
+		if ( null !== $applied && null !== self::get( $applied['id'] ) ) {
+			return strtoupper( $applied['id'] );
+		}
+		return self::for_base_country();
+	}
+
+	/**
+	 * SET-VC-09: hint on the retention of bookkeeping records (journal) for a profile (default: current()). DE and AT
+	 * name their paragraphs and carry the mark "Legal check pending" while the profile is not checked; CH, EU, OTHER
+	 * and unknown profiles get the neutral sentence without any paragraph. A filter may give an own text.
+	 */
+	public static function retention_hint( ?string $id = null ): string {
+		$id      = null === $id ? self::current() : strtoupper( $id );
+		$profile = self::get( $id );
+		$key     = null !== $profile ? $profile['retention_hint'] : '';
+		$texts   = array(
+			'de' => __( 'Retention periods for bookkeeping records in Germany: 8 or 10 years (§ 147 AO, § 257 HGB).', 'voucher-captain' ),
+			'at' => __( 'Retention period for bookkeeping records in Austria: 7 years (§ 132 BAO).', 'voucher-captain' ),
+		);
+		if ( '' === $key || 'neutral' === $key ) {
+			return __( 'Accounting records are subject to statutory retention periods.', 'voucher-captain' );
+		}
+		$text = $texts[ $key ] ?? $key;
+		return null !== $profile && ! $profile['checked'] ? $text . ' (' . self::review_mark() . ')' : $text;
 	}
 
 	/**

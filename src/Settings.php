@@ -1549,12 +1549,16 @@ final class Settings {
 
 	/**
 	 * Description of "Delete data on uninstall" (M12-67): what is deleted, what happens to the coupons, the
-	 * retention periods of bookkeeping records and a link to export the complete redemption journal first.
+	 * retention periods of bookkeeping records (SET-VC-09: from the country profile, CountryProfiles::retention_hint())
+	 * and a link to export the complete redemption journal first.
 	 */
 	public static function delete_on_uninstall_description(): string {
 		$text = __( 'Off (default): deleting the plugin keeps all data. On: deleting the plugin removes the voucher tables (including the redemption journal), templates, field groups, promotions, the voucher settings of products, the private PDF folder and all settings. The WooCommerce coupons of the vouchers are moved to the trash (restorable there), other coupons are kept.', 'voucher-captain' )
 			. ' ' . __( 'On a network each site decides for itself. Scheduled background jobs are always removed. This setting is not part of any export of settings.', 'voucher-captain' )
-			. ' ' . __( 'The journal is part of your bookkeeping records: retention periods are 8 or 10 years in Germany (§ 147 AO, § 257 HGB) and 7 years in Austria (§ 132 BAO). Export it before deleting the plugin.', 'voucher-captain' );
+			// SET-VC-09: the retention hint comes from the country profile (applied, else the shop's base country).
+			. ' ' . __( 'The journal is part of your bookkeeping records.', 'voucher-captain' )
+			. ' ' . CountryProfiles::retention_hint()
+			. ' ' . __( 'Export it before deleting the plugin.', 'voucher-captain' );
 		$url = Admin\ReportsAdmin::journal_csv_url( Admin\ReportsAdmin::JOURNAL_START, wp_date( 'Y-m-d' ) );
 		return esc_html( $text ) . ' <a href="' . esc_url( $url ) . '">' . esc_html__( 'Export the complete journal (CSV)', 'voucher-captain' ) . '</a>';
 	}

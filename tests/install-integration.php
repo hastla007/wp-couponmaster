@@ -315,7 +315,19 @@ vcap_uninstall_user_meta();
 wp_cache_delete( $m67_user, 'user_meta' );
 vcap_inst_assert( '' === get_user_meta( $m67_user, VCAP\PersonalVoucher::META_VERIFIED, true ) && '' === get_user_meta( $m67_user, VCAP\PersonalVoucher::META_CHANGED, true ), 'M12-67: uninstall removes _vcap_verified_email and _vcap_email_changed of the users' );
 $m67_desc = VCAP\Settings::delete_on_uninstall_description();
-vcap_inst_assert( str_contains( $m67_desc, '10 years' ) && str_contains( $m67_desc, '7 years' ) && str_contains( $m67_desc, 'moved to the trash' ) && ! str_contains( $m67_desc, 'WooCommerce coupons are kept' ) && str_contains( html_entity_decode( $m67_desc ), 'action=vcap_report_csv&view=journal&from=' . VCAP\Admin\ReportsAdmin::JOURNAL_START ), 'M12-67: the option warns about the retention periods (DE 8/10, AT 7 years), says the voucher coupons go to the trash and links the complete journal export' );
+vcap_inst_assert( str_contains( $m67_desc, esc_html( VCAP\CountryProfiles::retention_hint() ) ) && str_contains( $m67_desc, 'moved to the trash' ) && ! str_contains( $m67_desc, 'WooCommerce coupons are kept' ) && str_contains( html_entity_decode( $m67_desc ), 'action=vcap_report_csv&view=journal&from=' . VCAP\Admin\ReportsAdmin::JOURNAL_START ), 'M12-67: the option warns about the retention periods (SET-VC-09: from the country profile), says the voucher coupons go to the trash and links the complete journal export' );
+// SET-VC-09: a shop based in Switzerland (no profile applied) sees no German or Austrian paragraph.
+$vc09_country = get_option( 'woocommerce_default_country' );
+$vc09_applied = get_option( VCAP\CountryProfiles::APPLIED_OPTION, false );
+delete_option( VCAP\CountryProfiles::APPLIED_OPTION );
+update_option( 'woocommerce_default_country', 'CH' );
+VCAP\CountryProfiles::reset();
+$vc09_desc = VCAP\Settings::delete_on_uninstall_description();
+vcap_inst_assert( str_contains( $vc09_desc, 'Accounting records are subject to statutory retention periods.' ) && ! str_contains( $vc09_desc, '§' ), 'SET-VC-09: a CH shop sees the neutral retention hint without § 147 AO / § 132 BAO' );
+update_option( 'woocommerce_default_country', $vc09_country );
+if ( false !== $vc09_applied ) {
+	update_option( VCAP\CountryProfiles::APPLIED_OPTION, $vc09_applied, false );
+}
 
 // A voucher coupon without its voucher (row deleted, data removed) is never redeemed as an ordinary coupon.
 $u_refused = 0;
