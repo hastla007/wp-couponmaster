@@ -40,57 +40,68 @@ final class DatevExport {
 				'id'    => 'vcap_datev',
 				'desc'  => __( 'Optional: download the redemption journal as a DATEV booking batch (EXTF) under Vouchers → Reports → Redemption journal. Agree the accounts with your tax adviser and have a test import checked before using it.', 'voucher-captain' ),
 			),
-			array(
-				'title'             => __( 'Consultant number', 'voucher-captain' ),
-				'id'                => self::OPTION_CONSULTANT,
-				'type'              => 'text',
-				'default'           => '',
-				'custom_attributes' => array( 'pattern' => '[0-9]{4,7}', 'inputmode' => 'numeric' ),
+			SettingsRegistry::field(
+				self::OPTION_CONSULTANT,
+				array(
+					'title'             => __( 'Consultant number', 'voucher-captain' ),
+					'type'              => 'text',
+					'custom_attributes' => array( 'pattern' => '[0-9]{4,7}', 'inputmode' => 'numeric' ),
+					'desc_tip'          => __( 'DATEV consultant number of your tax adviser (4 to 7 digits). Written into the header of the booking batch.', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'             => __( 'Client number', 'voucher-captain' ),
-				'id'                => self::OPTION_CLIENT,
-				'type'              => 'text',
-				'default'           => '',
-				'custom_attributes' => array( 'pattern' => '[0-9]{1,5}', 'inputmode' => 'numeric' ),
+			SettingsRegistry::field(
+				self::OPTION_CLIENT,
+				array(
+					'title'             => __( 'Client number', 'voucher-captain' ),
+					'type'              => 'text',
+					'custom_attributes' => array( 'pattern' => '[0-9]{1,5}', 'inputmode' => 'numeric' ),
+					'desc_tip'          => __( 'Your DATEV client number at the tax adviser (1 to 5 digits).', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'             => __( 'Start of the financial year (MMDD)', 'voucher-captain' ),
-				'id'                => self::OPTION_FY_START,
-				'type'              => 'text',
-				'default'           => '0101',
-				'custom_attributes' => array( 'pattern' => '[0-9]{4}', 'inputmode' => 'numeric' ),
+			SettingsRegistry::field(
+				self::OPTION_FY_START,
+				array(
+					'title'             => __( 'Start of the financial year (MMDD)', 'voucher-captain' ),
+					'type'              => 'text',
+					'custom_attributes' => array( 'pattern' => '[0-9]{4}', 'inputmode' => 'numeric' ),
+					'desc'              => __( 'Month and day the financial year starts, e.g. 0101 for 1 January or 0701 for 1 July. The export assigns each booking to its financial year; agree it with your tax adviser.', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'             => __( 'Length of ledger accounts', 'voucher-captain' ),
-				'id'                => self::OPTION_LENGTH,
-				'type'              => 'number',
-				'default'           => 4,
-				'custom_attributes' => array( 'min' => 4, 'max' => 9, 'step' => 1 ),
+			SettingsRegistry::field(
+				self::OPTION_LENGTH,
+				array(
+					'title'             => __( 'Length of ledger accounts', 'voucher-captain' ),
+					'type'              => 'number',
+					'custom_attributes' => array( 'step' => 1 ),
+					'desc_tip'          => __( 'Number of digits of your general ledger accounts in DATEV (4 to 9, default 4, e.g. SKR03/SKR04).', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'             => __( 'Voucher liability account', 'voucher-captain' ),
-				'id'                => self::OPTION_LIABILITY,
-				'type'              => 'text',
-				'default'           => '',
-				'custom_attributes' => $account,
-				'desc_tip'          => __( 'Account for the value of sold vouchers still owed to customers (e.g. "other liabilities").', 'voucher-captain' ),
+			SettingsRegistry::field(
+				self::OPTION_LIABILITY,
+				array(
+					'title'             => __( 'Voucher liability account', 'voucher-captain' ),
+					'type'              => 'text',
+					'custom_attributes' => $account,
+					'desc_tip'          => __( 'Account for the value of sold vouchers still owed to customers (e.g. "other liabilities").', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'             => __( 'Clearing account', 'voucher-captain' ),
-				'id'                => self::OPTION_CLEARING,
-				'type'              => 'text',
-				'default'           => '',
-				'custom_attributes' => $account,
-				'desc_tip'          => __( 'Counter account of voucher sales and redemptions (e.g. a clearing account for shop payments).', 'voucher-captain' ),
+			SettingsRegistry::field(
+				self::OPTION_CLEARING,
+				array(
+					'title'             => __( 'Clearing account', 'voucher-captain' ),
+					'type'              => 'text',
+					'custom_attributes' => $account,
+					'desc_tip'          => __( 'Counter account of voucher sales and redemptions (e.g. a clearing account for shop payments).', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'             => __( 'Income account for forfeited value', 'voucher-captain' ),
-				'id'                => self::OPTION_INCOME,
-				'type'              => 'text',
-				'default'           => '',
-				'custom_attributes' => $account,
-				'desc_tip'          => __( 'Counter account of value that is no longer owed: expired vouchers, forfeited remaining value, rounding rests.', 'voucher-captain' ),
+			SettingsRegistry::field(
+				self::OPTION_INCOME,
+				array(
+					'title'             => __( 'Income account for forfeited value', 'voucher-captain' ),
+					'type'              => 'text',
+					'custom_attributes' => $account,
+					'desc_tip'          => __( 'Counter account of value that is no longer owed: expired vouchers, forfeited remaining value, rounding rests.', 'voucher-captain' ),
+				)
 			),
 			array( 'type' => 'sectionend', 'id' => 'vcap_datev' ),
 		);
@@ -107,8 +118,8 @@ final class DatevExport {
 		return array(
 			'consultant' => $digits( self::OPTION_CONSULTANT ),
 			'client'     => $digits( self::OPTION_CLIENT ),
-			'fy_start'   => 4 === strlen( $fy ) ? $fy : '0101',
-			'length'     => max( 4, min( 9, (int) get_option( self::OPTION_LENGTH, 4 ) ) ),
+			'fy_start'   => 4 === strlen( $fy ) ? $fy : (string) SettingsRegistry::default( self::OPTION_FY_START ),
+			'length'     => max( 4, min( 9, (int) get_option( self::OPTION_LENGTH, SettingsRegistry::default( self::OPTION_LENGTH ) ) ) ),
 			'liability'  => $digits( self::OPTION_LIABILITY ),
 			'clearing'   => $digits( self::OPTION_CLEARING ),
 			'income'     => $digits( self::OPTION_INCOME ),

@@ -42,7 +42,15 @@ final class Multilingual {
 			return;
 		}
 		foreach ( self::OPTIONS as $option ) {
-			$value = (string) get_option( $option, '' );
+			$value = get_option( $option, '' );
+			if ( is_array( $value ) ) {
+				// SET-VC-04: the conditions per country are a table; each row's text is one string.
+				foreach ( \VCAP\Markets::terms_rows( $value ) as $row ) {
+					pll_register_string( $option . '_' . $row['country'] . ( '' !== $row['language'] ? '_' . $row['language'] : '' ), $row['text'], self::GROUP, true );
+				}
+				continue;
+			}
+			$value = (string) $value;
 			if ( '' !== trim( $value ) ) {
 				pll_register_string( $option, $value, self::GROUP, true );
 			}

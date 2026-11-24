@@ -1,7 +1,8 @@
 # Steuerliche Behandlung von Gutscheinen – Freigabe-Dossier
 
 **Status:** Entwurf zur Prüfung durch die Steuerberatung – **nicht freigegeben**. Stand: 15.11.2026 (Audit-Gremium,
-TODO.md M12-03 … M12-69); Abschnitte und Fragen neu nummeriert (M12-32).
+TODO.md M12-03 … M12-69); Abschnitte und Fragen neu nummeriert (M12-32); ergänzt 23.11.2026 um Länder außerhalb der
+EU (8.1), Steuerhinweise der Länderprofile (8.2), Zurücksetzen/Import (Abschnitt 1) und `voucher.issue` (3.2) – PV-P3-8.
 **Bezug:** TODO.md, P1 „Steuerliche Zuordnung, Produkttexte und Erstattungsfolgen je Gutscheinart mit Steuerberatung
 freigeben lassen“. Folgepunkte, die von den Antworten abhängen: TODO.md Abschnitt „Entscheidungen Steuer“
 (Steuerstatus prüfen, Mehrzweck nach Steuer verrechnen; Einzweck-Satz/Land an Pass Captain: Abschnitt 4.2) und
@@ -34,7 +35,25 @@ Shops und Erweiterungen können die Zuordnung je Gutschein mit dem Filter `vcap_
 starten mit „an“** (M12-03, `Install::activate_site()` legt die Option nur an, wenn noch keine Schema-Version
 gespeichert ist); bestehende Shops behalten ihre Einstellung (fehlende Option = aus). Nachweis:
 `tests/tax-accounting-integration.php` „M12-03: a new installation starts with …“, „M12-03: an existing shop …“.
-Die Umstellung bestehender Shops ist Frage F17.
+Die Umstellung bestehender Shops ist Frage F17. Das Zurücksetzen der Einstellungen (*Datenschutz & Erweitert*,
+`wp vcap settings reset`) setzt die Option auf den Standard bestehender Shops zurück (Option gelöscht = aus), nie auf den
+Wert einer Neuinstallation, und zeigt die Änderung vorher als „bisher → neu“ mit Hinweis auf die steuerliche Bedeutung
+(PV-P1-3; ob ein Zurücksetzen stattdessen den Wert einer Neuinstallation setzen soll, entscheidet der Inhaber).
+
+**Zurücksetzen, Import und Länderprofil wirken auf diese Einstellung** (PV-P3-8): Sie hat den Wert für
+Neuinstallationen „an“ (Register `config/settings.php`: Standard `no`, `fresh` `yes`, `legal`).
+- *Zurücksetzen* („Privacy & advanced“ → „Export, import and reset settings“ bzw. `wp vcap settings reset`, Abschnitt „Redemption &
+  balance“ oder alle) setzt sie auf den Standard bestehender Shops (**„aus“**, Option gelöscht) – nie auf den Wert
+  einer Neuinstallation (PV-P1-3). Ein Shop, der sie gespeichert „an“ hat (auch eine Neuinstallation ab 1.3.0),
+  wechselt damit auf „aus“; die Vorschau des Zurücksetzens zeigt das vorher als Änderung mit steuerlichem Gewicht,
+  erst die Bestätigung führt es aus. Vorher wird automatisch eine Sicherung angelegt; die Änderung steht im
+  Änderungsprotokoll.
+- *Import* einer Einstellungsdatei übernimmt den Wert des Quell-Shops (sie wird exportiert); ein Shop kann so von
+  „aus“ auf „an“ oder umgekehrt wechseln.
+- *Länderprofile* ändern sie nicht (sie geben nur einen Hinweis, Abschnitt 8.2).
+
+Ob und wie vor einem solchen Wechsel verkaufte und danach eingelöste Gutscheine zu behandeln sind, ist **zu prüfen**
+(Frage F17, ergänzt um Zurücksetzen und Import); das Plugin korrigiert nichts rückwirkend.
 
 **Steuerstatus des Gutscheinprodukts:** Steuerstatus und Steuerklasse des *Gutscheinprodukts* (WooCommerce-Felder
 „Steuerstatus“, „Steuerklasse“) bestimmen, ob beim Verkauf USt berechnet wird. Das Plugin prüft sie gegen die
@@ -132,6 +151,11 @@ sind die Berichte unter „Gutscheine → Berichte“.
 - **Gutschein-Anfragen / Firmenbestellungen** (Captain Suite, D5): Beim Bestätigen wählt der Verwalter „verkauft“ oder
   „kostenlos“; das Kennzeichen geht wie in 3.1 an die Steuerlogik. Wird eine Anfrage an die Firmenbestellung eines
   Add-ons übergeben, stellt das Add-on Rechnung und Gutscheine aus – der Kern gibt dann nichts aus.
+- **Ausgabe über die Gutschein-Befehle** (`vcap_command_issue()`, Befehl `voucher.issue`, API.md → „Voucher
+  commands“): Der Befehl gibt einen Gutschein ohne Bestellung aus und übergibt ihn immer als **nicht verkauft**
+  (`paid => false`; ein eigenes `paid` lehnt der Befehl ab). Steuerlich gilt damit Zeile 2.8 (`discount`,
+  Preisnachlass; im Verbindlichkeitenbericht „unentgeltlich“). Ein verkaufter Gutschein (Zeile 2.9) kann über den
+  Befehl nicht ausgegeben werden. Ob das für die Anwendungsfälle der Workflows passt, ist mit Frage F4 **zu prüfen**.
 - **Einlösungen über die Gutschein-Befehle** (`vcap_command_redeem()`, API.md → „Voucher commands“, z. B. aus einer
   Workflow-Automatisierung) laufen über die Einlöse-Schnittstelle (`reserve`/`commit`, wie eine externe Einlösung)
   und erscheinen im Journal wie diese.
@@ -384,7 +408,7 @@ ihm abgebucht wird. Spezifikation und Nachweis (`tests/tax-integration.php`, Abs
 
 Offene Fragen dazu: F14, F15, F16 (Abschnitt 11).
 
-## 8. EU-weite Steuerfälle (Zielmarkt EU‑27)
+## 8. EU-weite Steuerfälle (Zielmarkt EU‑27; CH, LI, GB, NO in 8.1)
 
 Gilt für jedes Land, an das der Shop verkauft (WooCommerce „Verkaufsorte“). Voucher Captain speichert **keine
 Steuersätze**; Sätze, OSS-Länder und Leistungsort kommen aus den WooCommerce-Steuereinstellungen. Länderdaten
@@ -405,6 +429,50 @@ Prüfung je Land durch die Steuerberatung (je Zeile ankreuzen):
 | DE | ☐ | ☐ | ☐ | |
 | AT | ☐ | ☐ | ☐ | |
 | weitere Verkaufsländer: | ☐ | ☐ | ☐ | |
+
+### 8.1 Länder außerhalb der EU: Schweiz, Liechtenstein, Vereinigtes Königreich, Norwegen (PV-P3-8)
+
+Seit SET-VC-03 stehen CH, LI, GB und NO in den Länderdaten (`config/markets.php`: Währung CHF, CHF, GBP, NOK;
+`eu` = false). Für sie gilt die EU-Gutscheinrichtlinie (EU) 2016/1065 nicht unmittelbar; welches Gutscheinrecht und
+welche Einordnung (Mehrzweck/Einzweck/Preisnachlass) dort gilt, ist **je Land zu prüfen**. Das Plugin trifft dazu
+keine eigene Annahme:
+
+| Thema | Verhalten des Plugins (alle vier Länder gleich) |
+|---|---|
+| Einordnung | wie in der EU je Produkt (Abschnitt 1–2, Einstellung „Automatisch“); abweichende Länderregeln nur über `vcap_voucher_tax_treatment` |
+| Steuersätze, Steuerpflicht | ausschließlich aus WooCommerce (WooCommerce → Einstellungen → Steuer); das Plugin speichert keine Sätze |
+| OSS | betrifft diese Länder nicht; ob und wie der Shop dort steuerlich registriert sein muss, ist zu prüfen |
+| Einstellung „Mehrzweckgutscheine als Zahlung“ | gilt unverändert (Abschnitt 1, 4.1); ob sie für das Land passt, ist zu prüfen |
+| Gesetzliche Gültigkeit | keine geprüfte Regel (`voucher_expiry` = null, „nicht geprüft“); das Länderprofil CH schlägt 10 Jahre (Art. 127 OR) vor, markiert „Rechtsprüfung“ (LEGAL_TEXTS.md Abschnitt 3) |
+| Belegnummer an der Kasse | keine Pflicht hinterlegt (`fiscal_receipt` = false bedeutet „nicht geprüft“, nicht „keine Pflicht“) |
+| Länderprofil | CH: eigenes Profil mit Steuerhinweis `ch`; LI, GB, NO: neutrales Profil OTHER (Abschnitt 8.2) |
+
+Prüfung je Land durch die Steuerberatung:
+
+| Land | Satz/Steuerpflicht in WooCommerce eingerichtet | Einordnung Mehrzweck/Einzweck bestätigt | Verfall/Erstattung bestätigt | Besonderheiten (z. B. Zugehörigkeit LI zum Steuergebiet, Gutscheinregeln GB) – zu prüfen |
+|---|---|---|---|---|
+| CH | ☐ | ☐ | ☐ | |
+| LI | ☐ | ☐ | ☐ | |
+| GB | ☐ | ☐ | ☐ | |
+| NO | ☐ | ☐ | ☐ | |
+
+### 8.2 Steuerhinweise der Länderprofile (SET-VC-02)
+
+Die Länderprofile (Einstellungen → Gutscheine → Allgemein → „Country profile“, `config/country-profiles.php`)
+zeigen in der Vorschau einen Hinweis „Default tax type“. Er **ändert keine Einstellung** – weder die Einordnung der
+Produkte noch `vcap_mpv_after_tax` noch Steuerklassen. Keiner der Hinweise ist steuerlich geprüft (`checked` =
+false in allen Profilen, Hinweis „Rechtsprüfung“); der Wortlaut steht in `src/CountryProfiles.php`
+(`CountryProfiles::hints()`).
+
+| Profil | Schlüssel `tax` | Inhalt des Hinweises (sinngemäß) | Steuerlich geprüft |
+|---|---|---|---|
+| DE | `de` | Mehrzweckgutscheine bei Einlösung, Einzweckgutscheine beim Verkauf versteuert (§ 3 Abs. 13–15 UStG); üblich: Einstellung „Mehrzweckgutscheine als Zahlung“ an, Geschenkkarten mit Steuerstatus „Keiner“; Verweis auf TAX.md und Steuerberatung | ☐ |
+| AT | `at` | EU-Gutscheinregeln; gleiche übliche Einrichtung wie DE; Verweis auf TAX.md und Steuerberatung | ☐ |
+| CH | `ch` | Schweizer MWST-Recht, nicht die EU-Gutscheinregeln; Behandlung von Wertgutscheinen und die Einstellung von der Steuerberatung prüfen lassen | ☐ |
+| EU | `eu` | EU-Gutscheinrichtlinie (EU) 2016/1065; Sätze aus WooCommerce; Verweis auf TAX.md und Steuerberatung | ☐ |
+| OTHER | `other` | außerhalb der EU nach dem Recht des Landes; von der Steuerberatung prüfen lassen; Sätze aus WooCommerce | ☐ |
+
+Ob diese Hinweise fachlich zutreffen und so formuliert bleiben können, ist mit Frage F12 **zu prüfen**.
 
 ## 9. Texte, die Shop und Kunden sehen
 
@@ -467,7 +535,7 @@ des Codes dabei.
 | F14 | 7.3: Ist ein in AT verkaufter **Einzweck**gutschein bei Einlösung durch einen DE-Kunden (anderer Leistungsort) als Mehrzweck zu behandeln? Ist Einzweck überhaupt zulässig, wenn der Shop in mehrere Länder verkauft (OSS)? | Warnung im Produkt/Website-Zustand; Einlösung nur bei gleichem Land (4.1) | |
 | F15 | 7.5: Soll der Shop bei steuerpflichtigen Gutscheinen „gleicher Bruttopreis“ (7.4) verwenden, oder ist der WooCommerce-Standard akzeptabel? | WooCommerce-Standard | ☐ 7.4 ☐ Standard |
 | F16 | 7.7: Wechsel vom Kleinunternehmer zur Regelbesteuerung – wie sind vorher verkaufte, später eingelöste Gutscheine zu behandeln? | keine Sonderbehandlung | |
-| F17 | **Standard der Einstellung „Mehrzweckgutscheine als Zahlung“:** Neuinstallationen an – bestätigt? Sollen bestehende Shops umstellen, und wie sind dann die vor der Umstellung ohne USt verkauften und danach eingelösten Gutscheine (bzw. steuerpflichtig verkaufte, nach der Umstellung als Zahlung eingelöste) zu behandeln? | neu: an; bestehend: unverändert, kritische Warnung bei Mehrzweck + „Keiner“ (Abschnitt 1) | |
+| F17 | **Standard der Einstellung „Mehrzweckgutscheine als Zahlung“:** Neuinstallationen an – bestätigt? Sollen bestehende Shops umstellen, und wie sind dann die vor der Umstellung ohne USt verkauften und danach eingelösten Gutscheine (bzw. steuerpflichtig verkaufte, nach der Umstellung als Zahlung eingelöste) zu behandeln? Gilt das ebenso für einen Wechsel durch *Zurücksetzen* (setzt „an“) oder *Import* (Wert des Quell-Shops), Abschnitt 1? | neu: an; bestehend: unverändert, kritische Warnung bei Mehrzweck + „Keiner“ (Abschnitt 1) | |
 | F18 | **Erstattung als Guthaben** (5.2): Ist eine Korrektur nach § 17 UStG (Erstattung mit Positionen und USt) nötig, damit die spätere Einlösung des Guthabens (2.6, Mehrzweck) nicht doppelt versteuert wird? | heute ohne Positionen (offen, M12-11) | |
 | F19 | **Kaufpreis unter Nennwert** (Art. 73a MwStSystRL, z. B. Rabattaktion „100‑€‑Karte für 90 €“, Wiederverkäufer): Bemessungsgrundlage bei Einlösung eines Mehrzweckgutscheins = gezahlter Betrag oder Nennwert? Muss das Plugin den Kaufpreis je Gutschein festhalten? | Nennwert (Kaufpreis steht im Zeilen-Schnappschuss) | |
 | F20 | **Restwert eines Einmalgutscheins** (4.3): Verfall des Restes eines Mehrzweck-Einmalgutscheins ohne USt (Ertrag), beim Einzweck keine Korrektur – bestätigt? Ist die Umwandlung in Kundenguthaben/neue Karte („Keep the rest“) steuerlich neutral (Mehrzweck → Mehrzweck)? | „forfeited“ gegen Ertragskonto; Umwandlung neutral | |

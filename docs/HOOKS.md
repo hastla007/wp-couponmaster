@@ -98,13 +98,16 @@ with a public API contract, the contract starts with 1.1.0). Add-ons check the c
 | `vcap_claim_retention_days` | 1.2.0 | `src/Claim.php` | – |
 | `vcap_client_ip` | 1.2.0 | `src/Health.php`, `src/Plugin.php` | – |
 | `vcap_command_limits` | 1.3.0 | `src/API/V1/CommandLimits.php` | Lowers the limits of an automatic voucher command or switches it off (args: limits {enabled, per_day, per_recipient, max_amount_minor, amount_allowed}, command, currency of the amount). Values above the given ones, and enabled = true for a command the operator switched off, have no effect. |
+| `vcap_command_log_days` | 1.3.0 | `src/API/V1/OptionCommandStore.php` | Days the daily counters and the protocol of the voucher commands are kept. 0 keeps them. |
 | `vcap_contact_opted_out` | 1.3.0 | `src/API/V1/ContactService.php` | Whether the address must not be contacted for this purpose (e.g. an opt-out list). An opted-out address is never returned. |
 | `vcap_contact_read_allowed` | 1.3.0 | `src/API/V1/ContactService.php` | Whether the current caller may read the contact of a voucher. |
 | `vcap_counter_limit_applies` | 1.2.0 | `src/Counter.php` | Whether the daily counter limits apply (default: not for staff who manage vouchers). Args: bool, user id, Voucher. |
 | `vcap_counter_limits` | 1.2.0 | `src/Counter.php` | Daily limits of counter redemptions for a staff member at a till (0 = unlimited), e.g. other limits per branch. Args: limits {user: {amount, count}, till: {amount, count}}, user id, till, Voucher\|null. |
+| `vcap_counter_location_fields` | 1.3.0 | `src/CounterLocations.php` | Columns of the table "Tills / branches" (section "Counter & locations"). Add-ons add a column as id => array( 'label' => …, 'type' => 'text'\|'checkbox'\|'select', 'default' => …, 'options' => array( value => label ) for a select ); its value is stored with the row and read with CounterLocations::rows(). The core columns name, key and active cannot be removed or changed. |
 | `vcap_counter_locations` | 1.2.0 | `src/Counter.php` | The managed tills/branches offered on the scanner. Args: string[] list. |
 | `vcap_counter_require_receipt` | 1.2.0 | `src/Counter.php` | Whether a counter redemption needs a receipt number. Args: bool. |
 | `vcap_counter_reversal_minutes` | 1.2.0 | `src/Tickets.php` | – |
+| `vcap_country_profiles` | 1.3.0 | `src/CountryProfiles.php` | Country profiles (arg: id => array{country, checked, settings, expiry_row, tax, accounting, label?} – see config/country-profiles.php). Add profiles for further countries or change suggested values; a profile is always shown as a preview and applied only after the admin confirms it. Set "checked" to true only after the legal and tax check of the values for that country. |
 | `vcap_coupon_allowed_on_voucher_products` | 1.1.0 | `src/VoucherPurchaseRules.php` | – |
 | `vcap_coupon_before_save` | 1.0.0 | `src/Coupons/CouponFactory.php` | – |
 | `vcap_create_coupon` | 1.0.0 | `src/Issuer.php` | – |
@@ -185,9 +188,10 @@ with a public API contract, the contract starts with 1.1.0). Add-ons check the c
 | `vcap_pdf_remote_hosts` | 1.2.0 | `src/PdfRenderer.php` | – |
 | `vcap_pdf_title` | 1.2.0 | `src/PdfRenderer.php` | Title of a voucher PDF (args: string $title, Voucher $voucher). |
 | `vcap_personal_voucher_email_verified` | 1.2.0 | `src/PersonalVoucher.php` | Whether the account email of a customer counts as verified for personal vouchers (V6). Default: the customer proved the mailbox (password reset through the emailed link, or the confirmation link) or the account is grandfathered (registered before the proof of mailbox was introduced, email unchanged since; AP-S1-1). |
-| `vcap_physical_activation_statuses` | 1.2.0 | `src/PhysicalCards.php` | Order statuses at which physical gift cards are activated (default: completed). |
+| `vcap_physical_activation_statuses` | 1.2.0 | `src/PhysicalCards.php` | Order statuses at which physical gift cards are activated (default: the setting, "completed"). |
 | `vcap_placeholder_definitions` | 1.0.0 | `src/Placeholders.php` | Placeholders offered in the PDF designer and the email texts (arg: array of token => label); fill them in vcap_placeholders. |
 | `vcap_placeholders` | 1.0.0 | `src/Placeholders.php` | Values of the placeholders for a voucher (args: array of token => text, Voucher); texts are escaped when printed. |
+| `vcap_printed_link_grace_days` | 1.3.0 | `src/Downloads.php` | Days the download link printed on a voucher (QR code) stays valid after the voucher expired. |
 | `vcap_pro_hints_hidden` | 1.3.0 | `src/Admin/ProHints.php` | Whether the hint lines on add-on functions are hidden for the current user (default: the user's own setting "Hide hints on extensions"). |
 | `vcap_product_config` | 1.0.0 | `src/ProductConfig.php` | – |
 | `vcap_protect_voucher_coupons` | 1.2.0 | `src/Coupons/CouponSync.php` | Whether trashing/deleting a voucher's WooCommerce coupon is refused (default: in wp-admin and REST requests). |
@@ -238,6 +242,7 @@ with a public API contract, the contract starts with 1.1.0). Add-ons check the c
 | `vcap_sanitize_design` | 1.0.0 | `src/TemplatePostType.php` | A design after it was cleaned for saving (args: clean design, design as posted); add-on element types keep their own keys here. |
 | `vcap_scanner_checkin` | 1.1.0 | `src/Tickets.php` | – |
 | `vcap_scanner_describe` | 1.1.0 | `src/Tickets.php` | Connector details for the scanner (e.g. "ticket voucher – exchange first", redeemable false). |
+| `vcap_scanner_failed_lookup_days` | 1.3.0 | `src/Counter.php` | Days the counts of failed scanner lookups per staff member are kept (counter report). 0 keeps them. |
 | `vcap_scanner_lookup` | 1.1.0 | `src/Tickets.php` | Codes Voucher Captain does not know may belong to another plugin (shared scanner, e.g. Pass Captain tickets). |
 | `vcap_scanner_redeem_refused` | 1.1.0 | `src/Tickets.php` | Vouchers that must not be redeemed at the counter (e.g. ticket vouchers: exchange them for tickets). |
 | `vcap_scanner_show_holder` | 1.1.0 | `src/Tickets.php` | – |
@@ -246,14 +251,17 @@ with a public API contract, the contract starts with 1.1.0). Add-ons check the c
 | `vcap_setting_` | 1.0.0 | `src/Settings.php` | – |
 | `vcap_settings_fields` | 1.0.0 | `src/Settings.php` | Fields of a section of the "Vouchers" settings tab (args: WooCommerce settings fields, section id – '' is "General"). Add-ons add fields to a core section or fill their own section from "vcap_settings_sections". |
 | `vcap_settings_hints` | 1.3.0 | `src/Admin/ProHints.php` | Hint lines for add-on functions (args: list of {id, section, title, text, link}). Text only; a line is dropped when its id, title or text is empty or its link is not https. |
+| `vcap_settings_partner_active` | 1.3.0 | `src/Settings.php` | Whether the settings of a partner plugin are shown (Settings → Vouchers → Integrations (API) → "Integration rules"). Args: bool, partner id ('review', 'affiliate', 'passcaptain', 'subscriptions'). |
+| `vcap_settings_registry` | 1.3.0 | `src/SettingsRegistry.php` | The settings register (arg: option name => attributes type, default, min, max, empty, choices, section, legal, export, secret, fresh – see config/settings.php). Add-ons add their own options here (for export without secrets, the change log and WP-CLI) and may change attributes of core entries; core entries cannot be removed. A changed default changes what Settings::get() returns for shops that never saved the option. |
 | `vcap_settings_sections` | 1.2.0 | `src/Settings.php` | Extra sections of the "Vouchers" settings tab (arg: array of section id => label). Add-ons add their own section here and its fields with "vcap_settings_fields" (second argument: the section id); WooCommerce saves them. Core sections cannot be renamed or removed. |
+| `vcap_settings_validate_value` | 1.3.0 | `src/SettingsTransfer.php` | Checks a value before it is imported or set with WP-CLI (args: value in the stored format or WP_Error, option name, register entry, raw value as given (4th, since contract 1.8.0)). Add-ons check their own settings here – also replace a WP_Error of the type check with their own result; return a WP_Error to refuse. |
 | `vcap_shop_channel_refused_message` | 1.2.0 | `src/Coupons/CartCoupons.php` | Message for a voucher that is not redeemable in the shop (e.g. a ticket voucher: where to use it instead). |
 | `vcap_should_issue_for_order` | 1.0.0 | `src/Issuer.php` | – |
 | `vcap_site_has_redeem_form` | 1.2.0 | `src/Shortcodes.php` | Whether a site-wide template (theme file, builder layout, widget) shows the redeem form. |
 | `vcap_smtp_plugin_active` | 1.2.0 | `src/Health.php` | Whether the site sends its mails through an SMTP or mail service plugin (Site Health sender check). |
 | `vcap_stale_reservation_minutes` | 1.1.0 | `src/Coupons/Reservations.php`, `src/Discounts/Usage.php`, `src/FirstOrderCoupons.php` | – |
 | `vcap_statutory_expiry` | 1.1.0 | `src/ProductConfig.php` | – |
-| `vcap_subscription_issue_on_switch` | 1.2.0 | `src/Compat/Subscriptions.php` | Whether a subscription switch or resubscribe order issues vouchers (default false; args: order, "switch"\|"resubscribe"). |
+| `vcap_subscription_issue_on_switch` | 1.2.0 | `src/Compat/Subscriptions.php` | Whether a subscription switch or resubscribe order issues vouchers (default: the setting, no; args: order, "switch"\|"resubscribe"). |
 | `vcap_suspend_on_payment_reversal` | 1.2.0 | `src/Issuer.php` | Whether vouchers of an order are suspended when its payment is reversed or held (default: "void on refund"). |
 | `vcap_template_design` | 1.0.0 | `src/TemplatePostType.php` | The design (JSON layout: page, elements) of a PDF template as it is printed (args: design, template id). |
 | `vcap_topup_amount` | 1.2.0 | `src/TopUp.php` | Value added to the card for a top-up line (default: its face value like a new gift card, in the base currency). |
@@ -265,6 +273,7 @@ with a public API contract, the contract starts with 1.1.0). Add-ons check the c
 | `vcap_voucher_admin_messages` | 1.1.0 | `src/Admin/VoucherAdmin.php` | Extra messages for connector actions (keys ending in "_failed" are shown as errors). |
 | `vcap_voucher_amount` | 1.0.0 | `src/Issuer.php` | – |
 | `vcap_voucher_code` | 1.0.0 | `src/Issuer.php` | – |
+| `vcap_voucher_excluded_gateways` | 1.3.0 | `src/PaymentMethods.php` | Payment gateway ids that are not offered while the cart (or the order being paid) contains a voucher product. Default: the setting "Do not sell vouchers with" (empty). The filter wins over the setting. |
 | `vcap_voucher_expires_at` | 1.2.0 | `src/Issuer.php` | Expiry (UTC "Y-m-d H:i:s" or null) of a voucher being issued, e.g. no later than the event it is for. |
 | `vcap_voucher_is_means_of_payment` | 1.2.0 | `src/Coupons/CartCoupons.php` | – |
 | `vcap_voucher_links` | 1.2.0 | `src/Downloads.php` | Extra links of a voucher in its email and the customer's voucher list, e.g. "Add to Wallet". Args: list of array{label: string, url: string, id?: string, image?: string, width?: int, alt?: string}, Voucher, context ("email", "email_plain", "account" or "placeholder"). |
@@ -276,7 +285,7 @@ with a public API contract, the contract starts with 1.1.0). Add-ons check the c
 | `vcap_voucher_request_lock_wait` | 1.2.0 | `src/Integrations/VoucherRequests.php` | Seconds a state change of a voucher request waits for another one on the same request (R9). |
 | `vcap_voucher_request_service_v1` | 1.3.0 | `src/Integrations/FormCaptain/RequestService.php` | The voucher request service of the core (VoucherRequests::service()), when this Voucher Captain has it. |
 | `vcap_voucher_requests_max_open` | 1.2.0 | `src/Integrations/VoucherRequests.php` | Most open requests at a time (protection against floods of form entries); above it submit() answers `vcap_request_limit` (429). 0 accepts no new request. |
-| `vcap_voucher_requests_retention_months` | 1.2.0 | `src/Integrations/VoucherRequests.php` | Retention of voucher requests in months (D10): `open` – open and partly issued requests (default 6), `closed` – issued and handed-over requests (default 24). 0 keeps them. Rejected requests are deleted at once. |
+| `vcap_voucher_requests_retention_months` | 1.2.0 | `src/Integrations/VoucherRequests.php` | Retention of voucher requests in months (D10): `open` – open and partly issued requests (default 6), `closed` – issued and handed-over requests (default 24). 0 keeps them. Rejected requests are deleted at once. Since 1.3.0 the default is the setting of the block "Retention" (SET-VC-08). |
 | `vcap_voucher_tax_treatment` | 1.1.0 | `src/ProductConfig.php` | – |
 | `vcap_voucher_types` | 1.1.0 | `src/Voucher.php` | Extra voucher types of connectors and add-ons (arg: array of type key => label). Core types cannot be replaced; see API.md → Extension points. |
 | `vcap_vouchers_per_item` | 1.0.0 | `src/Issuer.php` | – |

@@ -152,6 +152,8 @@ final class Scanner {
 						<?php endforeach; ?>
 					</select>
 					<span class="description"><?php echo esc_html( '' !== $fixed ? __( 'Fixed for your account.', 'voucher-captain' ) : __( 'Saved on this device and kept with every redemption and check-in.', 'voucher-captain' ) ); ?></span></p>
+				<?php elseif ( \VCAP\Counter::tills_managed() ) : ?>
+					<strong id="vcap-till" class="vcap-till-none" role="alert"><?php echo esc_html( \VCAP\Counter::no_active_till_message() ); ?></strong></p>
 				<?php else : ?>
 					<input type="text" id="vcap-till" class="regular-text" maxlength="40" autocomplete="off" /> <span class="description"><?php esc_html_e( 'Saved on this device and kept with every redemption and check-in.', 'voucher-captain' ); ?></span></p>
 				<?php endif; ?>

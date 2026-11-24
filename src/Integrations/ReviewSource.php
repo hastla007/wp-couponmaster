@@ -30,7 +30,8 @@ defined( 'ABSPATH' ) || exit;
  * One service = one request (owner decision 16.11.2026): only the FIRST confirmed redemption of a voucher becomes
  * eligible – later redemptions of the same voucher (a gift card used in several visits) create no event. When that
  * first redemption is revoked (redeem_reversed, refunded), the next confirmed redemption may become eligible again.
- * Filter `vcap_review_first_redemption_only` (default true) switches back to one event per redemption.
+ * The setting `vcap_review_first_redemption_only` (SET-VC-33, default yes) or the filter of the same name (it wins)
+ * switches back to one event per redemption.
  *
  * Every redemption has one stable reference (same redemption ⇒ same reference); a repeated event for it is ignored.
  * It is "revoked" once when the counter redemption is cancelled (redeem_reversed), the external redemption is
@@ -61,6 +62,8 @@ final class ReviewSource {
 	public const PAYLOAD_KEYS = array( 'contract', 'event', 'event_id', 'reference', 'source', 'site_id', 'channel', 'experience_id', 'occurred_at', 'reason' );
 	/** Channels that can confirm a service at all ("shop" never). */
 	public const CHANNELS = array( 'counter', 'external' );
+	/** SET-VC-33 (1.12 no. 35): setting "only the first redemption asks for a review" (default yes; the filter wins). */
+	public const FIRST_ONLY_OPTION = 'vcap_review_first_redemption_only';
 
 	/** @var callable(int): ?Voucher */
 	private $lookup;
@@ -234,10 +237,10 @@ final class ReviewSource {
 		 * counts on its own.
 		 *
 		 * @since 1.2.0
-		 * @param bool    $only    Default true.
+		 * @param bool    $only    The setting (SET-VC-33, default true).
 		 * @param Voucher $voucher Voucher.
 		 */
-		return (bool) apply_filters( 'vcap_review_first_redemption_only', true, $voucher );
+		return (bool) apply_filters( 'vcap_review_first_redemption_only', 'yes' === \VCAP\Settings::value( self::FIRST_ONLY_OPTION ), $voucher );
 	}
 
 	/**
@@ -354,19 +357,38 @@ final class ReviewSource {
 
 	/** Records checked per database round in purge(). */
 	private const PURGE_BATCH = 200;
+	/** SET-VC-08: default of the setting `vcap_review_revoked_retention_days` (days a revoked record is kept). */
+	public const REVOKED_DAYS = 90;
+	/** SET-VC-08: default of the setting `vcap_review_retention_months` (months every record is kept at most). */
+	public const RETENTION_MONTHS = 24;
+
+	/**
+	 * SET-VC-08: retention of the reference records – the settings of the same name (block "Retention"), then the
+	 * filters, which win. 0 (filter only) keeps them.
+	 *
+	 * @return array{revoked_days:int, months:int}
+	 */
+	public static function retention(): array {
+		return array(
+			'revoked_days' => max( 0, (int) apply_filters( 'vcap_review_revoked_retention_days', \VCAP\SettingsRegistry::bounded_int( 'vcap_review_revoked_retention_days' ) ) ),
+			'months'       => max( 0, (int) apply_filters( 'vcap_review_retention_months', \VCAP\SettingsRegistry::bounded_int( 'vcap_review_retention_months' ) ) ),
+		);
+	}
 
 	/**
 	 * R4: daily retention of the reference records (one option each). Revoked records go after
 	 * `vcap_review_revoked_retention_days` (default 90 – long enough for the review plugin to reconcile them with
-	 * get()), every record after `vcap_review_retention_months` (default 24). 0 keeps them. Works in batches until
+	 * get()), every record after `vcap_review_retention_months` (default 24); settings since SET-VC-08, see
+	 * retention(). 0 keeps them. Works in batches until
 	 * done or $budget seconds are used.
 	 *
 	 * @return bool True when finished (nothing left to check within the budget).
 	 */
 	public function purge( float $budget = 10.0 ): bool {
 		global $wpdb;
-		$days   = (int) apply_filters( 'vcap_review_revoked_retention_days', 90 );
-		$months = (int) apply_filters( 'vcap_review_retention_months', 24 );
+		$keep   = self::retention();
+		$days   = $keep['revoked_days'];
+		$months = $keep['months'];
 		if ( $days <= 0 && $months <= 0 ) {
 			return true;
 		}

@@ -223,6 +223,30 @@ $p11_new->update_status( 'processing' );
 vcap_rules_assert( 800.0 === VCAP\VoucherPurchaseRules::ordered_last_day( 0, "velo-{$v7_tag}@example.com" ), 'AP-P1-1: a new order of the customer is counted at once (the request memo is forgotten)' );
 WC()->customer->set_billing_email( '' );
 
+// SET-VC-19: "Do not sell vouchers with" hides a gateway only while a voucher product is in the cart; "paid later"
+// comes from the setting, the filter vcap_offline_payment_methods wins.
+$s19_gateways = array( 'cod' => 'COD', 'bacs' => 'BACS', 'vcap_s19' => 'Other' );
+update_option( VCAP\PaymentMethods::EXCLUDED_OPTION, array( 'cod' ) );
+WC()->cart->empty_cart();
+WC()->cart->add_to_cart( vcap_rules_product( 'SET-VC-19 goods', '20', false )->get_id() );
+$s19_goods = ( new VCAP\PaymentMethods() )->available_gateways( $s19_gateways );
+WC()->cart->add_to_cart( vcap_rules_product( 'SET-VC-19 voucher', '25', true )->get_id() );
+$s19_voucher = ( new VCAP\PaymentMethods() )->available_gateways( $s19_gateways );
+delete_option( VCAP\PaymentMethods::EXCLUDED_OPTION );
+vcap_rules_assert( $s19_gateways === $s19_goods && array( 'bacs' => 'BACS', 'vcap_s19' => 'Other' ) === $s19_voucher, 'SET-VC-19: an excluded payment method disappears only while a voucher product is in the cart' );
+$s19_order = wc_create_order();
+$s19_order->set_payment_method( 'vcap_s19' );
+$s19_default = VCAP\Issuer::offline_payment( $s19_order );
+update_option( VCAP\PaymentMethods::OFFLINE_OPTION, array( 'cod', 'vcap_s19' ) );
+$s19_setting = VCAP\Issuer::offline_payment( $s19_order );
+$s19_filter  = static fn() => array( 'cod' );
+add_filter( 'vcap_offline_payment_methods', $s19_filter );
+$s19_filtered = VCAP\Issuer::offline_payment( $s19_order );
+remove_filter( 'vcap_offline_payment_methods', $s19_filter );
+delete_option( VCAP\PaymentMethods::OFFLINE_OPTION );
+$s19_order->delete( true );
+vcap_rules_assert( ! $s19_default && $s19_setting && ! $s19_filtered, 'SET-VC-19: "Payment methods paid later" decides which orders wait for the payment; the filter vcap_offline_payment_methods wins' );
+
 WC()->cart->empty_cart();
 wc_clear_notices();
 echo "Voucher Captain purchase rule checks passed.\n";

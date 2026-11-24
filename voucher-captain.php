@@ -44,9 +44,12 @@ define( 'VCAP_DB_VERSION', '1.8.0' );
  * API.md → "Connector access"), 1.5.0 = plugin 1.3.0 with contact and consent of a voucher id, off by default
  * (vcap()->contact, vcap_read_voucher_contact(); API.md → "Contact and consent"), 1.6.0 = plugin 1.3.0 with the
  * read function of the command limits vcap_read_command_limits() / vcap()->commands->limits() (SET-WC-15), 1.7.0 =
- * plugin 1.3.0 with journal_id in the context of vcap_store_credit_changed and vcap_gift_card_topped_up (VC-12).
+ * plugin 1.3.0 with journal_id in the context of vcap_store_credit_changed and vcap_gift_card_topped_up (VC-12), 1.8.0
+ * = plugin 1.3.0 with the settings register and the extension filters of the settings (vcap_settings_registry,
+ * vcap_settings_validate_value, vcap_settings_hints, vcap_pro_hints_hidden, vcap_country_profiles …) and the Form
+ * Captain hooks vcap_form_captain_* (CONNECTORS.md, section 6; PV-P6-2).
  */
-define( 'VCAP_CONTRACT_VERSION', '1.7.0' );
+define( 'VCAP_CONTRACT_VERSION', '1.8.0' );
 define( 'VCAP_FILE', __FILE__ );
 define( 'VCAP_PATH', plugin_dir_path( __FILE__ ) );
 define( 'VCAP_URL', plugin_dir_url( __FILE__ ) );
@@ -136,5 +139,7 @@ add_action(
 		 * @param \VCAP\Plugin $vcap_plugin The running plugin.
 		 */
 		do_action( 'vcap_loaded', $vcap_plugin );
+		// Settings entries that add-ons registered in "vcap_loaded" count from here on (PV-P6-1).
+		\VCAP\SettingsRegistry::reset();
 	}
 );

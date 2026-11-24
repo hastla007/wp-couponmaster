@@ -7,6 +7,15 @@ defined( 'ABSPATH' ) || exit;
  * PDF previews: admin template preview with sample data, and customer preview on the product page.
  */
 final class Preview {
+	/** SET-VC-29: test emails per user and hour (technical limit, not a setting). */
+	public const TEST_MAIL_LIMIT = 5;
+
+	/** SET-VC-29: transient of the test emails a user sent within the last hour ("<prefix><user id>"). */
+	public const TEST_MAIL_TRANSIENT = 'vcap_test_mails_';
+
+	/** SET-VC-29: admin-post action and nonce action of the test email. */
+	public const TEST_MAIL_ACTION = 'vcap_test_email';
+
 	public function __construct( private PdfRenderer $pdf ) {}
 
 	public function register(): void {
@@ -14,6 +23,159 @@ final class Preview {
 		add_action( 'wp_ajax_nopriv_vcap_product_preview', array( $this, 'product_preview' ) );
 		// Front-end endpoint (?wc-ajax=…): works where /wp-admin is protected (HTTP auth, IP allow list).
 		add_action( 'wc_ajax_vcap_product_preview', array( $this, 'product_preview' ) );
+		// SET-VC-29: "Send test email to me" (Vouchers → Delivery & downloads).
+		add_action( 'admin_post_' . self::TEST_MAIL_ACTION, array( self::class, 'test_email_request' ) );
+		add_action( 'woocommerce_admin_field_vcap_test_email', array( self::class, 'test_email_field' ) );
+	}
+
+	/**
+	 * SET-VC-29: test emails a user may still send within the hour; $consume counts one more (before sending, so a
+	 * failing mail server cannot be hammered either).
+	 */
+	public static function test_email_quota( int $user_id, bool $consume = false ): int {
+		$key    = self::TEST_MAIL_TRANSIENT . $user_id;
+		$stored = get_transient( $key );
+		$now    = time();
+		$sent   = array_values( array_filter( is_array( $stored ) ? array_map( 'intval', $stored ) : array(), static fn( int $at ) => $at > $now - HOUR_IN_SECONDS && $at <= $now ) );
+		if ( $consume && count( $sent ) < self::TEST_MAIL_LIMIT ) {
+			$sent[] = $now;
+			set_transient( $key, $sent, HOUR_IN_SECONDS );
+		}
+		return max( 0, self::TEST_MAIL_LIMIT - count( $sent ) );
+	}
+
+	/**
+	 * SET-VC-29: sends the gift recipient email with the sample voucher to the current user's own address – never to
+	 * the additional recipients of the email and never to any other address.
+	 *
+	 * @param int                                   $user_id User who asked.
+	 * @param string                                $address The user's own email address.
+	 * @param callable(string): bool|null            $send    Sends the test email to an address (tests); default mail_test_email().
+	 * @return string 'sent', 'limit' (5 per hour used), 'no_address' or 'failed'
+	 */
+	public static function send_test_email( int $user_id, string $address, ?callable $send = null ): string {
+		$address = sanitize_email( $address );
+		if ( $user_id <= 0 || ! is_email( $address ) ) {
+			return 'no_address';
+		}
+		$quota = self::test_email_quota( $user_id );
+		if ( $quota <= 0 ) {
+			return 'limit';
+		}
+		self::test_email_quota( $user_id, true );
+		$send = $send ?? array( self::class, 'mail_test_email' );
+		try {
+			return $send( $address ) ? 'sent' : 'failed';
+		} catch ( \Throwable $e ) {
+			Logger::error( 'Test email failed: ' . Mask::addresses( $e->getMessage() ), array( 'element' => 'test_email' ) );
+			return 'failed';
+		}
+	}
+
+	/** SET-VC-29: renders the gift recipient email (the shop's texts, logo and colour) with the sample voucher and sends it to $address only. */
+	public static function mail_test_email( string $address ): bool {
+		$email = function_exists( 'WC' ) ? ( WC()->mailer()->get_emails()['VCAP_Email_Voucher_Recipient'] ?? null ) : null;
+		if ( ! $email instanceof Emails\VoucherEmail ) {
+			return false;
+		}
+		$voucher                  = self::sample_voucher();
+		$voucher->recipient_email = $address;
+		$email->voucher           = $voucher;
+		$email->object            = false;
+		$email->recipient         = $address;
+		$email->placeholders      = array_merge( $email->placeholders, Placeholders::email_map( $voucher ) );
+		try {
+			/* translators: %s: subject of the voucher email */
+			$subject = sprintf( __( '[Test] %s', 'voucher-captain' ), $email->get_subject() );
+			// PV-P2-8: the test goes to $address only, never to the Cc/Bcc set for the email (WooCommerce email improvements).
+			return (bool) self::without_copies( (string) $email->id, static fn() => $email->send( $address, $subject, $email->get_content(), $email->get_headers(), array() ) );
+		} finally {
+			$email->voucher   = null;
+			$email->recipient = '';
+		}
+	}
+
+	/**
+	 * PV-P2-8: runs $send while the Cc and Bcc recipients of the email $email_id are empty (filters
+	 * "woocommerce_email_cc_recipient_{id}" / "woocommerce_email_bcc_recipient_{id}" at the last priority), then
+	 * removes the filters again.
+	 *
+	 * @template T
+	 * @param string        $email_id WooCommerce email id.
+	 * @param callable(): T $send     Sends the email.
+	 * @return T
+	 */
+	public static function without_copies( string $email_id, callable $send ) {
+		$none  = static fn(): string => '';
+		$hooks = array( 'woocommerce_email_cc_recipient_' . $email_id, 'woocommerce_email_bcc_recipient_' . $email_id );
+		foreach ( $hooks as $hook ) {
+			add_filter( $hook, $none, PHP_INT_MAX );
+		}
+		try {
+			return $send();
+		} finally {
+			foreach ( $hooks as $hook ) {
+				remove_filter( $hook, $none, PHP_INT_MAX );
+			}
+		}
+	}
+
+	/** SET-VC-29: admin-post handler of "Send test email to me" (capability, nonce, then back to the settings with the result). */
+	public static function test_email_request(): void {
+		if ( ! current_user_can( 'manage_woocommerce' ) ) {
+			wp_die( esc_html__( 'You are not allowed to do this.', 'voucher-captain' ), 403 );
+		}
+		check_admin_referer( self::TEST_MAIL_ACTION );
+		$user   = wp_get_current_user();
+		$result = self::send_test_email( (int) $user->ID, (string) $user->user_email );
+		wp_safe_redirect( add_query_arg( 'vcap_test_email', $result, admin_url( 'admin.php?page=wc-settings&tab=vcap&section=delivery' ) ) );
+		exit;
+	}
+
+	/**
+	 * SET-VC-29: messages of the test email results (query argument "vcap_test_email").
+	 *
+	 * @return array<string, string>
+	 */
+	public static function test_email_messages(): array {
+		return array(
+			'sent'       => __( 'The test email was sent to your address.', 'voucher-captain' ),
+			/* translators: %d: number of test emails per hour */
+			'limit'      => sprintf( __( 'You have sent %d test emails within the last hour. Please try again later.', 'voucher-captain' ), self::TEST_MAIL_LIMIT ),
+			'no_address' => __( 'Your user account has no valid email address.', 'voucher-captain' ),
+			'failed'     => __( 'The test email could not be sent. Check the email settings of WooCommerce and your mail server.', 'voucher-captain' ),
+		);
+	}
+
+	/**
+	 * SET-VC-29: settings field "Test email" (WooCommerce field type "vcap_test_email"): a button that sends the
+	 * gift recipient email with the sample voucher to the current user.
+	 *
+	 * @param array<string, mixed> $field Settings field.
+	 */
+	public static function test_email_field( $field ): void {
+		$field    = is_array( $field ) ? $field : array();
+		$url      = wp_nonce_url( admin_url( 'admin-post.php?action=' . self::TEST_MAIL_ACTION ), self::TEST_MAIL_ACTION );
+		$status   = isset( $_GET['vcap_test_email'] ) ? sanitize_key( wp_unslash( (string) $_GET['vcap_test_email'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- display of a result only.
+		$messages = self::test_email_messages();
+		$user     = wp_get_current_user();
+		?>
+		<tr valign="top">
+			<th scope="row" class="titledesc"><?php echo esc_html( (string) ( $field['title'] ?? '' ) ); ?></th>
+			<td class="forminp">
+				<a class="button" href="<?php echo esc_url( $url ); ?>"><?php esc_html_e( 'Send test email to me', 'voucher-captain' ); ?></a>
+				<?php if ( isset( $messages[ $status ] ) ) : ?>
+					<p role="status"><strong><?php echo esc_html( $messages[ $status ] ); ?></strong></p>
+				<?php endif; ?>
+				<p class="description">
+					<?php
+					/* translators: 1: email address of the current user, 2: number of test emails per hour */
+					echo esc_html( sprintf( __( 'Sends the gift recipient email with a sample voucher (without PDF) to %1$s. Save your changes first. At most %2$d test emails per hour.', 'voucher-captain' ), (string) $user->user_email, self::TEST_MAIL_LIMIT ) );
+					?>
+				</p>
+			</td>
+		</tr>
+		<?php
 	}
 
 	public static function sample_voucher(): Voucher {

@@ -136,6 +136,16 @@ final class GiftNoticeEmail extends \WC_Email {
 		return (string) ob_get_clean();
 	}
 
+	/** SET-VC-29: rendered with the shop's email logo and accent colour (Branding). */
+	public function get_content() {
+		return Branding::during( fn() => parent::get_content() );
+	}
+
+	/** SET-VC-29: WooCommerce's email styles with the shop's accent colour (Branding). */
+	public function style_inline( $content ) {
+		return Branding::during( fn() => parent::style_inline( $content ) );
+	}
+
 	public function get_content_html() {
 		return $this->body( false );
 	}

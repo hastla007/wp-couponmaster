@@ -28,6 +28,58 @@ Tastatur, Bildschirm nicht ansehen; Sprache der Seite Deutsch.
 Befunde mit Schweregrad (blockierend / erschwerend / kosmetisch) eintragen; blockierende vor dem Release beheben und
 in `tests/e2e/06-screen-reader.spec.js` als Regressionstest ergänzen.
 
+### Einstellungen: Hilfetexte und Fehlermeldungen
+
+*WooCommerce → Einstellungen → Gutscheine* (SET-VC-23):
+
+- **Jedes Feld hat einen Hilfetext** (Test „SET-VC-23: every register field has a help text“ in `tests/run.php`
+  prüft alle Felder des Einstellungs-Registers, auch die der Integrationen).
+- **Rechtlich relevante Hinweise stehen sichtbar unter dem Feld**, nicht nur im Tooltip: bei Einstellungen mit
+  `legal` im Register (z. B. Einlösebedingungen, Gültigkeit, Anonymisierung, Belegnummer an der Kasse, DATEV-Konten)
+  macht `SettingsRegistry::field()` aus dem Tooltip eine Beschreibung. Tooltips (Fragezeichen-Symbol) sind per
+  Tastatur und Screenreader schlecht erreichbar; die Beschreibung liest der Screenreader mit dem Feld vor.
+- **Fehlermeldungen nennen Feld und erlaubten Bereich.** Eine Zahl außerhalb von Mindest-/Höchstwert wird beim
+  Speichern auf die Grenze gesetzt, eine Kommazahl in einem Ganzzahlfeld gerundet, Text oder ein leeres Pflichtfeld
+  nicht gespeichert – jeweils mit einer Meldung oben auf der Seite, z. B. „Zustellstunde: 30 ist nicht erlaubt –
+  erlaubt sind ganze Zahlen von 0 bis 23. Gespeichert wurde 23.“ Die Zahlenfelder tragen `min`/`max` auch im HTML,
+  sodass Browser und Screenreader den Bereich schon bei der Eingabe kennen.
+- Die Tabelle *Rechte je Rolle* (Datenschutz & Erweitert) hat Spaltenköpfe, Zeilenköpfe je Rolle und für jedes
+  Kästchen einen Namen „Recht für Rolle“; feste Kästchen (Administrator, Rollen mit „WooCommerce verwalten“) sind
+  deaktiviert und angehakt.
+- *Gesetzliche Gültigkeit je Land* und *Einlösebedingungen je Land* (Allgemein, SET-VC-04) sind echte Tabellen
+  statt Freitext: Beschriftung (`caption`), Spaltenköpfe, und jedes Feld hat einen eigenen Namen mit Zeilennummer
+  („Land, Zeile 2“, „Jahre, Zeile 2“). „Zeile hinzufügen“ und „Entfernen“ sind Schaltflächen; nach dem Hinzufügen
+  steht der Fokus im Länderfeld der neuen Zeile, nach dem Entfernen auf „Entfernen“ der nächsten (sonst vorigen)
+  Zeile oder auf „Zeile hinzufügen“; beides wird über `wp.a11y.speak` angesagt (`assets/js/country-table.js`).
+  Ohne JavaScript gibt es immer eine leere Zeile für einen neuen Eintrag, und eine geleerte Zeile wird beim Speichern
+  entfernt. Eine ungültige Zeile wird nicht gespeichert: die Meldung oben nennt Einstellung und Zeile („Zeile 2 (FR):
+  …“), die Zeile erscheint danach mit ihrem Fehlertext (`aria-invalid`, `aria-describedby`) erneut, damit nichts
+  Eingegebenes verloren geht.
+- **Ein abgelehnter oder korrigierter Wert ist am Feld markiert** (PV-P5-4): Nach dem Speichern trägt das Feld
+  `aria-invalid="true"`, und die Meldung von oben steht noch einmal direkt unter dem Feld (der Screenreader liest
+  sie mit dem Feld vor). Das gilt für Zahlen, Akzentfarbe, Logo-Adresse und Zusätzliches CSS (PV-P5-3: eine Farbe
+  ohne „#“ wird mit „#“ übernommen, eine ungültige Farbe oder eine Logo-Adresse ohne http(s) wird nicht gespeichert,
+  gekürztes oder bereinigtes CSS wird gemeldet; das CSS-Feld hat `maxlength`).
+- **Enter speichert** (PV-P5-2): Jeder Abschnitt beginnt mit einer unsichtbaren Schaltfläche „Änderungen speichern“
+  (nicht per Tab erreichbar, für Screenreader verborgen). Enter in einem Feld speichert deshalb die Einstellungen und
+  löst nicht die erste Aktionsschaltfläche der Seite aus (Länderprofil-Vorschau, „Datei prüfen“).
+- **Länderprofil** (Allgemein, SET-VC-02): Auswahl mit Beschriftung „Profil“; die Vorschau ist eine Region mit
+  Überschrift („Vorgeschlagene Änderungen: …“) und eine Tabelle mit Spaltenköpfen, jedes Kästchen ist über
+  `label for` mit dem Namen der Einstellung verbunden. Hinweise „Rechtsprüfung ausstehend“ stehen als Text in der
+  Tabelle. Auswahl und Kästchen gelten nicht als ungespeicherte Änderung (`wc-settings-prevent-change-event`), die
+  Schaltflächen lösen keine Rückfrage „Seite verlassen?“ aus. Die Meldung nach „Übernehmen“/„Abbrechen“ wird
+  angesagt (Fehler `role="alert"`, Erfolg `role="status"`).
+- **Kassentabelle** (Kasse & Standorte, SET-VC-22): Tabelle mit unsichtbarer Beschriftung „Kassen und Filialen“,
+  Spaltenköpfen und für jedes Feld einem Namen mit Zeilennummer („Name, Zeile 2“); leere Zeilen für neue Kassen.
+- **Export, Import und Zurücksetzen** (Datenschutz & Erweitert, SET-VC-14/16): Dateifeld mit Beschriftung,
+  Bereichsauswahl mit Beschreibung (`aria-describedby`), Bestätigungskästchen mit Beschriftung. Die Import-Vorschau
+  ist eine Region mit Überschrift und Tabelle (Spaltenköpfe; Einstellung mit ihrem Feldnamen, Werte als Ja/Nein bzw.
+  „(leer)“, PV-P5-6). Meldungen werden angesagt; fehlt beim Zurücksetzen die Bestätigung, ist das Kästchen markiert
+  (`aria-invalid`, `aria-describedby` auf die Meldung).
+- **Änderungsprotokoll** (Datenschutz & Erweitert, SET-VC-15): Tabelle mit Spaltenköpfen (Datum, Benutzer,
+  Einstellung, Von, Nach, Quelle), Einstellungen mit Feldnamen, Werte lesbar (PV-P5-6). Breite Tabellen (Vorschau,
+  Protokoll, Länderprofil) scrollen auf dem Telefon in ihrem eigenen Kasten, nicht die ganze Seite (PV-P5-7).
+
 ### Gutschein-PDF
 
 Das PDF ist ein Druckdokument und **nicht getaggt** (dompdf erzeugt kein Tagged PDF/PDF/UA): Screenreader lesen den

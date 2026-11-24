@@ -224,7 +224,7 @@ vcap_sa_assert( str_contains( $panel_html, 'product=' . $search_product->get_id(
 $ids_of = static fn( string $section ): array => array_values( array_filter( array_map( static fn( $f ) => in_array( $f['type'] ?? '', array( 'title', 'sectionend' ), true ) || false === ( $f['is_option'] ?? true ) ? '' : (string) ( $f['id'] ?? '' ), vcap()->settings->fields( $section ) ) ) );
 $general_m = new ReflectionMethod( VCAP\Settings::class, 'general_fields' );
 $general_m->setAccessible( true );
-$all_general = array_values( array_filter( array_map( static fn( $f ) => in_array( $f['type'] ?? '', array( 'title', 'sectionend' ), true ) ? '' : (string) ( $f['id'] ?? '' ), $general_m->invoke( vcap()->settings ) ) ) );
+$all_general = array_values( array_filter( array_map( static fn( $f ) => in_array( $f['type'] ?? '', array( 'title', 'sectionend' ), true ) || false === ( $f['is_option'] ?? true ) ? '' : (string) ( $f['id'] ?? '' ), $general_m->invoke( vcap()->settings ) ) ) ); // Display-only fields (country profile block, SET-VC-02) store nothing.
 $split       = array_merge( $ids_of( '' ), $ids_of( 'redemption' ), $ids_of( 'promotions' ), $ids_of( 'codes' ) );
 sort( $split );
 $sorted_all = $all_general;

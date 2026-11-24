@@ -295,14 +295,14 @@ abstract class VoucherEmail extends \WC_Email {
 	/**
 	 * M12-83: colours of the voucher emails from WooCommerce → Settings → Emails: base colour (buttons, frame),
 	 * the readable text on it, a light accent, the muted text and table borders from the text colour
-	 * (filter "vcap_email_colors").
+	 * (filter "vcap_email_colors", which wins). SET-VC-29: the accent colour of the "Vouchers" settings replaces
+	 * the WooCommerce base colour once it is set (Branding::base_color()).
 	 *
 	 * @return array{base:string, on_base:string, accent:string, muted:string, border:string}
 	 */
 	public static function colors(): array {
-		$base = sanitize_hex_color( (string) get_option( 'woocommerce_email_base_color', '' ) );
+		$base = Branding::base_color();
 		$text = sanitize_hex_color( (string) get_option( 'woocommerce_email_text_color', '' ) );
-		$base = $base ? $base : '#1f3a4d';
 		$text = $text ? $text : '#3c3c3c';
 		$colors = array(
 			'base'    => $base,
@@ -318,6 +318,16 @@ abstract class VoucherEmail extends \WC_Email {
 			$colors[ $key ] = $value ? $value : $default;
 		}
 		return $colors;
+	}
+
+	/** SET-VC-29: rendered with the shop's email logo and accent colour (Branding). */
+	public function get_content() {
+		return Branding::during( fn() => parent::get_content() );
+	}
+
+	/** SET-VC-29: WooCommerce's email styles with the shop's accent colour (Branding). */
+	public function style_inline( $content ) {
+		return Branding::during( fn() => parent::style_inline( $content ) );
 	}
 
 	public function get_content_html() {

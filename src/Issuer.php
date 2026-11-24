@@ -419,12 +419,12 @@ final class Issuer {
 	private static array $confirmed = array();
 
 	/**
-	 * Payment methods that set an order to "Processing" (or let the shop do it) before any money arrived: cash
-	 * on delivery, bank transfer, cheque. Filter "vcap_offline_payment_methods" (gateway ids) adds e.g. invoice or
-	 * pay-at-pickup gateways.
+	 * Payment methods that set an order to "Processing" (or let the shop do it) before any money arrived: the
+	 * setting "Payment methods paid later" (SET-VC-19, default cash on delivery, bank transfer, cheque). The filter
+	 * "vcap_offline_payment_methods" (gateway ids) wins, e.g. to add invoice or pay-at-pickup gateways in code.
 	 */
 	public static function offline_payment( \WC_Order $order ): bool {
-		$methods = array_map( 'strval', (array) apply_filters( 'vcap_offline_payment_methods', array( 'cod', 'bacs', 'cheque' ), $order ) );
+		$methods = array_map( 'strval', (array) apply_filters( 'vcap_offline_payment_methods', PaymentMethods::offline(), $order ) );
 		return '' !== $order->get_payment_method() && in_array( $order->get_payment_method(), $methods, true );
 	}
 

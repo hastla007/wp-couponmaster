@@ -27,6 +27,7 @@ final class Downloads {
 		add_action( 'template_redirect', array( $this, 'handle_balance' ), 8 );
 		add_action( 'init', array( self::class, 'register_assets' ), 5 );
 		add_action( 'wp_enqueue_scripts', array( $this, 'styles' ) );
+		CustomCss::register(); // SET-VC-30: "Additional CSS" is stored cleaned.
 	}
 
 	/** Registers the storefront style and script (enqueued where vouchers are shown, see enqueue_style()). */
@@ -46,11 +47,16 @@ final class Downloads {
 	public static function enqueue_style(): void {
 		self::register_assets();
 		wp_enqueue_style( 'vcap-frontend' );
+		CustomCss::enqueue(); // SET-VC-30: the shop's additional CSS, only where plugin output is rendered.
 	}
 
 	public function styles(): void {
-		if ( is_account_page() || is_order_received_page() || is_product() || is_cart() || is_checkout() ) {
+		if ( is_account_page() ) {
 			self::enqueue_style();
+		} elseif ( is_order_received_page() || is_product() || is_cart() || is_checkout() ) {
+			// The base style only: these pages get the additional CSS once plugin output is rendered on them.
+			self::register_assets();
+			wp_enqueue_style( 'vcap-frontend' );
 		}
 	}
 
@@ -94,18 +100,31 @@ final class Downloads {
 		return $this->url_with_exp( $voucher, $exp );
 	}
 
-	/** Days a link printed on a voucher stays valid after the voucher expires (M12-41). */
+	/** Default days a link printed on a voucher stays valid after the voucher expires (M12-41; SET-VC-18 setting). */
 	public const PRINTED_LINK_GRACE_DAYS = 30;
 
 	/**
 	 * M12-41: download link printed in the PDF (QR code "PDF download link"). A printed voucher is kept for years,
-	 * so the link does not expire with the email link lifetime but 30 days after the voucher itself, and never for
-	 * vouchers without expiry. A reissue still invalidates it (link version).
+	 * so the link does not expire with the email link lifetime but a number of days after the voucher itself
+	 * (setting "vcap_printed_link_grace_days", default 30), and never for vouchers without expiry. A reissue still
+	 * invalidates it (link version).
 	 */
 	public function printed_url( Voucher $voucher ): string {
 		$expires = $voucher->expires_at ? strtotime( $voucher->expires_at . ' UTC' ) : false;
-		$exp     = false !== $expires ? (int) $expires + self::PRINTED_LINK_GRACE_DAYS * DAY_IN_SECONDS : 0;
+		$exp     = false !== $expires ? (int) $expires + self::printed_link_grace_days( $voucher ) * DAY_IN_SECONDS : 0;
 		return $this->url_with_exp( $voucher, $exp );
+	}
+
+	/** SET-VC-18: days a printed link stays valid after the voucher expired (setting, then filter; at least 0). */
+	public static function printed_link_grace_days( Voucher $voucher ): int {
+		/**
+		 * Days the download link printed on a voucher (QR code) stays valid after the voucher expired.
+		 *
+		 * @since 1.3.0
+		 * @param int     $days    Setting "vcap_printed_link_grace_days" (default 30).
+		 * @param Voucher $voucher Voucher.
+		 */
+		return max( 0, (int) apply_filters( 'vcap_printed_link_grace_days', SettingsRegistry::bounded_int( 'vcap_printed_link_grace_days' ), $voucher ) );
 	}
 
 	private function url_with_exp( Voucher $voucher, int $exp ): string {
@@ -129,7 +148,12 @@ final class Downloads {
 			&& (int) $order->get_customer_id() === get_current_user_id()
 			&& null !== $voucher->delivered_at
 			&& in_array( $voucher->status, array( Voucher::STATUS_ACTIVE, Voucher::STATUS_REDEEMED ), true )
-			&& (bool) apply_filters( 'vcap_customer_can_resend', true, $voucher );
+			&& self::resend_allowed( $voucher );
+	}
+
+	/** SET-VC-18: whether the shop lets buyers resend this voucher (setting "vcap_customer_can_resend", then filter). */
+	public static function resend_allowed( Voucher $voucher ): bool {
+		return (bool) apply_filters( 'vcap_customer_can_resend', 'yes' === Settings::value( 'vcap_customer_can_resend' ), $voucher );
 	}
 
 	/**
@@ -143,7 +167,12 @@ final class Downloads {
 			&& (int) $order->get_customer_id() === get_current_user_id()
 			&& Voucher::STATUS_SCHEDULED === $voucher->status
 			&& null === $voucher->delivered_at
-			&& (bool) apply_filters( 'vcap_customer_can_change', true, $voucher );
+			&& self::change_allowed( $voucher );
+	}
+
+	/** SET-VC-18: whether the shop lets buyers change this gift before delivery (setting "vcap_customer_can_change", then filter). */
+	public static function change_allowed( Voucher $voucher ): bool {
+		return (bool) apply_filters( 'vcap_customer_can_change', 'yes' === Settings::value( 'vcap_customer_can_change' ), $voucher );
 	}
 
 	/** Voucher settings of the voucher's product (the defaults when the product is gone). */
@@ -312,8 +341,19 @@ final class Downloads {
 
 	/** Ledger event of a recipient corrected through the signed link (counted: at most FIX_MAX). */
 	public const FIX_EVENT = 'recipient_corrected';
-	/** Corrections per voucher through the signed link (filter "vcap_recipient_fix_max", at most 2). */
+	/** Corrections per voucher through the signed link (setting and filter "vcap_recipient_fix_max", at most 2). */
 	public const FIX_MAX = 2;
+
+	/** SET-VC-18: days a "Correct recipient" link is valid – setting, then filter; at least 1. */
+	public static function fix_days( Voucher $voucher ): int {
+		/** Days the "Correct recipient" link of a gift stays valid. */
+		return max( 1, (int) apply_filters( 'vcap_recipient_fix_days', SettingsRegistry::bounded_int( 'vcap_recipient_fix_days' ), $voucher ) );
+	}
+
+	/** SET-VC-18: corrections allowed per voucher – setting, then filter; within 0 and FIX_MAX as before. */
+	public static function fix_max( Voucher $voucher ): int {
+		return min( self::FIX_MAX, max( 0, (int) apply_filters( 'vcap_recipient_fix_max', SettingsRegistry::bounded_int( 'vcap_recipient_fix_max' ), $voucher ) ) );
+	}
 
 	private function fix_signature( string $token, int $exp, int $version ): string {
 		return hash_hmac( 'sha256', 'fix|' . $token . '|' . $exp . '|v' . $version, $this->settings->secret() );
@@ -321,16 +361,14 @@ final class Downloads {
 
 	/**
 	 * M12-47: signed, time-limited link with which the buyer – also a guest – corrects a mistyped recipient address
-	 * (order received page, buyer email). Valid for "vcap_recipient_fix_days" days (default 30) and only for the
-	 * voucher's current code (a reissue gives a new token). '' when the voucher cannot be corrected.
+	 * (order received page, buyer email). Valid for fix_days() days (setting "vcap_recipient_fix_days", default 30)
+	 * and only for the voucher's current code (a reissue gives a new token). '' when the voucher cannot be corrected.
 	 */
 	public function correction_url( Voucher $voucher ): string {
 		if ( '' !== $this->correction_refusal( $voucher ) ) {
 			return '';
 		}
-		/** Days the "Correct recipient" link of a gift stays valid. */
-		$days = max( 1, (int) apply_filters( 'vcap_recipient_fix_days', 30, $voucher ) );
-		$exp  = time() + $days * DAY_IN_SECONDS;
+		$exp = time() + self::fix_days( $voucher ) * DAY_IN_SECONDS;
 		return add_query_arg(
 			array(
 				'vcap_fix' => $voucher->token,
@@ -356,7 +394,7 @@ final class Downloads {
 	 * most FIX_MAX times.
 	 */
 	public function correction_refusal( Voucher $voucher ): string {
-		$max = min( self::FIX_MAX, max( 0, (int) apply_filters( 'vcap_recipient_fix_max', self::FIX_MAX, $voucher ) ) );
+		$max = self::fix_max( $voucher );
 		if ( ! $voucher->id || 'credit' === $voucher->type || ! in_array( $voucher->send_to, array( 'recipient', 'both' ), true ) ) {
 			return __( 'This voucher is not sent to a recipient.', 'voucher-captain' );
 		}

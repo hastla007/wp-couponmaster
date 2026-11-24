@@ -13,13 +13,17 @@ defined( 'ABSPATH' ) || exit;
  * logged and listed for the admins.
  */
 final class Revocation {
+	/** SET-VC-33 (1.12 no. 39): setting "give the voucher back when its tickets are revoked" (default yes; the filter wins). */
+	public const RESTORE_OPTION = 'vcap_passcaptain_restore_on_revoke';
+
 	public function __construct( private RedemptionService $redemptions, private VoucherRepository $vouchers, private ExchangeState $state ) {}
 
 	/**
 	 * Pass Captain revoked or refunded the tickets of an exchange (order cancelled or refunded, date or
 	 * event cancelled): once no ticket is left – none valid, none used – the voucher is given back (the
 	 * redemption is refunded in full, a single-use voucher becomes active again) and can be exchanged anew.
-	 * Idempotent per Pass Captain order. Filter "vcap_passcaptain_restore_on_revoke" (false = keep redeemed).
+	 * Idempotent per Pass Captain order. Setting and filter "vcap_passcaptain_restore_on_revoke" (false = keep
+	 * redeemed; the filter gets the setting and wins).
 	 *
 	 * @param array $info redemption_key, order_public_id, remaining, revoked, reason.
 	 */
@@ -35,12 +39,17 @@ final class Revocation {
 			return;
 		}
 		$voucher = $this->vouchers->get( (int) $row['voucher_id'] );
-		if ( ! $voucher || Voucher::STATUS_VOID === $voucher->status || ! apply_filters( 'vcap_passcaptain_restore_on_revoke', true, $voucher, $info ) ) {
+		if ( ! $voucher || Voucher::STATUS_VOID === $voucher->status || ! apply_filters( 'vcap_passcaptain_restore_on_revoke', self::restore_setting(), $voucher, $info ) ) {
 			return;
 		}
 		if ( $this->restore( $key, $row, $voucher, (string) ( $info['order_public_id'] ?? '' ) ) ) {
 			$this->notify_restored( $this->vouchers->get( $voucher->id ) ?? $voucher );
 		}
+	}
+
+	/** Whether the setting gives a voucher back when Pass Captain revoked its tickets (default yes). */
+	public static function restore_setting(): bool {
+		return 'yes' === \VCAP\Settings::value( self::RESTORE_OPTION );
 	}
 
 	/** Gives the voucher of a committed exchange back (refund of the redemption; idempotent per PC order). */

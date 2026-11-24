@@ -32,14 +32,14 @@ final class Counter {
 	public const META_COUNT  = 'vcap_counter_limit_count';
 	/** M12-31: setting "Receipt no. required" – 'auto' (shops based in Germany or Austria), 'yes' or 'no'. */
 	public const REQUIRE_RECEIPT = 'vcap_counter_require_receipt';
-	/** M12-81: setting with the managed list of tills/branches, one per line ('' = free text on the device). */
+	/** M12-81: setting with the managed list of tills/branches ('' = free text on the device; SET-VC-22: a table, CounterLocations). */
 	public const LOCATIONS = 'vcap_counter_locations';
 	/** M12-81: user option (per site): the till/branch a staff member is fixed to ('' = chosen on the device). */
 	public const META_LOCATION = 'vcap_counter_location';
 	/** M12-78: option with failed scanner lookups per shop day and staff member ({Y-m-d: {user id: count}}). */
 	public const FAILED_LOOKUPS = 'vcap_scanner_failed_lookups';
-	/** Days the failed-lookup counter keeps. */
-	private const FAILED_DAYS = 92;
+	/** Days the failed-lookup counter keeps: default of the setting `vcap_scanner_failed_lookup_days` (SET-VC-08). */
+	public const FAILED_DAYS = 92;
 	/** Seconds a counter booking waits for the limit lock of another one (same staff member or till). */
 	private const LOCK_WAIT = 5;
 
@@ -153,14 +153,14 @@ final class Counter {
 
 	/**
 	 * Whether a counter redemption needs a receipt number (setting "Receipt no. required"; automatic = for shops
-	 * based in Germany or Austria, where the till receipt documents the sale – KassenSichV/RKSV). Filter
-	 * "vcap_counter_require_receipt".
+	 * based in a country whose market data sets "fiscal_receipt" – Germany and Austria, where the till receipt
+	 * documents the sale, KassenSichV/RKSV; SET-VC-10). Filter "vcap_counter_require_receipt" wins.
 	 */
 	public static function receipt_required(): bool {
 		$setting = (string) Settings::value( self::REQUIRE_RECEIPT );
 		if ( 'auto' === $setting || '' === $setting ) {
 			$country  = strtoupper( (string) strtok( (string) get_option( 'woocommerce_default_country', '' ), ':' ) );
-			$required = in_array( $country, array( 'DE', 'AT' ), true );
+			$required = Markets::fiscal_receipt( $country );
 		} else {
 			$required = 'yes' === $setting;
 		}
@@ -169,15 +169,29 @@ final class Counter {
 	}
 
 	/**
-	 * The managed list of tills/branches (setting, one per line; empty = free text on the device).
+	 * The managed list of tills/branches: names of the active rows of the table (SET-VC-22, CounterLocations; the
+	 * free text of 1.2.0 is still read); empty = free text on the device.
 	 *
 	 * @return string[]
 	 */
 	public static function locations(): array {
-		$list = preg_split( '/\r\n|\r|\n/', (string) Settings::value( self::LOCATIONS ) );
-		$list = array_values( array_unique( array_filter( array_map( array( self::class, 'clean_till' ), (array) $list ), static fn( $l ) => '' !== $l ) ) );
+		$list = CounterLocations::active_names();
 		/** The managed tills/branches offered on the scanner. Args: string[] list. */
 		return array_values( array_map( 'strval', (array) apply_filters( 'vcap_counter_locations', $list ) ) );
+	}
+
+	/**
+	 * PV-P2-9: whether the shop keeps a list of tills/branches – the table has rows (active or not) or the filter
+	 * offers names. A device then books only at an active till of the list, never with a free text: "no list" (free
+	 * text) and "a list without an active till" (nothing can be booked) are different.
+	 */
+	public static function tills_managed(): bool {
+		return array() !== self::locations() || array() !== CounterLocations::rows();
+	}
+
+	/** PV-P2-9: what the scanner says while the list of tills has no active till. */
+	public static function no_active_till_message(): string {
+		return __( 'No till/branch of the list is active, so nothing can be booked. Ask an administrator to activate a till under WooCommerce → Settings → Vouchers → Counter & locations.', 'voucher-captain' );
 	}
 
 	/** The till/branch a staff member is fixed to ('' = chosen on the device; only names from the managed list). */
@@ -199,6 +213,10 @@ final class Counter {
 		}
 		$till      = self::clean_till( $till );
 		$locations = self::locations();
+		if ( ! $locations && self::tills_managed() ) {
+			// PV-P2-9: every till of the list is switched off – no free text (it would bypass the limits per till).
+			return new \WP_Error( 'vcap_till_none_active', self::no_active_till_message(), array( 'status' => 400 ) );
+		}
 		if ( $locations && ! in_array( $till, $locations, true ) ) {
 			return new \WP_Error( 'vcap_till_unknown', __( 'Please choose the till/branch of this device from the list.', 'voucher-captain' ), array( 'status' => 400 ) );
 		}
@@ -211,9 +229,48 @@ final class Counter {
 		$data  = is_array( $data ) ? $data : array();
 		$today = wp_date( 'Y-m-d' );
 		$data[ $today ][ $user_id ] = (int) ( $data[ $today ][ $user_id ] ?? 0 ) + 1;
-		$cut  = wp_date( 'Y-m-d', time() - self::FAILED_DAYS * DAY_IN_SECONDS );
-		$data = array_filter( $data, static fn( $day ) => (string) $day >= $cut, ARRAY_FILTER_USE_KEY );
-		update_option( self::FAILED_LOOKUPS, $data, false );
+		update_option( self::FAILED_LOOKUPS, self::without_old_lookups( $data ), false );
+	}
+
+	/**
+	 * SET-VC-08: days the failed-lookup counter keeps – the setting `vcap_scanner_failed_lookup_days` (block
+	 * "Retention"), then the filter of the same name, which wins. 0 (filter only) keeps every day.
+	 */
+	public static function failed_lookup_days(): int {
+		/**
+		 * Days the counts of failed scanner lookups per staff member are kept (counter report). 0 keeps them.
+		 *
+		 * @since 1.3.0
+		 * @param int $days Days (default: the setting, 92).
+		 */
+		return max( 0, (int) apply_filters( 'vcap_scanner_failed_lookup_days', SettingsRegistry::bounded_int( 'vcap_scanner_failed_lookup_days' ) ) );
+	}
+
+	/**
+	 * The failed-lookup counts without the days older than failed_lookup_days().
+	 *
+	 * @param array<mixed> $data Shop day (Y-m-d) => counts.
+	 * @return array<mixed>
+	 */
+	private static function without_old_lookups( array $data ): array {
+		$days = self::failed_lookup_days();
+		if ( $days <= 0 ) {
+			return $data;
+		}
+		$cut = (string) wp_date( 'Y-m-d', time() - $days * DAY_IN_SECONDS );
+		return array_filter( $data, static fn( $day ) => (string) $day >= $cut, ARRAY_FILTER_USE_KEY );
+	}
+
+	/** SET-VC-08: daily maintenance (step "protocols") – removes failed-lookup counts older than the retention. */
+	public static function prune_failed_lookups(): void {
+		$data = get_option( self::FAILED_LOOKUPS, null );
+		if ( ! is_array( $data ) ) {
+			return;
+		}
+		$kept = self::without_old_lookups( $data );
+		if ( count( $kept ) !== count( $data ) ) {
+			update_option( self::FAILED_LOOKUPS, $kept, false );
+		}
 	}
 
 	/**

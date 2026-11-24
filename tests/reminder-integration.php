@@ -14,7 +14,10 @@ function vcap_rem_assert( bool $condition, string $message ): void {
 function vcap_rem_voucher( string $email, int $expires_in_days, array $props = array() ): VCAP\Voucher {
 	$v                 = new VCAP\Voucher();
 	$v->code           = 'vcap-rem-' . strtolower( wp_generate_password( 10, false, false ) );
-	$v->order_item_id  = 60000000 + random_int( 1, 9999999 );
+	// Unique within a run (one random base, then counted): random ids per voucher collided on order_item_slot.
+	static $vcap_rem_base = null, $vcap_rem_item = 0;
+	$vcap_rem_base    ??= random_int( 1, 999 ) * 100000;
+	$v->order_item_id  = 600000000 + $vcap_rem_base + ( ++$vcap_rem_item );
 	$v->type           = 'giftcard';
 	$v->usage_mode     = $props['usage_mode'] ?? 'balance';
 	$v->initial_amount = 50;

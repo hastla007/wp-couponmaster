@@ -123,6 +123,7 @@ final class Plugin {
 		( new TopUp( $this->vouchers, $this->coupons ) )->register();
 		( new CouponLink( $this->settings ) )->register();
 		( new VoucherPurchaseRules( $this->settings ) )->register();
+		( new PaymentMethods() )->register(); // SET-VC-19: payment methods not offered for vouchers.
 		( new FirstOrderCoupons() )->register();
 		( new CouponSkuRules() )->register();
 		$referrals = new Referrals( $this->settings, $this->store_credit );
@@ -176,10 +177,14 @@ final class Plugin {
 		$this->passcaptain_tickets->register();
 		( new Compat\PassCaptainScanner() )->register();
 
+		( new SettingsLog() )->register(); // SET-VC-16: change log of the settings (any source).
+
 		if ( is_admin() ) {
 			( new Admin\Menu() )->register();
+			( new Admin\SettingsTools() )->register();
 			( new Admin\ProHints() )->register();
 			( new Admin\DataRemoval() )->register();
+			( new Admin\RoleCaps() )->register(); // SET-VC-21: rights per role.
 			( new Admin\OrderAdmin( $this->vouchers, $this->issuer ) )->register();
 			( new Admin\VoucherAdmin( $this->vouchers ) )->register();
 			( new Admin\Import( $this->code_pool ) )->register();
@@ -187,6 +192,7 @@ final class Plugin {
 			( new Admin\CampaignAdmin( new Campaigns( $this->code_pool, $this->vouchers ) ) )->register();
 			( new Admin\ReportsAdmin() )->register();
 			( new Counter() )->register(); // Own daily counter limits on the user profile (R6).
+			( new CounterLocations() )->register(); // SET-VC-22: the table of tills/branches.
 		}
 
 		add_action( 'init', array( $this, 'load_textdomain' ), 0 );
@@ -388,6 +394,17 @@ final class Plugin {
 		self::$rate_backend = array();
 	}
 
+	/** Addresses remembered per bucket of RATE_HITS_OPTION (as keyed hashes) for the Site Health check. */
+	public const RATE_HIT_SOURCES = 5;
+
+	/**
+	 * The visitor's network (Plugin::client_network()) as a short keyed hash: compares addresses of limit hits
+	 * without storing them (the site's secret salt keeps it from being turned back into the address).
+	 */
+	public static function rate_hit_source(): string {
+		return substr( self::rate_key( 'source|' . self::client_network( self::client_ip() ) ), 0, 16 );
+	}
+
 	/**
 	 * A visitor went over a limit: logged once per bucket and window (without the address) and remembered for
 	 * Site Health, so "Too many attempts" for many customers (e.g. behind a proxy) does not go unnoticed.
@@ -396,25 +413,53 @@ final class Plugin {
 		if ( 1 !== self::rate_increment( self::rate_key( $bucket . '|hit' ), $window ) ) {
 			return;
 		}
-		Logger::warning( sprintf( 'Rate limit "%1$s" reached: a visitor made more than %2$d attempts within %3$d minutes. If many customers see "Too many attempts", check Tools > Site Health (proxy or CDN without the filter "vcap_client_ip").', $bucket, $per_visitor, (int) ceil( $window / 60 ) ) );
+		Logger::warning( sprintf( 'Rate limit "%1$s" reached: a visitor made more than %2$d attempts within %3$d minutes. If many customers see "Too many attempts", check Tools > Site Health (proxy or CDN without the setting "Trusted proxy header" or the filter "vcap_client_ip").', $bucket, $per_visitor, (int) ceil( $window / 60 ) ) );
 		$hits            = get_option( self::RATE_HITS_OPTION, array() );
 		$hits            = is_array( $hits ) ? $hits : array();
+		$from            = is_array( $hits[ $bucket ]['from'] ?? null ) ? $hits[ $bucket ]['from'] : array();
+		$from[]          = array( self::rate_hit_source(), time() ); // SET-VC-26: Site Health sees when all hits share one address.
 		$hits[ $bucket ] = array(
 			'last'    => time(),
 			'windows' => (int) ( $hits[ $bucket ]['windows'] ?? 0 ) + 1,
+			'from'    => array_slice( $from, -self::RATE_HIT_SOURCES ),
 		);
 		update_option( self::RATE_HITS_OPTION, $hits, false );
 		/** Fires the first time a visitor exceeds the limit of a bucket in a window. */
 		do_action( 'vcap_rate_limit_hit', $bucket, $per_visitor, $window );
 	}
 
+	/** Option (SET-VC-26): header with the visitor address set by a trusted proxy – 'none', 'cloudflare', 'xff_last'. */
+	public const PROXY_HEADER_OPTION = 'vcap_proxy_header';
+
 	/**
-	 * Visitor address for rate limits: REMOTE_ADDR only, because X-Forwarded-For and similar headers can be
-	 * spoofed. Behind a trusted reverse proxy or CDN return the real client address with "vcap_client_ip".
+	 * Visitor address for rate limits: REMOTE_ADDR, or – when the shop runs behind a proxy it trusts – the header
+	 * chosen under "Trusted proxy header" (SET-VC-26; X-Forwarded-For and similar headers can be spoofed when no
+	 * proxy sets them, so the default is REMOTE_ADDR only). The filter "vcap_client_ip" wins over the setting.
 	 */
 	public static function client_ip(): string {
-		$ip = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '';
+		$ip = self::client_ip_from( $_SERVER, (string) Settings::value( self::PROXY_HEADER_OPTION ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- client_ip_from() reads and checks the two values it uses.
 		return (string) apply_filters( 'vcap_client_ip', $ip );
+	}
+
+	/**
+	 * Visitor address from server variables: with $header 'cloudflare' the address in CF-Connecting-IP, with
+	 * 'xff_last' the last entry of X-Forwarded-For (the one the nearest proxy appended), else REMOTE_ADDR. A missing
+	 * or invalid header value falls back to REMOTE_ADDR.
+	 *
+	 * @param array<string, mixed> $server $_SERVER.
+	 * @param string               $header Setting PROXY_HEADER_OPTION.
+	 */
+	public static function client_ip_from( array $server, string $header ): string {
+		$remote = isset( $server['REMOTE_ADDR'] ) && is_string( $server['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $server['REMOTE_ADDR'] ) ) : '';
+		$raw    = '';
+		if ( 'cloudflare' === $header ) {
+			$raw = $server['HTTP_CF_CONNECTING_IP'] ?? '';
+		} elseif ( 'xff_last' === $header ) {
+			$list = explode( ',', is_string( $server['HTTP_X_FORWARDED_FOR'] ?? null ) ? $server['HTTP_X_FORWARDED_FOR'] : '' );
+			$raw  = (string) end( $list );
+		}
+		$ip = is_string( $raw ) ? trim( sanitize_text_field( wp_unslash( $raw ) ) ) : '';
+		return '' !== $ip && false !== filter_var( $ip, FILTER_VALIDATE_IP ) ? $ip : $remote;
 	}
 
 	/**

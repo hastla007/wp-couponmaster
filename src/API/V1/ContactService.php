@@ -290,12 +290,13 @@ final class ContactService {
 					'desc'  => __( 'Lets authorised add-ons read the address of a voucher\'s recipient or buyer for a purpose this person consented to (e.g. a review invitation). Every read is written to the voucher history. Switch it on only after your data protection review and with a matching note in your privacy policy.', 'voucher-captain' ),
 					'id'    => 'vcap_contact_read',
 				),
-				array(
-					'title'   => __( 'Allow contact reads', 'voucher-captain' ),
-					'id'      => self::OPTION_ENABLED,
-					'type'    => 'checkbox',
-					'default' => 'no',
-					'desc'    => __( 'Answer contact requests of add-ons (only with recorded consent)', 'voucher-captain' ),
+				\VCAP\SettingsRegistry::field(
+					self::OPTION_ENABLED,
+					array(
+						'title' => __( 'Allow contact reads', 'voucher-captain' ),
+						'type'  => 'checkbox',
+						'desc'  => __( 'Answer contact requests of add-ons (only with recorded consent)', 'voucher-captain' ),
+					)
 				),
 				array(
 					'type' => 'sectionend',

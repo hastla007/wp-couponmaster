@@ -450,14 +450,14 @@ final class Tickets {
 
 	/**
 	 * Whether the current user may revert the last check-in: 'own' (their own check-in within the time window,
-	 * filter "vcap_checkin_undo_minutes", default 10), 'reason' (managers, with a reason) or '' (not at all; also
+	 * setting and filter "vcap_checkin_undo_minutes", default 10), 'reason' (managers, with a reason) or '' (not at all; also
 	 * for cancelled or expired tickets).
 	 */
 	public static function undo_mode( Voucher $voucher, ?array $last_checkin, int $user_id, bool $manager, int $now, int $undone = 0 ): string {
 		if ( ! $voucher->is_ticket() || $voucher->checkins < 1 || Voucher::STATUS_VOID === $voucher->status || Voucher::STATUS_EXPIRED === $voucher->status || $voucher->is_expired() ) {
 			return '';
 		}
-		$window = max( 0, (int) apply_filters( 'vcap_checkin_undo_minutes', 10, $voucher ) );
+		$window = max( 0, (int) apply_filters( 'vcap_checkin_undo_minutes', SettingsRegistry::bounded_int( 'vcap_checkin_undo_minutes' ), $voucher ) );
 		// M12-15: one's own undo reverts at most the admissions of that check-in ($undone: reverted since), never
 		// earlier check-ins of others (a 3-day pass checked in once must not go back from 3/3 to 0/3).
 		$admitted = $last_checkin ? max( 1, (int) round( (float) ( $last_checkin['amount'] ?? 1 ) ) ) : 0;
@@ -1310,7 +1310,7 @@ final class Tickets {
 	 * Why a redemption cannot be cancelled ('' = it can): 'not_found' (no redemption of this voucher), 'order'
 	 * (booked by a shop order: cancel or refund the order instead), 'reversed' (already cancelled), 'void'
 	 * (voucher cancelled), 'forbidden' (only managers, or the person who booked it within the time window,
-	 * filter "vcap_counter_reversal_minutes", default 15).
+	 * setting and filter "vcap_counter_reversal_minutes", default 15).
 	 */
 	public static function reversal_refusal( ?array $event, Voucher $voucher, int $user_id, bool $manager, int $now, bool $reversed ): string {
 		if ( ! $event || 'redeemed' !== ( $event['event'] ?? '' ) || (int) $event['voucher_id'] !== $voucher->id || (float) $event['amount'] <= 0 ) {
@@ -1328,7 +1328,7 @@ final class Tickets {
 		if ( $manager ) {
 			return '';
 		}
-		$window = max( 0, (int) apply_filters( 'vcap_counter_reversal_minutes', 15, $voucher ) );
+		$window = max( 0, (int) apply_filters( 'vcap_counter_reversal_minutes', SettingsRegistry::bounded_int( 'vcap_counter_reversal_minutes' ), $voucher ) );
 		$own    = $user_id > 0 && (int) $event['user_id'] === $user_id && $now - (int) strtotime( $event['created_at'] . ' UTC' ) <= $window * MINUTE_IN_SECONDS;
 		return $own ? '' : 'forbidden';
 	}

@@ -732,4 +732,25 @@ foreach ( $u9_keep as $u9_option => $u9_value ) {
 
 false === $keep_terms ? delete_option( 'vcap_default_terms' ) : update_option( 'vcap_default_terms', $keep_terms );
 false === $keep_rule ? delete_option( 'vcap_default_expiry_rule' ) : update_option( 'vcap_default_expiry_rule', $keep_rule );
+/* ---- 13. Country profile (SET-VC-02) and setup checklist (SET-VC-25) ------------------------------------------- */
+
+$cp_keys = array( 'vcap_default_expiry_rule', 'vcap_retention_days', 'vcap_date_format', VCAP\Markets::EXPIRY_OPTION, VCAP\CountryProfiles::APPLIED_OPTION, VCAP\SettingsLog::OPTION, VCAP\SettingsTransfer::BACKUP_OPTION, 'woocommerce_default_country' );
+$cp_keep = array();
+foreach ( $cp_keys as $cp_key ) {
+	$cp_keep[ $cp_key ] = get_option( $cp_key, false );
+	delete_option( $cp_key );
+}
+update_option( 'woocommerce_default_country', 'DE:BE' );
+VCAP\CountryProfiles::reset();
+vcap_ps_assert( ! VCAP\Admin\Onboarding::steps()['country_profile']['done'] && ! VCAP\Admin\Onboarding::steps()['retention']['done'], 'SET-VC-25: country profile and retention steps are open on a shop without them' );
+$cp_preview = VCAP\CountryProfiles::preview( 'DE' );
+$cp_result  = VCAP\CountryProfiles::apply( 'DE', array_keys( array_filter( $cp_preview, static fn( $item ) => $item['preselected'] ) ) );
+$cp_log     = array_filter( VCAP\SettingsLog::entries(), static fn( $row ) => VCAP\SettingsLog::VIA_PROFILE === $row['via'] );
+vcap_ps_assert( is_array( $cp_result ) && in_array( 'vcap_retention_days', $cp_result['changed'], true ) && '1095' === (string) get_option( 'vcap_retention_days' ) && in_array( 'vcap_retention_days', array_column( $cp_log, 'key' ), true ) && 'DE' === VCAP\Markets::expiry_rows( get_option( VCAP\Markets::EXPIRY_OPTION ) )[0]['country'], 'SET-VC-02: applying the DE profile stores the ticked values and the change log records them with the source "country profile"' );
+vcap_ps_assert( VCAP\Admin\Onboarding::steps()['country_profile']['done'] && VCAP\Admin\Onboarding::steps()['retention']['done'], 'SET-VC-25: after the profile the country profile and retention steps are done' );
+foreach ( $cp_keep as $cp_key => $cp_value ) {
+	false === $cp_value ? delete_option( $cp_key ) : update_option( $cp_key, $cp_value );
+}
+VCAP\CountryProfiles::reset();
+
 echo "Voucher Captain product setup checks passed.\n";

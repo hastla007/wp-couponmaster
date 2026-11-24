@@ -7,22 +7,81 @@ defined( 'ABSPATH' ) || exit;
  * M12-97: physical gift cards. A voucher product with "Physical card" is shipped (not virtual): its vouchers take
  * their code from the product's imported batch (the printed cards), get no email – the card itself is the handover
  * – and stay inactive (scheduled, coupon disabled) until the order reaches an activation status (default
- * "completed", i.e. shipped; filter "vcap_physical_activation_statuses"). Print data for card printers is not part
+ * "completed", i.e. shipped; SET-VC-33: setting and filter "vcap_physical_activation_statuses"). Print data for card printers is not part
  * of the core (docs/FREE-PREMIUM.md: possible add-on feature).
  */
 final class PhysicalCards {
+	/** SET-VC-33 (1.12 no. 12): setting with the activation statuses (default "completed"; the filter wins). */
+	public const STATUSES_OPTION = 'vcap_physical_activation_statuses';
+
+	/** Statuses before or without payment: never an activation status of the setting (a card is a means of payment). */
+	public const UNPAID_STATUSES = array( 'pending', 'on-hold', 'failed', 'cancelled', 'refunded', 'checkout-draft' );
+
 	public function register(): void {
 		add_action( 'woocommerce_order_status_changed', array( $this, 'on_status' ), 40, 4 );
+		add_filter( 'woocommerce_admin_settings_sanitize_option_' . self::STATUSES_OPTION, array( self::class, 'sanitize_statuses' ) );
 	}
 
 	public static function is_physical( array $config ): bool {
 		return 'yes' === ( $config['physical'] ?? 'no' );
 	}
 
-	/** Order statuses (without "wc-") that mean "shipped": the cards of the order become redeemable. */
+	/**
+	 * Order statuses (without "wc-") that mean "shipped": the cards of the order become redeemable. SET-VC-33: the
+	 * setting (Settings → Vouchers → Integrations (API); unpaid statuses are dropped, empty = "completed") is the
+	 * default of the filter, which wins.
+	 *
+	 * @return string[]
+	 */
 	public static function activation_statuses(): array {
-		/** Order statuses at which physical gift cards are activated (default: completed). */
-		return array_values( array_filter( array_map( 'sanitize_key', (array) apply_filters( 'vcap_physical_activation_statuses', array( 'completed' ) ) ) ) );
+		/** Order statuses at which physical gift cards are activated (default: the setting, "completed"). */
+		return array_values( array_filter( array_map( 'sanitize_key', (array) apply_filters( 'vcap_physical_activation_statuses', self::setting_statuses() ) ) ) );
+	}
+
+	/**
+	 * The statuses of the setting: paid statuses only, "completed" when none is left.
+	 *
+	 * @param mixed $value Stored value (default: the setting).
+	 * @return string[]
+	 */
+	public static function setting_statuses( $value = null ): array {
+		$value = null === $value ? Settings::value( self::STATUSES_OPTION ) : $value;
+		$list  = array();
+		foreach ( (array) $value as $status ) {
+			$status = is_scalar( $status ) ? sanitize_key( (string) $status ) : '';
+			$status = str_starts_with( $status, 'wc-' ) ? substr( $status, 3 ) : $status;
+			if ( '' !== $status && ! in_array( $status, self::UNPAID_STATUSES, true ) && ! in_array( $status, $list, true ) ) {
+				$list[] = $status;
+			}
+		}
+		return $list ? $list : array( 'completed' );
+	}
+
+	/**
+	 * Paid order statuses offered by the setting (status without "wc-" => label).
+	 *
+	 * @return array<string, string>
+	 */
+	public static function status_choices(): array {
+		$choices = array();
+		foreach ( function_exists( 'wc_get_order_statuses' ) ? wc_get_order_statuses() : array( 'wc-completed' => __( 'Completed', 'voucher-captain' ) ) as $key => $label ) {
+			$status = str_starts_with( (string) $key, 'wc-' ) ? substr( (string) $key, 3 ) : (string) $key;
+			if ( ! in_array( $status, self::UNPAID_STATUSES, true ) ) {
+				$choices[ $status ] = (string) $label;
+			}
+		}
+		return $choices;
+	}
+
+	/**
+	 * WooCommerce filter "woocommerce_admin_settings_sanitize_option_vcap_physical_activation_statuses": only paid
+	 * statuses are stored; an empty choice stores "completed".
+	 *
+	 * @param mixed $value Submitted value.
+	 * @return string[]
+	 */
+	public static function sanitize_statuses( $value ): array {
+		return self::setting_statuses( is_array( $value ) ? $value : array() );
 	}
 
 	/**
@@ -35,7 +94,17 @@ final class PhysicalCards {
 		}
 		$voucher->delivery_at  = null;
 		$voucher->delivered_at = $now;
-		$voucher->status       = in_array( $order->get_status(), self::activation_statuses(), true ) ? Voucher::STATUS_ACTIVE : Voucher::STATUS_SCHEDULED;
+		$voucher->status       = self::activates( (string) $order->get_status() ) ? Voucher::STATUS_ACTIVE : Voucher::STATUS_SCHEDULED;
+	}
+
+	/**
+	 * Whether an order status activates physical cards: one of activation_statuses(), and PV-P2-2 always "completed"
+	 * (the last paid status – an order there has passed every activation status, so a card issued only at
+	 * "completed" is not left inactive for good). Only an empty list of the filter switches the activation off.
+	 */
+	public static function activates( string $status ): bool {
+		$statuses = self::activation_statuses();
+		return in_array( $status, $statuses, true ) || ( 'completed' === $status && array() !== $statuses );
 	}
 
 	/** Physical cards of an order still waiting for the shipment. @return Voucher[] */
@@ -56,7 +125,7 @@ final class PhysicalCards {
 
 	/** @param mixed $order The order (WooCommerce passes it from 3.x on). */
 	public function on_status( $order_id, $from = '', $to = '', $order = null ): void {
-		if ( ! in_array( (string) $to, self::activation_statuses(), true ) ) {
+		if ( ! self::activates( (string) $to ) ) {
 			return;
 		}
 		$order = $order instanceof \WC_Order ? $order : wc_get_order( $order_id );

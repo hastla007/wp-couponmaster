@@ -24,6 +24,8 @@ final class AffiliateCaptain {
 	public const CONTRACT = '1.0.0';
 	/** Capability of Affiliate Captain needed to assign campaign partners. */
 	public const CAPABILITY = 'wpac_manage_affiliates';
+	/** SET-VC-33 (1.12 no. 38): setting "commission on voucher sales" (default yes; the filter wins). */
+	public const COMMISSION_OPTION = 'vcap_affiliate_commission_on_voucher_sales';
 
 	private bool $done = false;
 
@@ -208,14 +210,14 @@ final class AffiliateCaptain {
 	/**
 	 * `wpac_commission_base`: buying a voucher or gift card is a prepayment; the money is earned when it is
 	 * redeemed (and the redeeming order is then reduced by the voucher). By default the partner who brought
-	 * the voucher buyer is paid on the voucher sale; return false from `vcap_affiliate_commission_on_voucher_sales`
-	 * to pay nothing on voucher products instead.
+	 * the voucher buyer is paid on the voucher sale; the setting of the same name (SET-VC-33) or the filter
+	 * `vcap_affiliate_commission_on_voucher_sales` (it gets the setting and wins) pays nothing on voucher products instead.
 	 */
 	public function commission_base( $base, $item, $sale ) {
 		if ( ! is_array( $item ) || ! is_array( $sale ) || 'woocommerce' !== ( $sale['source'] ?? '' ) || (int) $base <= 0 ) {
 			return $base;
 		}
-		if ( apply_filters( 'vcap_affiliate_commission_on_voucher_sales', true ) ) {
+		if ( apply_filters( 'vcap_affiliate_commission_on_voucher_sales', 'yes' === \VCAP\Settings::value( self::COMMISSION_OPTION ) ) ) {
 			return $base;
 		}
 		$product = (int) ( ! empty( $item['product_id'] ) ? $item['product_id'] : 0 );

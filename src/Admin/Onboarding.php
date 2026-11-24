@@ -6,8 +6,9 @@ use VCAP\Shortcodes;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * First steps after activation: a dismissible checklist (redeem and balance pages with one click, a first
- * voucher product, issue status, redemption conditions). It disappears once everything is done or dismissed.
+ * First steps after activation: a dismissible checklist (country profile, redeem and balance pages with one click, a
+ * first voucher product, issue status, redemption conditions, mandatory texts per country, tax type, retention). It
+ * disappears once everything is done or dismissed.
  */
 final class Onboarding {
 	public const DISMISSED = 'vcap_onboarding_dismissed';
@@ -78,7 +79,19 @@ final class Onboarding {
 				'meta_value'  => 'yes', // phpcs:ignore WordPress.DB.SlowDBQuery
 			)
 		);
-		$steps = array(
+		$profile = \VCAP\CountryProfiles::for_base_country();
+		$missing = self::missing_texts();
+		$steps   = array(
+			// SET-VC-25: the country first – its profile suggests validity, receipt number, retention and more.
+			'country_profile' => array(
+				'label'  => __( 'Choose a country profile: suggested settings for the country you sell in (validity, receipt number, retention, date format), shown as a preview before anything changes', 'voucher-captain' ),
+				'done'   => self::profile_chosen(),
+				'action' => 'profile_preview',
+				'url'    => \VCAP\Admin\CountryProfilesAdmin::page_url(),
+				/* translators: %s: profile name, e.g. Germany */
+				'button' => sprintf( __( 'Show suggestions for %s', 'voucher-captain' ), \VCAP\CountryProfiles::label( $profile ) ),
+				'link'   => __( 'Choose another profile', 'voucher-captain' ),
+			),
 			'redeem_page'  => array(
 				'label'  => __( 'A page where customers check and redeem their voucher codes (links in emails and PDFs lead there)', 'voucher-captain' ),
 				'done'   => '' !== Shortcodes::redeem_url(),
@@ -117,14 +130,36 @@ final class Onboarding {
 				'url'    => $settings . '#vcap_default_terms',
 				'button' => __( 'Open settings', 'voucher-captain' ),
 			),
-			// M12-03: how gift cards are taxed depends on two settings that belong together.
+			// SET-VC-25: mandatory texts per country – conditions for every market country the shop sells to.
+			'legal_texts'  => array(
+				'label'  => $missing && '' !== $missing[0]
+					/* translators: %s: country codes, e.g. "AT, CH" */
+					? sprintf( __( 'Mandatory texts per country: redemption conditions for every country you sell to (have them checked legally). Missing for: %s', 'voucher-captain' ), implode( ', ', array_slice( $missing, 0, 10 ) ) . ( count( $missing ) > 10 ? ', …' : '' ) )
+					: __( 'Mandatory texts per country: redemption conditions for every country you sell to (have them checked legally)', 'voucher-captain' ),
+				'done'   => ! $missing,
+				'action' => '',
+				'url'    => $settings . '#' . \VCAP\Markets::TERMS_OPTION . '-label', // PV-P5-8: id of the table's title (CountryTableField).
+				'button' => __( 'Open settings', 'voucher-captain' ),
+			),
+			// M12-03 / SET-VC-25: confirm the tax type – how gift cards are taxed depends on two settings that belong
+			// together (TAX.md); the step is done once the admin confirmed it.
 			'vat'          => array(
-				'label'  => \VCAP\PaymentVouchers::enabled()
+				'label'  => ( \VCAP\PaymentVouchers::enabled()
 					? __( 'VAT of gift cards and value vouchers: they are multi-purpose vouchers that pay after tax (setting "Multi-purpose vouchers as payment" is on). Sell them with the tax status "None" and have the classification confirmed by your tax adviser.', 'voucher-captain' )
-					: __( 'VAT of gift cards and value vouchers: the setting "Multi-purpose vouchers as payment" is off, so they are redeemed as a price reduction. Turn the setting on (and sell them with the tax status "None"), or keep the voucher products taxable. Have the classification confirmed by your tax adviser.', 'voucher-captain' ),
+					: __( 'VAT of gift cards and value vouchers: the setting "Multi-purpose vouchers as payment" is off, so they are redeemed as a price reduction. Turn the setting on (and sell them with the tax status "None"), or keep the voucher products taxable. Have the classification confirmed by your tax adviser.', 'voucher-captain' ) )
+					. ' ' . __( 'Confirm the tax type once it is checked (details in TAX.md of the plugin documentation).', 'voucher-captain' ),
 				'done'   => false,
 				'action' => '',
-				'url'    => $settings,
+				'url'    => $settings . '&section=redemption#' . \VCAP\PaymentVouchers::OPTION,
+				'button' => __( 'Open tax setting', 'voucher-captain' ),
+			),
+			// SET-VC-25: retention – new installations keep recipient data (owner rule S9); the admin sets a period
+			// (the country profile suggests one) or marks the step as done to keep the data.
+			'retention'    => array(
+				'label'  => __( 'Retention: after how many days recipient data of used or expired vouchers is anonymised (default: kept). Set a period that fits your country, or mark the step as done to keep the data.', 'voucher-captain' ),
+				'done'   => self::retention_set(),
+				'action' => '',
+				'url'    => $settings . '&section=privacy#vcap_retention_days',
 				'button' => __( 'Open settings', 'voucher-captain' ),
 			),
 		);
@@ -135,12 +170,43 @@ final class Onboarding {
 		return $steps;
 	}
 
+	/** SET-VC-25: a country profile was applied (or chosen without changes). */
+	public static function profile_chosen(): bool {
+		return null !== \VCAP\CountryProfiles::applied();
+	}
+
+	/** SET-VC-25: a retention period for recipient data is set (more than 0 days). */
+	public static function retention_set(): bool {
+		return (int) get_option( 'vcap_retention_days', 0 ) > 0;
+	}
+
+	/**
+	 * SET-VC-25: market countries (config/markets.php) the shop sells to without redemption conditions of their own.
+	 * General conditions cover a shop that sells to one market country; a shop selling to none of them needs the
+	 * general conditions (missing = array( '' )). Empty when every country has its conditions.
+	 *
+	 * @param string[]|null $selling Selling countries (default: WooCommerce "Selling location(s)").
+	 * @return string[]
+	 */
+	public static function missing_texts( ?array $selling = null ): array {
+		$general = '' !== trim( (string) get_option( 'vcap_default_terms', '' ) );
+		$known   = array_values( array_filter( array_map( 'strtoupper', $selling ?? \VCAP\Markets::selling_countries() ), array( \VCAP\Markets::class, 'known' ) ) );
+		if ( ! $known ) {
+			return $general ? array() : array( '' );
+		}
+		if ( 1 === count( $known ) && $general ) {
+			return array();
+		}
+		$own = array_column( \VCAP\Markets::terms_rows( get_option( \VCAP\Markets::TERMS_OPTION, '' ) ), 'country' );
+		return array_values( array_diff( $known, $own ) );
+	}
+
 	/**
 	 * U9: redemption conditions exist where ProductConfig::terms() looks for them – general conditions, conditions
 	 * per country (e.g. only "AT: …") or a voucher product's own conditions.
 	 */
 	private static function has_terms(): bool {
-		if ( '' !== trim( (string) get_option( 'vcap_default_terms', '' ) ) || \VCAP\ProductConfig::terms_by_country( (string) get_option( 'vcap_terms_by_country', '' ) ) ) {
+		if ( '' !== trim( (string) get_option( 'vcap_default_terms', '' ) ) || \VCAP\ProductConfig::terms_by_country( get_option( \VCAP\Markets::TERMS_OPTION, '' ) ) ) {
 			return true;
 		}
 		return (bool) get_posts(
@@ -254,6 +320,10 @@ final class Onboarding {
 			update_option( self::DISMISSED, 'yes', false );
 		} elseif ( 'validity_statutory' === $do || 'validity_days' === $do ) {
 			self::choose_validity( substr( $do, 9 ) );
+		} elseif ( 'profile_preview' === $do ) {
+			// SET-VC-25: opens the preview of the profile of the shop's country; nothing is changed yet.
+			CountryProfilesAdmin::open_preview( \VCAP\CountryProfiles::for_base_country() );
+			$back = CountryProfilesAdmin::page_url();
 		} elseif ( str_starts_with( $do, 'done_' ) ) {
 			self::mark_done( substr( $do, 5 ) );
 		} elseif ( 'sample_product' === $do ) {

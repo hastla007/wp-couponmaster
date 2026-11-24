@@ -94,6 +94,11 @@ Ein Add-on registriert sich in der Action `vcap_loaded` (Argument: das laufende 
 öffentliche API: `vcap()->api_v1`, `vcap()->redemptions`, den REST-Namespace `vcap/v1`, die Schnittstellen
 `VCAP\Contracts\*`, die dokumentierte Order-/Coupon-Meta und die Hooks mit Präfix `vcap_` (API.md, CONNECTORS.md).
 
+Eigene Einstellungen meldet das Add-on über den Filter `vcap_settings_registry` an (Vertrag 1.8.0) – am besten ebenfalls
+in `vcap_loaded`: Das Register wird erst ab `init` für die ganze Anfrage zwischengespeichert, vorher nur so lange,
+wie kein neuer Callback an dem Filter hängt, und direkt nach `vcap_loaded` einmal verworfen (PV-P6-1). Ein Filter, der
+erst nach `init` angemeldet wird, braucht `VCAP\SettingsRegistry::reset()`.
+
 **Versionierung** (CONNECTORS.md → 6. API versioning policy): Innerhalb von v1 nur additive Änderungen (neue Methoden,
 optionale Argumente, Array-Schlüssel, Hooks, Fehlercodes); bestehende Schlüssel, Fehlercodes und Hook-Argumente
 behalten ihre Bedeutung. Brechende Änderungen bekommen eine neue Version daneben (`api_v2`, `vcap/v2`); die alte

@@ -32,14 +32,17 @@ final class Health {
 
 	/**
 	 * Whether the request looks like it came through a reverse proxy or CDN while the rate limits still use
-	 * REMOTE_ADDR (no "vcap_client_ip" filter): then all customers share the proxy's counter.
+	 * REMOTE_ADDR (setting "Trusted proxy header" = none or its header missing, no "vcap_client_ip" filter): then all
+	 * customers share the proxy's counter. Signs: a proxy header is present, or REMOTE_ADDR is a private or reserved
+	 * address (a proxy or load balancer in the same network).
 	 *
 	 * @param array<string, mixed> $server $_SERVER.
 	 */
 	public static function proxy_without_client_ip( array $server ): bool {
 		$remote = isset( $server['REMOTE_ADDR'] ) && is_string( $server['REMOTE_ADDR'] ) ? $server['REMOTE_ADDR'] : '';
-		if ( (string) apply_filters( 'vcap_client_ip', $remote ) !== $remote ) { // Same filter as Plugin::client_ip().
-			return false; // The filter "vcap_client_ip" gives the visitor's address.
+		$client = Plugin::client_ip_from( $server, (string) Settings::value( Plugin::PROXY_HEADER_OPTION ) );
+		if ( (string) apply_filters( 'vcap_client_ip', $client ) !== $remote ) { // Same setting and filter as Plugin::client_ip().
+			return false; // The setting or the filter "vcap_client_ip" gives the visitor's address.
 		}
 		foreach ( array( 'HTTP_X_FORWARDED_FOR', 'HTTP_X_REAL_IP', 'HTTP_CF_CONNECTING_IP', 'HTTP_TRUE_CLIENT_IP', 'HTTP_FORWARDED', 'HTTP_X_CLUSTER_CLIENT_IP', 'HTTP_FASTLY_CLIENT_IP' ) as $header ) {
 			if ( ! empty( $server[ $header ] ) ) {
@@ -47,6 +50,53 @@ final class Health {
 			}
 		}
 		return '' !== $remote && false === filter_var( $remote, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE );
+	}
+
+	/** Limit hits looked at by single_source() (the most recent ones, at most 30 days old). */
+	private const SOURCE_HITS = 5;
+
+	/**
+	 * SET-VC-26: whether the last SOURCE_HITS rate-limit hits (Plugin::RATE_HITS_OPTION, all buckets, last 30 days)
+	 * all came from one address – the sign of a proxy whose address every visitor shares (or of one persistent
+	 * visitor). Fewer hits say nothing.
+	 *
+	 * @param mixed $hits Stored RATE_HITS_OPTION.
+	 */
+	public static function single_source( $hits ): bool {
+		$recent = array();
+		foreach ( is_array( $hits ) ? $hits : array() as $hit ) {
+			foreach ( is_array( $hit ) && is_array( $hit['from'] ?? null ) ? $hit['from'] : array() as $from ) {
+				if ( is_array( $from ) && is_string( $from[0] ?? null ) && '' !== $from[0] && (int) ( $from[1] ?? 0 ) > time() - 30 * DAY_IN_SECONDS ) {
+					$recent[] = array( $from[0], (int) $from[1] );
+				}
+			}
+		}
+		if ( count( $recent ) < self::SOURCE_HITS ) {
+			return false;
+		}
+		usort( $recent, static fn( array $a, array $b ) => $b[1] <=> $a[1] );
+		return 1 === count( array_unique( array_column( array_slice( $recent, 0, self::SOURCE_HITS ), 0 ) ) );
+	}
+
+	/**
+	 * Field "Trusted proxy header" of the section "Privacy & advanced" (SET-VC-26).
+	 *
+	 * @return array<string, mixed>
+	 */
+	public static function proxy_header_field(): array {
+		return SettingsRegistry::field(
+			Plugin::PROXY_HEADER_OPTION,
+			array(
+				'title'   => __( 'Trusted proxy header', 'voucher-captain' ),
+				'type'    => 'select',
+				'options' => array(
+					'none'       => __( 'None – use the connection address (REMOTE_ADDR)', 'voucher-captain' ),
+					'cloudflare' => __( 'Cloudflare (CF-Connecting-IP)', 'voucher-captain' ),
+					'xff_last'   => __( 'X-Forwarded-For, last entry', 'voucher-captain' ),
+				),
+				'desc'    => __( 'Rate limits for code entries count per visitor address. Behind a reverse proxy or CDN every visitor seems to come from the proxy\'s address; choose the header your proxy sets so each visitor is counted on their own. Only choose a header when every request passes through that proxy – otherwise visitors can fake the header and get around the limits. The filter "vcap_client_ip" wins over this setting.', 'voucher-captain' ),
+			)
+		);
 	}
 
 	/** Rate limits: visitor addresses behind a proxy, and limits reached in the last day. */
@@ -60,13 +110,18 @@ final class Health {
 			}
 		}
 		$proxy  = self::proxy_without_client_ip( $_SERVER ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- only checks which headers exist.
+		$single = self::single_source( $hits );
 		$reset  = '<p><a class="button" href="' . esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=vcap_reset_rate_limits' ), 'vcap_reset_rate_limits' ) ) . '">' . esc_html__( 'Reset rate limits', 'voucher-captain' ) . '</a></p>';
-		if ( ! $proxy && ! $recent ) {
+		if ( ! $proxy && ! $recent && ! $single ) {
 			return self::result( 'rate_limits', 'good', __( 'Code entry rate limits see each visitor', 'voucher-captain' ), __( 'Failed code entries and PDF previews are limited per visitor address; no limit was reached in the last 24 hours.', 'voucher-captain' ) );
 		}
 		$text = array();
 		if ( $proxy ) {
-			$text[] = __( 'This site seems to run behind a reverse proxy or CDN, but the rate limits count by the address of the proxy. All customers then share one counter and may see "Too many attempts". Return the real visitor address with the filter "vcap_client_ip" (only from headers your proxy sets).', 'voucher-captain' );
+			$text[] = __( 'This site seems to run behind a reverse proxy or CDN, but the rate limits count by the address of the proxy. All customers then share one counter and may see "Too many attempts". Choose the header your proxy sets under WooCommerce → Settings → Vouchers → Privacy & advanced → "Trusted proxy header" (or return the real visitor address with the filter "vcap_client_ip").', 'voucher-captain' );
+		}
+		if ( $single ) {
+			/* translators: %d: number of rate limit hits */
+			$text[] = sprintf( __( 'The last %d times a rate limit was reached, the requests all came from the same address. If that is the address of your proxy or CDN, choose its header under "Trusted proxy header"; if it is a single visitor trying many codes, the limit worked as intended.', 'voucher-captain' ), self::SOURCE_HITS );
 		}
 		if ( $recent ) {
 			/* translators: %s: list of rate limit names, e.g. "code, preview" */
@@ -84,7 +139,7 @@ final class Health {
 
 	public function tests( $tests ) {
 		$tests = (array) $tests;
-		foreach ( array( 'extensions', 'database', 'schema', 'scheduler', 'mail', 'sender_domain', 'purchase_limits', 'redeem_page', 'markets', 'offline_payment', 'currency', 'rate_limits', 'template_images', 'template_overrides' ) as $id ) {
+		foreach ( array( 'extensions', 'database', 'schema', 'scheduler', 'mail', 'sender_domain', 'purchase_limits', 'redeem_page', 'markets', 'offline_payment', 'currency', 'rate_limits', 'template_images', 'template_overrides', 'retention' ) as $id ) {
 			$tests['direct'][ 'vcap_' . $id ] = array(
 				'label' => Brand::name( 'site_health' ),
 				'test'  => array( $this, 'test_' . $id ),
@@ -540,10 +595,15 @@ final class Health {
 		return self::result( 'redeem_page', 'recommended', __( 'The voucher redeem page needs attention', 'voucher-captain' ), $problem );
 	}
 
-	/** EU countries the shop sells to: verified voucher validity, country conditions and a translation for each. */
+	/**
+	 * Every country the shop sells to (SET-VC-03: not only the EU – Switzerland, Liechtenstein, United Kingdom,
+	 * Norway too): verified voucher validity, country conditions and a translation for each; selling countries
+	 * without market data are named (the shop's defaults apply there).
+	 */
 	public function test_markets(): array {
-		$gaps = array();
-		foreach ( Markets::readiness() as $country => $state ) {
+		$selling = Markets::selling_countries();
+		$gaps    = array();
+		foreach ( Markets::readiness( $selling ) as $country => $state ) {
 			$missing = array();
 			if ( ! $state['validity'] ) {
 				$missing[] = __( 'statutory validity not verified (3 years to the end of the year is used)', 'voucher-captain' );
@@ -553,21 +613,32 @@ final class Health {
 			}
 			if ( ! $state['translation'] ) {
 				/* translators: %s: locale, e.g. fr_FR */
-				$missing[] = sprintf( __( 'no translation (%s)', 'voucher-captain' ), $state['locale'] );
+				$missing[] = sprintf( __( 'no translation (%s)', 'voucher-captain' ), implode( ', ', $state['untranslated'] ? $state['untranslated'] : array( $state['locale'] ) ) );
 			}
 			if ( $missing ) {
 				$gaps[] = $country . ': ' . implode( ', ', $missing );
 			}
 		}
+		$unknown = Markets::unknown_selling_countries( $selling );
+		$note    = '';
+		if ( $unknown ) {
+			$shown = array_slice( $unknown, 0, 15 );
+			$rest  = count( $unknown ) - count( $shown );
+			$note  = ' ' . sprintf(
+				/* translators: %s: list of country codes */
+				__( 'No market data for these selling countries – the shop\'s default validity and the general conditions apply, nothing is checked there: %s', 'voucher-captain' ),
+				implode( ', ', $shown ) . ( $rest > 0 ? ' ' . sprintf( /* translators: %d: number of further countries */ _n( '(and %d more)', '(and %d more)', $rest, 'voucher-captain' ), $rest ) : '' )
+			);
+		}
 		if ( ! $gaps ) {
-			return self::result( 'markets', 'good', __( 'Voucher rules are set for every EU country you sell to', 'voucher-captain' ), __( 'Each selling country has a verified voucher validity, redemption conditions and a translation.', 'voucher-captain' ) );
+			return self::result( 'markets', 'good', __( 'Voucher rules are set for every country you sell to', 'voucher-captain' ), __( 'Each selling country has a verified voucher validity, redemption conditions and a translation.', 'voucher-captain' ) . $note );
 		}
 		return self::result(
 			'markets',
 			'recommended',
-			__( 'Some EU selling countries need voucher settings', 'voucher-captain' ),
+			__( 'Some selling countries need voucher settings', 'voucher-captain' ),
 			/* translators: %s: list of countries with what is missing */
-			sprintf( __( 'Set the statutory validity and conditions per country under Vouchers → Settings (have them checked legally) and add translations: %s', 'voucher-captain' ), implode( '; ', $gaps ) )
+			sprintf( __( 'Set the statutory validity and conditions per country under Vouchers → Settings (have them checked legally) and add translations: %s', 'voucher-captain' ), implode( '; ', $gaps ) ) . $note
 		);
 	}
 
@@ -673,7 +744,7 @@ final class Health {
 			}
 		}
 		if ( ! $names ) {
-			return self::result( 'validity', 'good', __( 'Voucher validity is not shorter than the statutory period', 'voucher-captain' ), __( 'No voucher product ends before the statutory limitation period of the shop country or an EU selling country.', 'voucher-captain' ) . self::truncation_note( $more ) );
+			return self::result( 'validity', 'good', __( 'Voucher validity is not shorter than the statutory period', 'voucher-captain' ), __( 'No voucher product ends before the statutory limitation period of the shop country or a selling country.', 'voucher-captain' ) . self::truncation_note( $more ) );
 		}
 		return self::result(
 			'validity',
@@ -681,6 +752,30 @@ final class Health {
 			__( 'Some vouchers are valid for less than the statutory period', 'voucher-captain' ),
 			/* translators: %s: products with the countries concerned */
 			sprintf( __( 'A validity shorter than the statutory limitation period is often invalid in voucher conditions. Check legally or switch to the statutory validity: %s', 'voucher-captain' ), implode( '; ', $names ) ) . self::truncation_note( $more )
+		);
+	}
+
+	/**
+	 * SET-VC-08 (owner decision S9): recipient data is kept without a period while "Anonymise recipient data after
+	 * (days)" is 0 – the default of new and old installations, nothing is deleted silently. Site Health recommends
+	 * setting a period as long as none is set.
+	 */
+	public function test_retention(): array {
+		$days = (int) get_option( 'vcap_retention_days', 0 );
+		if ( $days > 0 ) {
+			return self::result(
+				'retention',
+				'good',
+				__( 'A retention period for recipient data is set', 'voucher-captain' ),
+				/* translators: %d: days */
+				sprintf( _n( 'Recipient data is anonymised %d day after a voucher has expired or been fully redeemed. The period is not legally checked: have it checked for your country.', 'Recipient data is anonymised %d days after a voucher has expired or been fully redeemed. The period is not legally checked: have it checked for your country.', $days, 'voucher-captain' ), $days )
+			);
+		}
+		return self::result(
+			'retention',
+			'recommended',
+			__( 'No retention period for recipient data is set', 'voucher-captain' ),
+			__( 'Recipient names, email addresses and messages of vouchers are kept without a time limit. Data protection law usually requires deleting personal data once it is no longer needed. Set "Anonymise recipient data after (days)" under WooCommerce → Settings → Vouchers → Privacy & advanced → Retention (have the period checked legally for your country).', 'voucher-captain' )
 		);
 	}
 
@@ -782,6 +877,8 @@ final class Health {
 			case 'template_overrides':
 			case 'ledger':
 				return '';
+			case 'retention':
+				return '<p><a href="' . esc_url( admin_url( 'admin.php?page=wc-settings&tab=vcap&section=privacy' ) . '#vcap_retention-description' ) . '">' . esc_html__( 'Retention settings', 'voucher-captain' ) . '</a></p>';
 		}
 		return '<p><a href="' . esc_url( admin_url( 'admin.php?page=wc-settings&tab=vcap' ) ) . '">' . esc_html__( 'Voucher settings', 'voucher-captain' ) . '</a></p>';
 	}

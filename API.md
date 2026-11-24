@@ -120,7 +120,7 @@ A till system can redeem vouchers in two ways:
 | POST | `/wp-json/vcap/v1/redeem/reverse` | `q`, `event_id`, `reason`, `idempotency_key` | the voucher plus `success` |
 | POST | `/wp-json/vcap/v1/checkin` | `q`, `count`, `undo`, `reason`, `till`, `idempotency_key` | the ticket plus `success` |
 
-   Rules: a personal voucher needs `id_checked=true` (staff checked the ID against `personal.names`; else `409 vcap_id_check_required`); with the setting "Receipt no. required" a redemption without `receipt` is refused (`400 vcap_receipt_required`; default "automatic": required for shops based in Germany or Austria); with a managed list of tills (setting "Tills / branches") `till` must be one of them (`400 vcap_till_unknown`), and a staff member fixed to a till on their profile always books there. A repeated request with the same `idempotency_key` gets the stored answer with `replayed: true` – nothing is booked again. Unknown codes are limited per staff member (100 per 15 minutes, filter `vcap_rate_limit_scanner_lookup`; `429 vcap_rate_limited`) and counted in Reports → Tills and staff. Daily limits per staff member and till apply (`daily_limit`). There is no offline mode on purpose: without a connection nothing is booked, so a code cannot be redeemed twice at two tills.
+   Rules: a personal voucher needs `id_checked=true` (staff checked the ID against `personal.names`; else `409 vcap_id_check_required`); with the setting "Receipt no. required" a redemption without `receipt` is refused (`400 vcap_receipt_required`; default "automatic": required for shops based in a country whose country data sets `fiscal_receipt` – Germany and Austria; filter `vcap_counter_require_receipt` wins); with a managed list of tills (setting "Tills / branches") `till` must be one of them (`400 vcap_till_unknown`), and a staff member fixed to a till on their profile always books there. A repeated request with the same `idempotency_key` gets the stored answer with `replayed: true` – nothing is booked again. Unknown codes are limited per staff member (100 per 15 minutes, filter `vcap_rate_limit_scanner_lookup`; `429 vcap_rate_limited`) and counted in Reports → Tills and staff. Daily limits per staff member and till apply (`daily_limit`). There is no offline mode on purpose: without a connection nothing is booked, so a code cannot be redeemed twice at two tills.
 
 ### Error codes
 
@@ -140,7 +140,7 @@ A till system can redeem vouchers in two ways:
 | `vcap_redemption_released` | 409 | `reserve()` repeated for a key whose reservation was released or expired – redeem again with a new key |
 | `vcap_expired` / `vcap_cancelled` | 410 | Voucher expired / voided |
 | `vcap_not_redeemable` | 422 | Tickets and shop-only (reusable) vouchers |
-| `vcap_rate_limited` | 429 | Too many invalid codes (setting, default 10 per user and 15 minutes; while many invalid codes arrive site-wide – filter `vcap_redemption_site_wide_failures`, default 300 – every caller without vouchers of their own gets a fifth) |
+| `vcap_rate_limited` | 429 | Too many invalid codes (setting, default 10 per user and 15 minutes; while many invalid codes arrive site-wide – setting "Invalid code attempts of all callers" `vcap_redemption_site_wide_failures`, default 300, at least 50, then the filter of the same name – every caller without vouchers of their own gets a fifth) |
 | `vcap_temporary_failure` | 503 | Database/lock problem – retry with the same key |
 
 ### Rules for integrations
@@ -343,7 +343,13 @@ the caller from workflow, workflow version, event id and step, R-8.4), `reason` 
   (`CommandLimits::SIMILAR_CURRENCIES`), the same number 100 applies in that currency (the operator may lower it). Any
   other currency is refused (`currency_not_allowed`) unless it is the shop currency and the operator entered an own
   *Maximum amount* there (worth no more than 100 EUR – not checked, there is no exchange rate in the core); until then
-  `voucher.issue` and `voucher.redeem` are effectively off in that shop.
+  `voucher.issue` and `voucher.redeem` are effectively off in that shop. The own maximum amount is stored with the
+  currency it was entered in (`vcap_command_<issue|redeem>_max_amount_currency`, read-only on the settings page,
+  exported and imported with the amount; PV-P3-4): after a change of the shop currency, or an import from a shop in
+  another currency, the amount is not used and amounts are refused until a new maximum is saved on the settings page
+  (a value set with `wp vcap settings set` keeps the recorded currency; set both options there). An amount stored
+  without a currency counts once in the current shop currency, which is then recorded. A count setting must be a whole
+  number (also `5.0` or `1e1`); anything else is refused on the settings page and the stored value stays (PV-P2-4).
 - **Reading the limits** (since contract 1.6.0, SET-WC-15): `vcap_read_command_limits( string $currency = '' )`
   (wrapper of `vcap()->commands->limits()`) returns the limits as they apply now, e.g. for a display in a workflow
   editor: `day` (site time zone), `currency` (the given one, default the shop currency), `shop_currency`,
@@ -487,7 +493,7 @@ Which redemptions count (all conditions):
 | Product setting *Redemption confirms a service (for review invitations)* (`_vcap_review_service`) | off; `vcap_review_service_voucher` ( `bool`, `Voucher` ) for vouchers without a product. Store credit and tickets never count. |
 | Channel | `counter` (scanner, *Mark as redeemed (store)*: staff confirm on site). `external` (redemption API) only when added to `vcap_review_channels` **and** the target starts with a prefix of `vcap_review_external_target_prefixes` (e.g. `spa:`); the built-in `passcaptain:` targets never. `shop` never: the order is a purchase, which the review plugin judges by the order itself. |
 | A review plugin listens | `vcap_review_redemption_eligible` has a listener (filter `vcap_review_source_active`). Without one nothing is recorded. |
-| One service = one request | only the **first** confirmed redemption of a voucher becomes `eligible` – also for gift cards with a remaining value (`usage_mode` `balance`) redeemed in several visits. Further redemptions of the same voucher (counter or external) create no event and no reference record while that one is eligible. When the first one is revoked (`redeem_reversed`, `refunded`), the next confirmed redemption may become eligible again; redemptions made in between are not reported afterwards. Filter `vcap_review_first_redemption_only` ( `bool $only = true`, `Voucher` ): `false` counts every redemption on its own (owner decision 16.11.2026). |
+| One service = one request | only the **first** confirmed redemption of a voucher becomes `eligible` – also for gift cards with a remaining value (`usage_mode` `balance`) redeemed in several visits. Further redemptions of the same voucher (counter or external) create no event and no reference record while that one is eligible. When the first one is revoked (`redeem_reversed`, `refunded`), the next confirmed redemption may become eligible again; redemptions made in between are not reported afterwards. Filter `vcap_review_first_redemption_only` ( `bool $only` = the setting, default `true`, `Voucher` ): `false` counts every redemption on its own (owner decision 16.11.2026). SET-VC-33: the shop sets it under Settings → Vouchers → Integrations (API) → *Integration rules* (shown while a review plugin listens); the filter wins. |
 
 Never a review source: purchases, issuing, delivery, top-ups, store credit, discount codes (campaign coupons are no
 vouchers), reservations that were released.
@@ -588,6 +594,8 @@ requests in the states `issued` and `handed_over` 24 months after the issuing or
 deleted at once by `reject()`. A deleted request takes its form-reference claim with it (the same form entry could be
 submitted again afterwards). Filter `vcap_voucher_requests_retention_months` ( `array{open:int, closed:int}` ,
 default `[ 'open' => 6, 'closed' => 24 ]`; `0` keeps that group). The suggested privacy policy text names both periods.
+Since 1.3.0 (SET-VC-08) the default of the filter comes from the settings `vcap_voucher_requests_open_months` and
+`vcap_voucher_requests_closed_months` (Privacy & advanced → *Retention*, at least 1 month); the filter still wins.
 
 #### Hand-over to a company order (add-on)
 
@@ -618,6 +626,92 @@ Pro, company orders) may take a request over. Without such an add-on nothing cha
 - A handed-over request cannot be issued (`confirm()` → `vcap_handed_over`, 409) or rejected. Privacy export and
   erasure treat `handed_over` like `issued`.
 
+## Settings: export, import, reset, change log (since 1.3.0)
+
+One service, `VCAP\SettingsTransfer`, serves *WooCommerce → Settings → Vouchers → Privacy & advanced* and WP-CLI; it
+works on the settings register (`config/settings.php`, `VCAP\SettingsRegistry`).
+
+- **Export** (SET-VC-14): every global setting marked `export` – never a secret (`vcap_secret`,
+  `vcap_customer_key_secret`, entries with `secret`), never "Remove all data", the support log or the default template
+  ID, no product settings and no voucher data. File format:
+  `{"format": "voucher-captain-settings", "version": 1, "plugin_version": "1.3.0", "exported_at": "…Z", "settings": {option: value}}`.
+  Values are the stored values (the default where nothing is saved), not what a `vcap_setting_{key}` filter makes of them,
+  normalised to what the shop runs on: `vcap_default_expiry_rule` while never saved is the rule that applies
+  (`ProductConfig::default_expiry_rule()`), the country tables are rows (also a text value from before 1.3.0), an empty
+  number field that may not be empty is its default (PV-P1-1, PV-P1-2). Rights per role are not part of the file.
+- **Import**: the whole file is checked first – no JSON object of this format, no or a newer `version`, a secret or a
+  never-exported setting, or one invalid value refuses the whole file and nothing changes. Options this site does not
+  know (e.g. of an add-on that is not installed) are skipped and listed. The admin page shows a preview
+  (setting, current value, new value) and applies it after a second click; an automatic backup is taken before.
+  Settings missing in the file are left unchanged. A file of an earlier build is read like the settings page reads the
+  stored values, with a note in the preview: a country table as old text becomes its readable rows (unreadable lines
+  are left out), an empty number becomes its default, a never-saved validity rule (`''`) is skipped (PV-P1-2).
+- **Checks** (`SettingsTransfer::validate( $option, $value )`, also `wp vcap settings set`): `bool` takes yes/no
+  (also on/off, 1/0, true/false), `int`/`decimal` a number within min/max (a value outside is refused, not moved to the
+  bound as on the settings page), `select` one of its choices, `list` an array or comma-separated text, code prefix,
+  suffix and separator the code characters, reminder days are stored normalised, whole numbers as whole numbers
+  (`"5.0"` → `"5"`), text with the cleaning of its field (HTML of the default conditions, custom CSS, logo URL; PV-P4-5),
+  `vcap_default_expiry_rule` only `statutory` or `days`; the filter
+  `vcap_settings_validate_value` (value or `WP_Error`, option, register entry, raw value as given – the 4th argument since contract 1.8.0) lets add-ons check their own options, also replacing a `WP_Error` of the type check. An add-on's option array takes the register type `map` (keys and nesting kept, text cleaned; `wp vcap settings set <key> '{"…":…}'` takes a JSON object), SET-VC-27.
+- **Reset** (SET-VC-15, PV-P1-3): per section or for all sections. A setting returns to its register `default` – what
+  an existing shop runs on while it never saved it –, never to the `fresh` value of a new installation: the option is
+  deleted (the autoloaded request settings are stored with their default). `SettingsTransfer::reset_preview( $section )`
+  lists every changing setting with `from`, `to` and `legal`; the page shows it before the confirmation, WP-CLI before
+  asking (`--dry-run` only lists). An automatic backup is taken when anything changes (the last ten are kept, a backup
+  identical to the newest is not stored again; downloadable on the page or with `wp vcap settings export --backup`).
+  Secrets, "Remove all data", the rights per role, the default template, internal state and the database (vouchers,
+  history) are never touched.
+- **Change log** (SET-VC-16, `VCAP\SettingsLog`): every change of a registered option – from the settings page, an
+  import, a reset, WP-CLI or code (`added_option`, `updated_option`, `delete_option`) – with time, user, option,
+  value from → to and source (`VCAP\Source` plus import/reset/settings command); secrets are recorded as `********`.
+  Shown on *Privacy & advanced* (latest 50), part of the personal data export of the user who made the change, kept
+  `vcap_settings_log_days` days (default 365, 0 = keep; at most 2,000 entries) and cleaned up by the daily maintenance
+  step `settings_log`. Stored in the option `vcap_settings_log` (never autoloaded); the changes of one import, reset,
+  WP-CLI command or save of the tab are written with one update (PV-P1-5). Rights per role changed on the page are
+  logged as `role:<role>:<right>` (PV-P4-2).
+- **Rights**: every action of the page needs `manage_woocommerce` and its nonce; the buttons post to `admin-post.php`
+  (actions `vcap_settings_export`, `vcap_settings_backup`, `vcap_settings_import`, `vcap_settings_import_apply`,
+  `vcap_settings_import_cancel`, `vcap_settings_reset_preview`, `vcap_settings_reset_cancel`, `vcap_settings_reset`), so
+  *Save changes* never imports or resets; a second click on *Apply* / *Reset settings* keeps the message of the first.
+
+### WP-CLI (SET-VC-17)
+
+| Command | Does |
+|---|---|
+| `wp vcap settings list [--section=<section>] [--format=table\|json\|csv\|yaml]` | Every setting with section, type, value, default and export flag (secrets masked). Sections: `general`, `redemption`, `promotions`, `codes`, `delivery`, `privacy`, `api` and those of add-ons. |
+| `wp vcap settings get <option> [--format=plain\|json]` | Stored value (default where nothing is saved); a table row by row (`AT 30 note; …`). Secrets are refused. |
+| `wp vcap settings set <option> <value>` | Checked like the page (see *Checks*); tables and lists take a JSON array (lists also comma-separated values); refused values change nothing (exit code 1). "Remove all data" stays with `wp vcap data-removal`. |
+| `wp vcap settings export [--file=<path>] [--backup[=<time>]]` | The export JSON (or an automatic backup) to the output or a file. |
+| `wp vcap settings import <file> [--dry-run] [--yes]` | Lists the changes (`option: from -> to`), then applies them after a backup; `--dry-run` only lists. |
+| `wp vcap settings reset <section>\|all [--dry-run] [--yes]` | Lists the changing settings (`option: from -> default`, `[legal/tax weight – check]` on legal ones), then resets them after a confirmation and a backup (see *Reset*); `--dry-run` only lists. |
+| `wp vcap settings profile list [--format=…]` | The country profiles with their check state ("legal check pending" for DE/AT/CH, "neutral, not checked" for EU/OTHER) and the one applied last. |
+| `wp vcap settings profile show [--country=<profile>]` | Preview of a profile (default: the profile of the shop's base country): per value `current -> suggested`, `*` = would be applied, `-` = kept (own value or link parameter), `=` = already set, `[Legal check pending]` on values with legal weight; plus the tax and accounting hints. Changes nothing. |
+| `wp vcap settings profile apply [--country=<profile>] [--dry-run] [--yes] [--all]` | Applies the values marked `*` after a confirmation and a backup; `--all` also replaces own values and the link parameter; `--dry-run` only lists. |
+
+Every change made this way is in the change log with the source "WP-CLI" (profile: "WP-CLI (country profile)").
+
+### Country profiles (SET-VC-02)
+
+`VCAP\CountryProfiles` reads `config/country-profiles.php` (filter `vcap_country_profiles`). A profile only suggests
+values (owner decision E4 = a): validity rule (`vcap_default_expiry_rule`), the country's row of "Statutory validity per
+country" (`vcap_expiry_by_country`, only that row is added or replaced; DE/AT from the market data), receipt number at
+the counter (`vcap_counter_require_receipt`, DE/AT from the market flag `fiscal_receipt`), retention of recipient data
+(`vcap_retention_days`; new installations keep the data, owner rule S9), date format (`vcap_date_format`) and link
+parameter (`vcap_coupon_link_param` – suggestion only, never preselected, owner decision E10 open), plus hints on the
+default tax type and the accounting format that change no setting. Profiles: DE, AT, CH and the neutral EU and OTHER
+(nothing with legal weight). No profile is legally checked yet (owner rule S8): every value with legal weight carries the
+mark "Legal check pending" until `checked` is set for that profile.
+
+- `CountryProfiles::preview( $id )` – per value `from`, `to`, `changed`, `legal`, `review` (the mark), `opt_in`,
+  `own` (the shop set its own value) and `preselected` (changed, not opt-in, no own value). Changes nothing.
+- `CountryProfiles::apply( $id, $items )` – only the given items; each value is checked like an import
+  (`SettingsTransfer::validate()`), one invalid value refuses all; then a backup ("profile") and
+  `SettingsTransfer::apply()` with the change log source "country profile". The profile applied last is kept in the
+  internal option `vcap_country_profile` (setup checklist).
+- Admin: block "Country profile" at the top of *Settings → Vouchers → General* and the first step of the setup
+  checklist; preview with one checkbox per value, *Apply ticked values* / *Cancel*. Actions `vcap_country_profile_preview`,
+  `vcap_country_profile_apply`, `vcap_country_profile_cancel` (admin-post, `manage_woocommerce`, own nonce).
+
 ## Extension points for add-ons (public API since 1.2.0)
 
 Voucher Captain is free and complete; paid features live in a separate add-on plugin (docs/FREE-PREMIUM.md, planned:
@@ -627,9 +721,14 @@ are public API under the versioning rules of CONNECTORS.md → *API versioning p
 without a deprecation period. `tests/run.php` ("A4: add-on extension points") checks that every hook of this table is
 called in the code and listed in docs/HOOKS.md, the generated reference with each call site.
 
+The hooks of the settings marked 1.3.0 below (register, validation, hint lines, country profiles, partner rules,
+counter columns, payment methods, retention days) and the Form Captain hooks belong to contract **1.8.0**
+(`VCAP_CONTRACT_VERSION`, CONNECTORS.md → 6.): an add-on that needs them checks
+`version_compare( VCAP_CONTRACT_VERSION, '1.8.0', '>=' )`.
+
 | Hook / function | Type | Arguments | Since | Use |
 |---|---|---|---|---|
-| `vcap_loaded` | action | `VCAP\Plugin` | 1.2.0 | Start of the add-on: the services (`vcap()->api_v1`, `->redemptions`, `->issuer` …) exist. |
+| `vcap_loaded` | action | `VCAP\Plugin` | 1.2.0 | Start of the add-on: the services (`vcap()->api_v1`, `->redemptions`, `->issuer` …) exist. Settings entries registered here (`vcap_settings_registry`) count: the register is cached for the request only from `init` and forgotten right after this action (PV-P6-1). |
 | `vcap_admin_menu` | action | `string $parent_slug` (`vcap-vouchers`) | 1.2.0 | Own pages under *Vouchers*: `add_submenu_page( $parent_slug, … )` (shown before *Settings*). |
 | `vcap_brand_name` | filter | `string $name`, `string $context` (`admin`, `notice`, `site_health`, `privacy`, `pdf`, `scanner`) | 1.2.0 | White label: the product name shown to people (admin notices, Site Health, support info, privacy text, PDF metadata). Technical identifiers (text domain, slugs, hooks, names in integration contracts) never change. |
 | `vcap_brand_logo` | filter | `string $url` (default `''`), `string $context` | 1.2.0 | White label: a logo next to the name (scanner page); the core shows none. |
@@ -638,7 +737,21 @@ called in the code and listed in docs/HOOKS.md, the generated reference with eac
 | `vcap_settings_sections` | filter | `array $sections` (id ⇒ label) | 1.2.0 | Own section of WooCommerce → Settings → Vouchers; core sections cannot be renamed or removed. |
 | `vcap_settings_fields` | filter | `array $fields`, `string $section` | 1.0.0 | Fields of a section (WooCommerce settings API, saved by WooCommerce). An add-on section starts empty. |
 | `vcap_settings_hints` | filter | `array $hints` (each `id`, `section`, `title`, `text`, `link`) | 1.3.0 | Hint lines on add-on functions at the end of a core section (decision S1, docs/FREE-PREMIUM.md rule 3): text only, no form control; list in `config/pro-hints.php` (`white_label`, `sms_delivery`, `wallet_passes`, `bulk_orders`). A field registered through `vcap_settings_fields` with `'replaces' => '<id>'` (string or array) removes its line. |
+| `vcap_settings_registry` | filter | `array $settings` (option ⇒ `type`, `default`, `min`, `max`, `empty`, `choices`, `section`, `legal`, `export`, `secret`, `fresh`) | 1.3.0 | Settings register (`config/settings.php`, class `VCAP\SettingsRegistry`, SET-VC-01): one entry per option with default, type, bounds, section, legal weight, export and secret flag. Add-ons register their own options here (export without secrets, change log, WP-CLI); core entries cannot be removed. `SettingsRegistry::field( $option, $field )` completes a settings field with id, default and min/max; every number setting is also checked on the server when the tab is saved (out of range → nearest bound, no number → stored value kept). `Settings::defaults()` replaces the constant `Settings::DEFAULTS`, which stays as a deprecated copy of the 1.2.0 defaults (65 options, not maintained). |
+| `vcap_customer_can_resend` | filter | `bool $allowed` (setting `vcap_customer_can_resend`, default yes), `Voucher` | 1.1.0 | SET-VC-18: whether the buyer may resend a delivered voucher from My Account; the filter gets the setting and wins. |
+| `vcap_customer_can_change`, `vcap_recipient_fix_days`, `vcap_recipient_fix_max`, `vcap_topup_min_remaining_days`, `vcap_checkin_undo_minutes`, `vcap_counter_reversal_minutes` | filter | the setting of the same name, `Voucher` | 1.2.0 | SET-VC-18: customer self-service and deadlines are settings (Settings → Vouchers → Delivery & downloads "Customer self-service", Redemption & balance "Top-ups and counter"; defaults as in 1.2.0: yes, 30 days, 2, 30 days, 10 min, 15 min). Each filter gets the setting instead of the fixed value and wins; the floors of 1.2.0 stay (link at least 1 day, at most 2 corrections, windows not below 0). |
+| `vcap_printed_link_grace_days` | filter | `int $days` (setting `vcap_printed_link_grace_days`, default 30), `Voucher` | 1.3.0 | SET-VC-18: days the download link printed on a voucher (QR code) stays valid after the voucher expired (`Downloads::printed_link_grace_days()`). |
+| `vcap_affiliate_commission_on_voucher_sales`, `vcap_passcaptain_restore_on_revoke` | filter | the setting of the same name (`bool`, default yes) and the arguments as before | 1.1.0 | SET-VC-33 (1.12 no. 38, 39): see the next row. |
+| `vcap_physical_activation_statuses`, `vcap_review_first_redemption_only`, `vcap_subscription_issue_on_switch` | filter | the setting of the same name (statuses `string[]` default `['completed']`; first redemption only `bool` default yes; subscription switch `bool` default no) and the arguments as before | 1.2.0 | SET-VC-33 (1.12 no. 12, 35, 38–40): rules of physical cards and partner plugins are settings (Settings → Vouchers → Integrations (API) → *Integration rules*); each filter gets the setting and wins. Physical cards: only paid statuses, empty = completed. |
+| `vcap_settings_partner_active` | filter | `bool $active`, `string $partner` (`review`, `affiliate`, `passcaptain`, `subscriptions`) | 1.3.0 | SET-VC-33: whether the rules of a partner plugin are shown in *Integration rules* (a hidden rule keeps its value and still applies). |
+| `vcap_counter_location_fields` | filter | `array $columns` (column id ⇒ `label`, `type` `text`/`checkbox`/`select`, `default`, `options`) | 1.3.0 | SET-VC-22: own columns of the table "Tills / branches" (Settings → Vouchers → Counter & locations); the value is stored with the row (`VCAP\CounterLocations::rows()`: `name`, `key`, `active` and the add-on columns; stored as a JSON list in `vcap_counter_locations`, the one-name-per-line text of 1.2.0 is still read). Core columns cannot be removed. Only active tills reach the scanner (`Counter::locations()`, filter `vcap_counter_locations`). |
+| `vcap_review_retention_months`, `vcap_review_revoked_retention_days` | filter | `int` (setting of the same name, default 24 months / 90 days) | 1.2.0 | SET-VC-08: retention of the review invitation notes (all / withdrawn ones; `ReviewSource::retention()`); the filter gets the setting (block *Retention*, at least 1 month / 30 days) and wins, `0` keeps them. |
+| `vcap_command_log_days` | filter | `int $days` (setting `vcap_command_log_days`, default 90) | 1.3.0 | SET-VC-08: days the daily counters and the protocol of the voucher commands are kept (`OptionCommandStore::log_days()`, cleaned up by the daily maintenance step `protocols`); `0` keeps them. Replies (idempotency) stay 90 days. |
+| `vcap_scanner_failed_lookup_days` | filter | `int $days` (setting `vcap_scanner_failed_lookup_days`, default 92) | 1.3.0 | SET-VC-08: days the failed scanner lookups per staff member are kept (`Counter::failed_lookup_days()`, step `protocols`); `0` keeps them. |
+| `vcap_settings_validate_value` | filter | value in the stored format or `WP_Error`, `string $option`, `array $entry`, `mixed $raw` (since 1.8.0) | 1.3.0 | Check a value of an own option before it is imported or set with `wp vcap settings set` (see *Settings: export, import, reset, change log*); return a `WP_Error` to refuse. |
+| `vcap_country_profiles` | filter | `array $profiles` (id ⇒ `country`, `checked`, `settings`, `expiry_row`, `tax`, `accounting`, `label`) | 1.3.0 | SET-VC-02: add country profiles or change suggested values (see *Country profiles*). Only exportable settings can be suggested (never secrets or "Remove all data"); a profile is always applied after the preview. Set `checked` only after the legal and tax check for that country. |
 | `vcap_pro_hints_hidden` | filter | `bool $hidden`, `int $user_id` | 1.3.0 | Whether the hint lines are hidden for the current user (default: the user's setting "Hide hints on extensions"). |
+| `vcap_voucher_excluded_gateways` | filter | `string[] $ids` (setting `vcap_voucher_excluded_gateways` "Do not sell vouchers with", default none) | 1.3.0 | SET-VC-19: payment gateway ids not offered while the cart (or the order paid on "Pay for order") contains a voucher product (`PaymentMethods::excluded()`); the filter wins over the setting. |
 | `vcap_product_settings_fields` / `vcap_product_settings_save` | action | – / `WC_Product`, `array $post` | 1.1.0 | Own fields in the product's *Voucher* tab and saving them. |
 | `vcap_template_design` | filter | `array $design`, `int $template_id` | 1.0.0 | The design a PDF template prints with. |
 | `vcap_sanitize_design` | filter | `array $clean`, `array $posted` | 1.0.0 | Keep own element keys when a design is saved. |
