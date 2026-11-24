@@ -116,7 +116,7 @@ final class Settlement {
 			$labels += array( 'wc-' . $status => ucfirst( $status ) );
 		}
 		// Same list and filter as WooCommerce's wc_get_is_paid_statuses().
-		$paid    = function_exists( 'wc_get_is_paid_statuses' ) ? wc_get_is_paid_statuses() : apply_filters( 'woocommerce_order_is_paid_statuses', array( 'processing', 'completed' ) );
+		$paid    = function_exists( 'wc_get_is_paid_statuses' ) ? wc_get_is_paid_statuses() : apply_filters( 'woocommerce_order_is_paid_statuses', array( 'processing', 'completed' ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's own filter.
 		$paid    = self::status_list( $paid );
 		$choices = array();
 		foreach ( $labels as $key => $label ) {

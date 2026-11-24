@@ -575,15 +575,15 @@ final class Settings {
 			'id'    => 'vcap_physical_cards',
 		);
 		$fields[] = SettingsRegistry::field(
-				PhysicalCards::STATUSES_OPTION,
-				array(
-					'title'   => __( 'Activate physical cards at', 'voucher-captain' ),
-					'type'    => 'multiselect',
-					'class'   => 'wc-enhanced-select',
-					'options' => PhysicalCards::status_choices(),
-					'desc'    => __( 'Physical gift cards stay inactive until their order reaches one of these statuses (default: Completed, i.e. shipped). Only paid statuses can be chosen; empty = Completed.', 'voucher-captain' ),
-				)
-			);
+			PhysicalCards::STATUSES_OPTION,
+			array(
+				'title'   => __( 'Activate physical cards at', 'voucher-captain' ),
+				'type'    => 'multiselect',
+				'class'   => 'wc-enhanced-select',
+				'options' => PhysicalCards::status_choices(),
+				'desc'    => __( 'Physical gift cards stay inactive until their order reaches one of these statuses (default: Completed, i.e. shipped). Only paid statuses can be chosen; empty = Completed.', 'voucher-captain' ),
+			)
+		);
 		$fields[] = array(
 			'type' => 'sectionend',
 			'id'   => 'vcap_physical_cards',
