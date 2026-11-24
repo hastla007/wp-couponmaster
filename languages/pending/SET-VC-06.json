@@ -1,0 +1,91 @@
+{
+	"The validity of this voucher ended on %s. The shop still accepts it.": {
+		"du": "Die Gültigkeit dieses Gutscheins ist am %s abgelaufen. Der Shop nimmt ihn trotzdem noch an.",
+		"sie": "Die Gültigkeit dieses Gutscheins ist am %s abgelaufen. Der Shop nimmt ihn trotzdem noch an.",
+		"at": "Die Gültigkeit dieses Gutscheins ist am %s abgelaufen. Der Shop nimmt ihn trotzdem noch an."
+	},
+	"The validity of this voucher ended on %1$s. The shop still accepts it until %2$s.": {
+		"du": "Die Gültigkeit dieses Gutscheins ist am %1$s abgelaufen. Der Shop nimmt ihn noch bis %2$s an.",
+		"sie": "Die Gültigkeit dieses Gutscheins ist am %1$s abgelaufen. Der Shop nimmt ihn noch bis %2$s an.",
+		"at": "Die Gültigkeit dieses Gutscheins ist am %1$s abgelaufen. Der Shop nimmt ihn noch bis %2$s an."
+	},
+	"Active (validity date passed)": {
+		"du": "Aktiv (Gültigkeitsdatum überschritten)",
+		"sie": "Aktiv (Gültigkeitsdatum überschritten)",
+		"at": "Aktiv (Gültigkeitsdatum überschritten)"
+	},
+	"When the validity ends": {
+		"du": "Wenn die Gültigkeit endet",
+		"sie": "Wenn die Gültigkeit endet",
+		"at": "Wenn die Gültigkeit endet"
+	},
+	"Not legally or tax checked: booking off an expired value is income, and consumer law may forbid short validity periods. Have the choice checked for your country.": {
+		"du": "Nicht rechtlich oder steuerlich geprüft: Das Ausbuchen eines abgelaufenen Werts ist Ertrag, und das Verbraucherrecht kann kurze Gültigkeitsfristen verbieten. Lass die Wahl für dein Land prüfen.",
+		"sie": "Nicht rechtlich oder steuerlich geprüft: Das Ausbuchen eines abgelaufenen Werts ist Ertrag, und das Verbraucherrecht kann kurze Gültigkeitsfristen verbieten. Lassen Sie die Wahl für Ihr Land prüfen.",
+		"at": "Nicht rechtlich oder steuerlich geprüft: Das Ausbuchen eines abgelaufenen Werts ist Ertrag, und das Verbraucherrecht kann kurze Gültigkeitsfristen verbieten. Lassen Sie die Wahl für Ihr Land prüfen."
+	},
+	"Expired vouchers": {
+		"du": "Abgelaufene Gutscheine",
+		"sie": "Abgelaufene Gutscheine",
+		"at": "Abgelaufene Gutscheine"
+	},
+	"Expire on the expiry date (remaining value booked off)": {
+		"du": "Verfallen am Ablaufdatum (Restwert wird ausgebucht)",
+		"sie": "Verfallen am Ablaufdatum (Restwert wird ausgebucht)",
+		"at": "Verfallen am Ablaufdatum (Restwert wird ausgebucht)"
+	},
+	"Grace period: still redeemable for the days below": {
+		"du": "Kulanzfrist: noch die unten angegebenen Tage einlösbar",
+		"sie": "Kulanzfrist: noch die unten angegebenen Tage einlösbar",
+		"at": "Kulanzfrist: noch die unten angegebenen Tage einlösbar"
+	},
+	"Never expire: the expiry date is only shown as a notice": {
+		"du": "Laufen nie ab: Das Ablaufdatum ist nur ein Hinweis",
+		"sie": "Laufen nie ab: Das Ablaufdatum ist nur ein Hinweis",
+		"at": "Laufen nie ab: Das Ablaufdatum ist nur ein Hinweis"
+	},
+	"In the grace period the voucher is still accepted in the cart, at the counter and through the redemption API, with a notice; its remaining value is booked off only when the grace period ends. With \"Never expire\" nothing is booked off. Vouchers that already expired stay expired – extend them by hand.": {
+		"du": "In der Kulanzfrist wird der Gutschein im Warenkorb, an der Kasse und über die Einlöse-API mit einem Hinweis weiter angenommen; sein Restwert wird erst nach Ende der Kulanzfrist ausgebucht. Bei „Laufen nie ab“ wird nichts ausgebucht. Bereits abgelaufene Gutscheine bleiben abgelaufen – verlängere sie von Hand.",
+		"sie": "In der Kulanzfrist wird der Gutschein im Warenkorb, an der Kasse und über die Einlöse-API mit einem Hinweis weiter angenommen; sein Restwert wird erst nach Ende der Kulanzfrist ausgebucht. Bei „Laufen nie ab“ wird nichts ausgebucht. Bereits abgelaufene Gutscheine bleiben abgelaufen – verlängern Sie sie von Hand.",
+		"at": "In der Kulanzfrist wird der Gutschein im Warenkorb, an der Kassa und über die Einlöse-API mit einem Hinweis weiter angenommen; sein Restwert wird erst nach Ende der Kulanzfrist ausgebucht. Bei „Laufen nie ab“ wird nichts ausgebucht. Bereits abgelaufene Gutscheine bleiben abgelaufen – verlängern Sie sie von Hand."
+	},
+	"Grace period (days)": {
+		"du": "Kulanzfrist (Tage)",
+		"sie": "Kulanzfrist (Tage)",
+		"at": "Kulanzfrist (Tage)"
+	},
+	"Only with \"Grace period\": days after the expiry date in which the voucher is still accepted.": {
+		"du": "Nur bei „Kulanzfrist“: Tage nach dem Ablaufdatum, in denen der Gutschein noch angenommen wird.",
+		"sie": "Nur bei „Kulanzfrist“: Tage nach dem Ablaufdatum, in denen der Gutschein noch angenommen wird.",
+		"at": "Nur bei „Kulanzfrist“: Tage nach dem Ablaufdatum, in denen der Gutschein noch angenommen wird."
+	},
+	"Staff may extend the validity by up to (days)": {
+		"du": "Mitarbeiter dürfen die Gültigkeit verlängern um bis zu (Tage)",
+		"sie": "Mitarbeiter dürfen die Gültigkeit verlängern um bis zu (Tage)",
+		"at": "Mitarbeiter dürfen die Gültigkeit verlängern um bis zu (Tage)"
+	},
+	"Limit for extending a voucher by hand (voucher edit and bulk action \"Extend validity\"), counted from its current expiry date or today, whichever is later. 0 = no limit.": {
+		"du": "Grenze für das Verlängern eines Gutscheins von Hand (Gutschein bearbeiten und Sammelaktion „Gültigkeit verlängern“), gezählt ab dem bisherigen Ablaufdatum oder ab heute, je nachdem, was später ist. 0 = keine Grenze.",
+		"sie": "Grenze für das Verlängern eines Gutscheins von Hand (Gutschein bearbeiten und Sammelaktion „Gültigkeit verlängern“), gezählt ab dem bisherigen Ablaufdatum oder ab heute, je nachdem, was später ist. 0 = keine Grenze.",
+		"at": "Grenze für das Verlängern eines Gutscheins von Hand (Gutschein bearbeiten und Sammelaktion „Gültigkeit verlängern“), gezählt ab dem bisherigen Ablaufdatum oder ab heute, je nachdem, was später ist. 0 = keine Grenze."
+	},
+	"%1$d voucher was not extended: staff may extend a validity by at most %2$d days from its current expiry date or today.|%1$d vouchers were not extended: staff may extend a validity by at most %2$d days from its current expiry date or today.": {
+		"du": [
+			"%1$d Gutschein wurde nicht verlängert: Mitarbeiter dürfen eine Gültigkeit um höchstens %2$d Tage ab dem bisherigen Ablaufdatum oder ab heute verlängern.",
+			"%1$d Gutscheine wurden nicht verlängert: Mitarbeiter dürfen eine Gültigkeit um höchstens %2$d Tage ab dem bisherigen Ablaufdatum oder ab heute verlängern."
+		],
+		"sie": [
+			"%1$d Gutschein wurde nicht verlängert: Mitarbeiter dürfen eine Gültigkeit um höchstens %2$d Tage ab dem bisherigen Ablaufdatum oder ab heute verlängern.",
+			"%1$d Gutscheine wurden nicht verlängert: Mitarbeiter dürfen eine Gültigkeit um höchstens %2$d Tage ab dem bisherigen Ablaufdatum oder ab heute verlängern."
+		],
+		"at": [
+			"%1$d Gutschein wurde nicht verlängert: Mitarbeiter dürfen eine Gültigkeit um höchstens %2$d Tage ab dem bisherigen Ablaufdatum oder ab heute verlängern.",
+			"%1$d Gutscheine wurden nicht verlängert: Mitarbeiter dürfen eine Gültigkeit um höchstens %2$d Tage ab dem bisherigen Ablaufdatum oder ab heute verlängern."
+		]
+	},
+	"Staff may extend a validity by at most %1$d days (latest date for this voucher: %2$s). The voucher was not saved.": {
+		"du": "Mitarbeiter dürfen eine Gültigkeit um höchstens %1$d Tage verlängern (spätestes Datum für diesen Gutschein: %2$s). Der Gutschein wurde nicht gespeichert.",
+		"sie": "Mitarbeiter dürfen eine Gültigkeit um höchstens %1$d Tage verlängern (spätestes Datum für diesen Gutschein: %2$s). Der Gutschein wurde nicht gespeichert.",
+		"at": "Mitarbeiter dürfen eine Gültigkeit um höchstens %1$d Tage verlängern (spätestes Datum für diesen Gutschein: %2$s). Der Gutschein wurde nicht gespeichert."
+	}
+}

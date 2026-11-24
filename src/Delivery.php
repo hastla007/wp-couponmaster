@@ -1532,6 +1532,7 @@ final class Delivery {
 				Install::ensure_upload_dir();
 				return true;
 			case 'expire_overdue':
+				// SET-VC-06: the expiry behaviour decides (ExpiryPolicy) – at the date, when the grace days end, or never.
 				$this->repo->expire_overdue( $budget, $finished );
 				return $finished;
 			case 'retention':

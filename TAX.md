@@ -369,6 +369,25 @@ Spalten **„VAT treatment“** (Einordnung beim Ausstellen, 3; ältere Gutschei
 Die Summe der Spalte entspricht der Änderung der offenen Gutscheinwerte. Nachweis: `tests/tax-accounting-integration.php`
 „M12-29: …“, `tests/tax-integration.php` „M12-29: the booked-off rounding rest carries the order id …“.
 
+### 6.1a Verhalten bei Ablauf (SET-VC-06) – zu prüfen
+
+Einstellung „Abgelaufene Gutscheine“ (`vcap_expiry_behaviour`, Abschnitt „Allgemein“, Block „Wenn die Gültigkeit
+endet“; Filter `vcap_expiry_behaviour` gewinnt; `VCAP\ExpiryPolicy`):
+
+| Wert | Einlösung nach dem Ablaufdatum | Buchung `expired` (Ausbuchung = Ertrag) | Verbindlichkeit (6.2) |
+|---|---|---|---|
+| `expires` (Standard, Verhalten bis 1.2.0) | abgelehnt | am Ablaufdatum (tägliche Wartung) | ab dem Ablaufdatum „abgelaufen“ |
+| `grace` | weiter möglich für `vcap_expiry_grace_days` Tage (Standard 30; Warenkorb, Store API, Admin-Bestellung, Einlöse-API, Kasse) mit Hinweis | erst nach Ende der Kulanzfrist; in der Frist **keine** Ausbuchung | in der Frist offen, danach „abgelaufen“ |
+| `never` | immer möglich; das Datum ist nur ein Hinweis | nie | immer offen |
+
+Das aufgedruckte Datum bleibt unverändert. Bereits abgelaufene Gutscheine bleiben abgelaufen (Verlängerung von Hand
+bucht wie bisher `expiry_reversed`). „Verlängerung durch Mitarbeiter bis X Tage“ (`vcap_expiry_staff_extension_days`,
+0 = ohne Grenze wie bisher) begrenzt die Verlängerung von Hand (Bearbeiten und Sammelaktion), gezählt ab dem
+bisherigen Ablaufdatum bzw. heute. **Zu prüfen (Steuerberatung/Rechtsprüfung, Frage F24):** Zeitpunkt der
+Ertragsbuchung bei Kulanzfrist und bei „läuft nie ab“ (Verbindlichkeit bleibt dauerhaft stehen), Zulässigkeit
+kurzer Fristen gegenüber Verbrauchern je Land. Alle drei Werte sind im Register als `legal` markiert. Nachweis:
+`tests/run.php` „SET-VC-06: …“.
+
 ### 6.2 Verbindlichkeit (Stichtag)
 
 Offene Werte je Währung und Art; abgelaufene Werte getrennt; **„Of which free of charge“**: der Teil, der ohne
@@ -589,6 +608,7 @@ des Codes dabei.
 | F21 | **Kontierung** (Abschnitt 6.3/6.4): Konten, keine Steuerschlüssel auf Gutscheinbuchungen, Gutscheinzahlung als Zahlung statt Erlösminderung – bestätigt? | wie 6.3 | |
 | F22 | **Physische Karten** (3.2): Gilt der Verkauf (Zahlung) als maßgeblicher Zeitpunkt, auch wenn die Karte erst bei „Abgeschlossen“ aktiviert wird? | Verkauf maßgeblich, Aktivierung ohne Buchung | |
 | F23 | **Umbuchung Geschenkkarte → Kundenguthaben** (3.2): steuerlich neutral (Mehrzweck → Mehrzweck), keine Rechnungskorrektur? | neutral, nur Umbuchung der Verbindlichkeit | |
+| F24 | **Verhalten bei Ablauf** (6.1a, SET-VC-06): Ertragsbuchung erst nach einer Kulanzfrist bzw. nie („läuft nie ab“, Verbindlichkeit bleibt stehen) – zulässig und richtig ausgewiesen? Gilt eine Kulanzfrist als Verlängerung der Gültigkeit? | „verfällt“ am Ablaufdatum (wie bisher) | |
 
 ## 12. Freigabe
 

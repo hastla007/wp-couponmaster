@@ -62,7 +62,7 @@ final class Ledger {
 		// Cached per day: every change of value or validity writes a ledger row (edits included), so the newest
 		// ledger and voucher ids are part of the key.
 		$state     = $wpdb->get_row( $wpdb->prepare( 'SELECT ( SELECT MAX(id) FROM %i ) AS e, ( SELECT MAX(id) FROM %i ) AS v', $t['events'], $t['vouchers'] ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-		$cache_key = 'vcap_liability_v2_' . md5( (string) wp_json_encode( array( $until, $state, get_option( 'woocommerce_currency' ) ) ) );
+		$cache_key = 'vcap_liability_v2_' . md5( (string) wp_json_encode( array( $until, $state, get_option( 'woocommerce_currency' ), ExpiryPolicy::sql_cutoff( $until ) ) ) );
 		$cached    = get_transient( $cache_key );
 		if ( is_array( $cached ) && isset( $cached['totals'] ) ) {
 			return $cached;
@@ -88,7 +88,8 @@ final class Ledger {
 				FROM {$t['vouchers']} v
 				WHERE v.created_at <= %s AND {$value}
 			) x WHERE outstanding > 0.00001 GROUP BY currency, type, expired, free";
-		$rows   = $wpdb->get_results( $wpdb->prepare( $sql, $until, self::free_pattern(), $until, $until, $until, $until, $until ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared
+		// SET-VC-06: a voucher in its grace period (or with "never expires") is still open, not expired.
+		$rows   = $wpdb->get_results( $wpdb->prepare( $sql, ExpiryPolicy::sql_cutoff( $until ), self::free_pattern(), $until, $until, $until, $until, $until ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared
 		/** @var array<string, array<string, array{count:int,amount:float,expired_count:int,expired_amount:float,free_count:int,free_amount:float}>> $totals */
 		$totals = array();
 		foreach ( $rows ? $rows : array() as $r ) {
@@ -120,6 +121,7 @@ final class Ledger {
 		global $wpdb;
 		$tables = Install::tables();
 		$until  = self::utc_range( $date, $date )[1];
+		$cutoff = ExpiryPolicy::sql_cutoff( $until ); // SET-VC-06: grace period / never expires.
 		$last   = 0;
 		$value  = self::VALUE_VOUCHERS;
 		do {
@@ -149,7 +151,7 @@ final class Ledger {
 					'expires'     => (string) $v->expires_at,
 					'order_id'    => $v->order_id,
 					'outstanding' => $outstanding,
-					'expired'     => $v->expires_at && $v->expires_at <= $until,
+					'expired'     => $v->expires_at && $v->expires_at <= $cutoff,
 					'decimals'    => $v->decimals(),
 					// M12-42: issued without a sale (goodwill, prize) = false; unknown (older vouchers) counts as sold.
 					'sold'        => false !== ProductConfig::is_sold( $v ),

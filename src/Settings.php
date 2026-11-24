@@ -1089,6 +1089,46 @@ final class Settings {
 			),
 			array( 'type' => 'sectionend', 'id' => 'vcap_general' ),
 
+			// SET-VC-06: what happens when the validity ends; defaults = 1.2.0 (expires, no limit for staff).
+			array(
+				'type'  => 'title',
+				'title' => __( 'When the validity ends', 'voucher-captain' ),
+				'desc'  => __( 'Not legally or tax checked: booking off an expired value is income, and consumer law may forbid short validity periods. Have the choice checked for your country.', 'voucher-captain' ),
+				'id'    => 'vcap_expiry_behaviour_block',
+			),
+			SettingsRegistry::field(
+				'vcap_expiry_behaviour',
+				array(
+					'title'    => __( 'Expired vouchers', 'voucher-captain' ),
+					'type'     => 'select',
+					'options'  => array(
+						'expires' => __( 'Expire on the expiry date (remaining value booked off)', 'voucher-captain' ),
+						'grace'   => __( 'Grace period: still redeemable for the days below', 'voucher-captain' ),
+						'never'   => __( 'Never expire: the expiry date is only shown as a notice', 'voucher-captain' ),
+					),
+					'desc_tip' => __( 'In the grace period the voucher is still accepted in the cart, at the counter and through the redemption API, with a notice; its remaining value is booked off only when the grace period ends. With "Never expire" nothing is booked off. Vouchers that already expired stay expired – extend them by hand.', 'voucher-captain' ),
+				)
+			),
+			SettingsRegistry::field(
+				'vcap_expiry_grace_days',
+				array(
+					'title'             => __( 'Grace period (days)', 'voucher-captain' ),
+					'type'              => 'number',
+					'custom_attributes' => array( 'step' => 1 ),
+					'desc_tip'          => __( 'Only with "Grace period": days after the expiry date in which the voucher is still accepted.', 'voucher-captain' ),
+				)
+			),
+			SettingsRegistry::field(
+				'vcap_expiry_staff_extension_days',
+				array(
+					'title'             => __( 'Staff may extend the validity by up to (days)', 'voucher-captain' ),
+					'type'              => 'number',
+					'custom_attributes' => array( 'step' => 1 ),
+					'desc_tip'          => __( 'Limit for extending a voucher by hand (voucher edit and bulk action "Extend validity"), counted from its current expiry date or today, whichever is later. 0 = no limit.', 'voucher-captain' ),
+				)
+			),
+			array( 'type' => 'sectionend', 'id' => 'vcap_expiry_behaviour_block' ),
+
 			array(
 				'type'  => 'title',
 				'title' => __( 'Abuse protection', 'voucher-captain' ),

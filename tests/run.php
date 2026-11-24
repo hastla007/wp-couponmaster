@@ -6618,6 +6618,247 @@ check(
 );
 $GLOBALS['vcap_test_options'] = $ln_saved_opts;
 $GLOBALS['vcap_test_filters'] = $ln_saved_filters;
+// SET-VC-06: expiry behaviour as a setting ("expires" = 1.2.0, grace period, never expires) and the extension limit
+// for staff; filters vcap_expiry_behaviour, vcap_expiry_grace_days, vcap_expiry_staff_extension_days win.
+echo "SET-VC-06 expiry behaviour\n";
+VCAP\SettingsRegistry::reset();
+$x6_opts    = $GLOBALS['vcap_test_options'] ?? array();
+$x6_filters = $GLOBALS['vcap_test_filters'] ?? array();
+$x6_set     = static function ( array $values ): void {
+	foreach ( $values as $k => $v ) {
+		if ( null === $v ) {
+			unset( $GLOBALS['vcap_test_options'][ $k ] );
+		} else {
+			$GLOBALS['vcap_test_options'][ $k ] = $v;
+		}
+	}
+};
+$x6_def = VCAP\Settings::defaults();
+check(
+	'SET-VC-06: defaults keep 1.2.0 – expires at the date, grace 30 days (only used with "grace"), staff extension without limit (0); General section, legal weight',
+	'expires' === $x6_def['vcap_expiry_behaviour'] && 30 === $x6_def['vcap_expiry_grace_days'] && 0 === $x6_def['vcap_expiry_staff_extension_days'] && 'expires' === VCAP\ExpiryPolicy::behaviour() && 0 === VCAP\ExpiryPolicy::grace_days() && 0 === VCAP\ExpiryPolicy::staff_extension_days()
+		&& '' === VCAP\SettingsRegistry::get( 'vcap_expiry_behaviour' )['section'] && VCAP\SettingsRegistry::get( 'vcap_expiry_behaviour' )['legal'] && VCAP\SettingsRegistry::get( 'vcap_expiry_grace_days' )['legal'] && VCAP\SettingsRegistry::get( 'vcap_expiry_staff_extension_days' )['legal']
+		&& array( 'expires', 'grace', 'never' ) === VCAP\SettingsRegistry::get( 'vcap_expiry_behaviour' )['choices'] && 1 === VCAP\SettingsRegistry::get( 'vcap_expiry_grace_days' )['min']
+);
+$x6_v5              = new Voucher();
+$x6_v5->status      = Voucher::STATUS_ACTIVE;
+$x6_v5->expires_at  = gmdate( 'Y-m-d H:i:s', time() - 5 * DAY_IN_SECONDS );
+$x6_v40             = new Voucher();
+$x6_v40->status     = Voucher::STATUS_ACTIVE;
+$x6_v40->expires_at = gmdate( 'Y-m-d H:i:s', time() - 40 * DAY_IN_SECONDS );
+$x6_state           = static fn() => array( $x6_v5->is_expired(), $x6_v40->is_expired(), $x6_v5->is_usable(), '' !== VCAP\ExpiryPolicy::notice( $x6_v5 ) );
+$x6_exp             = $x6_state();
+$x6_label           = $x6_v5->status_label();
+$x6_set( array( 'vcap_expiry_behaviour' => 'grace' ) );
+$x6_grace       = $x6_state();
+$x6_grace_note  = VCAP\ExpiryPolicy::notice( $x6_v5 );
+$x6_grace_label = $x6_v5->status_label();
+$x6_set( array( 'vcap_expiry_grace_days' => '3' ) );
+$x6_grace3 = $x6_state();
+$x6_set( array( 'vcap_expiry_behaviour' => 'never', 'vcap_expiry_grace_days' => null ) );
+$x6_never      = $x6_state();
+$x6_never_note = VCAP\ExpiryPolicy::notice( $x6_v40 );
+check(
+	'SET-VC-06: Voucher::is_expired() follows the behaviour – expires: both past-date vouchers expired; grace 30 days: 5 days past still redeemable with a notice, 40 days past expired; grace 3 days: both expired; never: none expired, notice only',
+	array( true, true, false, false ) === $x6_exp && array( false, true, true, true ) === $x6_grace && array( true, true, false, false ) === $x6_grace3 && array( false, false, true, true ) === $x6_never
+		&& 'Expired' === $x6_label && 'Active (validity date passed)' === $x6_grace_label
+		&& str_contains( $x6_grace_note, 'The shop still accepts it until ' ) && str_contains( $x6_never_note, 'The shop still accepts it.' ) && ! str_contains( $x6_never_note, 'until' ),
+	json_encode( array( $x6_exp, $x6_grace, $x6_grace3, $x6_never, $x6_label, $x6_grace_label, $x6_grace_note, $x6_never_note ) )
+);
+$x6_set( array( 'vcap_expiry_behaviour' => 'grace' ) );
+$x6_seen = array();
+add_filter( 'vcap_expiry_behaviour', static function ( $b ) use ( &$x6_seen ) { $x6_seen[] = $b; return 'never'; } );
+$x6_fb_never = array( VCAP\ExpiryPolicy::behaviour(), $x6_v40->is_expired() );
+$GLOBALS['vcap_test_filters']['vcap_expiry_behaviour'] = array( array( static fn() => 'bogus', 1 ) );
+$x6_fb_bogus = VCAP\ExpiryPolicy::behaviour();
+unset( $GLOBALS['vcap_test_filters']['vcap_expiry_behaviour'] );
+add_filter( 'vcap_expiry_grace_days', static fn() => 60 );
+$x6_fg = array( VCAP\ExpiryPolicy::grace_days(), $x6_v40->is_expired() );
+unset( $GLOBALS['vcap_test_filters']['vcap_expiry_grace_days'] );
+$x6_set( array( 'vcap_expiry_behaviour' => 'unknown' ) );
+$x6_stored_bogus = VCAP\ExpiryPolicy::behaviour();
+check(
+	'SET-VC-06: filter vcap_expiry_behaviour gets the setting and wins (unknown values = "expires"); filter vcap_expiry_grace_days wins (60 days keep a voucher 40 days past redeemable)',
+	array( 'grace', 'grace' ) === $x6_seen && array( 'never', false ) === $x6_fb_never && 'expires' === $x6_fb_bogus && array( 60, false ) === $x6_fg && 'expires' === $x6_stored_bogus,
+	json_encode( array( $x6_seen, $x6_fb_never, $x6_fb_bogus, $x6_fg, $x6_stored_bogus ) )
+);
+
+// Journal: the daily maintenance books the expiry off only when the grace period ended, never with "never".
+$x6_saved_wpdb = $GLOBALS['wpdb'] ?? null;
+$x6_fixtures   = array(
+	5  => array( 'id' => 5, 'code' => 'X6-FIVE', 'type' => 'giftcard', 'usage_mode' => 'balance', 'status' => 'active', 'initial_amount' => 50, 'balance' => 50, 'currency' => 'EUR', 'discount_type' => 'fixed_cart', 'expires_at' => $x6_v5->expires_at ),
+	40 => array( 'id' => 40, 'code' => 'X6-FORTY', 'type' => 'giftcard', 'usage_mode' => 'balance', 'status' => 'active', 'initial_amount' => 20, 'balance' => 20, 'currency' => 'EUR', 'discount_type' => 'fixed_cart', 'expires_at' => $x6_v40->expires_at ),
+	99 => array( 'id' => 99, 'code' => 'X6-FUTURE', 'type' => 'giftcard', 'usage_mode' => 'balance', 'status' => 'active', 'initial_amount' => 10, 'balance' => 10, 'currency' => 'EUR', 'discount_type' => 'fixed_cart', 'expires_at' => gmdate( 'Y-m-d H:i:s', time() + 30 * DAY_IN_SECONDS ) ),
+);
+$x6_db = new class( $x6_fixtures ) {
+	public string $prefix     = 'wp_';
+	public string $last_error = '';
+	public int $insert_id     = 0;
+	public array $log         = array();
+	public array $inserts     = array();
+	private array $expired    = array();
+	public function __construct( private array $rows ) {}
+	public function prepare( $query, ...$args ) {
+		$args = isset( $args[0] ) && is_array( $args[0] ) ? $args[0] : $args;
+		return vsprintf( str_replace( array( '%d', '%s', '%i' ), array( '%d', "'%s'", '%s' ), $query ), $args );
+	}
+	private function cutoff( string $q ): string {
+		return preg_match( "/expires_at <=? '([^']+)'/", $q, $m ) ? $m[1] : '';
+	}
+	private function due( string $q ): array {
+		$cut = $this->cutoff( $q );
+		return array_values( array_filter( $this->rows, static fn( $r ) => 'active' === $r['status'] && $r['expires_at'] < $cut ) );
+	}
+	public function get_col( $q, $i = 0 ) {
+		$this->log[] = $q;
+		return str_starts_with( $q, 'SELECT id FROM' ) ? array_column( $this->due( $q ), 'id' ) : array();
+	}
+	public function query( $q ) {
+		$this->log[] = $q;
+		if ( str_starts_with( $q, 'UPDATE' ) && str_contains( $q, "SET status = 'expired'" ) ) {
+			$due = $this->due( $q );
+			foreach ( $due as $r ) {
+				$this->rows[ $r['id'] ]['status'] = 'expired';
+				$this->expired[]                  = $r['id'];
+			}
+			return count( $due );
+		}
+		return 1;
+	}
+	public function get_results( $q, $o = null ) {
+		$this->log[] = $q;
+		if ( str_contains( $q, "status = 'expired' AND updated_at" ) ) {
+			$out = array();
+			foreach ( $this->expired as $id ) {
+				$out[] = $this->rows[ $id ];
+			}
+			$this->expired = array();
+			return $out;
+		}
+		if ( str_contains( $q, 'AS expired' ) ) { // Ledger::liability(): group the fixtures like the SQL does.
+			$cut = $this->cutoff( $q );
+			$out = array();
+			foreach ( $this->rows as $r ) {
+				$key         = (int) ( $r['expires_at'] <= $cut );
+				$out[ $key ] = array( 'currency' => 'EUR', 'type' => 'giftcard', 'expired' => $key, 'free' => 0, 'cnt' => ( $out[ $key ]['cnt'] ?? 0 ) + 1, 'amount' => ( $out[ $key ]['amount'] ?? 0 ) + $r['balance'] );
+			}
+			return array_values( $out );
+		}
+		return array();
+	}
+	public function get_var( $q ) { $this->log[] = $q; return null; }
+	public function get_row( $q, $o = null ) { $this->log[] = $q; return null; }
+	public function insert( $table, $row ) { $this->inserts[] = $row; return 1; }
+	public function esc_like( $s ) { return addcslashes( (string) $s, '_%\\' ); }
+	public function reset_rows( array $rows ): void { $this->rows = $rows; $this->inserts = array(); $this->log = array(); }
+};
+$GLOBALS['wpdb'] = $x6_db;
+$x6_repo         = new VCAP\VoucherRepository();
+$x6_run          = static function ( string $behaviour ) use ( $x6_db, $x6_repo, $x6_fixtures, $x6_set ): array {
+	$x6_set( array( 'vcap_expiry_behaviour' => $behaviour ) );
+	$x6_db->reset_rows( $x6_fixtures );
+	$count  = $x6_repo->expire_overdue();
+	$booked = array();
+	foreach ( $x6_db->inserts as $row ) {
+		if ( 'expired' === $row['event'] ) {
+			$booked[ $row['voucher_id'] ] = $row['amount'];
+		}
+	}
+	return array( $count, $booked, count( $x6_db->log ) );
+};
+$x6_j_exp   = $x6_run( 'expires' );
+$x6_j_grace = $x6_run( 'grace' );
+$x6_j_never = $x6_run( 'never' );
+check(
+	'SET-VC-06: journal – "expires" books both past-date cards off (50 + 20); "grace" (30 days) books only the card past its grace period (20), the card in its grace period stays open; "never" books nothing (no query)',
+	2 === $x6_j_exp[0] && array( 5 => 50.0, 40 => 20.0 ) == $x6_j_exp[1] && 1 === $x6_j_grace[0] && array( 40 => 20.0 ) == $x6_j_grace[1] && array( 0, array(), 0 ) === $x6_j_never,
+	json_encode( array( $x6_j_exp, $x6_j_grace, $x6_j_never ) )
+);
+if ( ! function_exists( 'get_gmt_from_date' ) ) {
+	function get_gmt_from_date( $date, $format = 'Y-m-d H:i:s' ) { return gmdate( $format, (int) strtotime( $date . ' UTC' ) ); } // phpcs:ignore
+}
+if ( ! function_exists( 'esc_sql' ) ) {
+	function esc_sql( $s ) { return addslashes( (string) $s ); } // phpcs:ignore
+}
+$x6_open = static function ( string $behaviour ) use ( $x6_db, $x6_fixtures, $x6_set ): array {
+	$x6_set( array( 'vcap_expiry_behaviour' => $behaviour ) );
+	$x6_db->reset_rows( $x6_fixtures );
+	$GLOBALS['vcap_test_transients'] = array();
+	$bucket = ( new VCAP\Ledger( new VCAP\VoucherRepository() ) )->liability( wp_date( 'Y-m-d' ) )['totals']['EUR']['giftcard'] ?? array();
+	return array( $bucket['amount'] ?? 0.0, $bucket['expired_amount'] ?? 0.0 );
+};
+$x6_o = array( $x6_open( 'expires' ), $x6_open( 'grace' ), $x6_open( 'never' ) );
+check(
+	'SET-VC-06: report "open voucher value" (Ledger::liability) – expires: 10 open / 70 expired; grace 30 days: 60 open / 20 expired; never: 80 open / 0 expired; Reports::overview shifts its "expired" figure the same way',
+	array( array( 10.0, 70.0 ), array( 60.0, 20.0 ), array( 80.0, 0.0 ) ) == $x6_o
+		&& str_contains( (string) file_get_contents( VCAP_PATH . 'src/Reports.php' ), 'ExpiryPolicy::sql_cutoff( $start ), ExpiryPolicy::sql_cutoff( $end )' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'src/Ledger.php' ), "'expired'     => \$v->expires_at && \$v->expires_at <= \$cutoff" ),
+	json_encode( $x6_o )
+);
+$GLOBALS['wpdb']                 = $x6_saved_wpdb;
+$GLOBALS['vcap_test_transients'] = array();
+
+// Redemption in the grace period: WooCommerce's own expiry check of a voucher coupon (cart, Store API, admin orders),
+// the cart/API checks (Voucher::is_expired()) and the counter's check-in query.
+if ( ! class_exists( 'WC_Coupon' ) ) {
+	eval( 'class WC_Coupon { public array $meta = array(); public ?DateTime $expires = null; public function get_meta( $key ) { return $this->meta[ $key ] ?? ""; } public function get_date_expires() { return $this->expires; } }' ); // phpcs:ignore Squiz.PHP.Eval -- test stub only when WooCommerce is missing.
+}
+$x6_c                        = new WC_Coupon();
+$x6_c->meta['_vcap_voucher'] = 'yes';
+$x6_c->expires               = new DateTime( '@' . ( time() - 5 * DAY_IN_SECONDS ) );
+$x6_other                    = new WC_Coupon();
+$x6_other->expires           = new DateTime( '@' . ( time() - 5 * DAY_IN_SECONDS ) );
+$x6_set( array( 'vcap_expiry_behaviour' => 'expires' ) );
+$x6_cv = array( VCAP\ExpiryPolicy::coupon_expired( true, $x6_c ) );
+$x6_set( array( 'vcap_expiry_behaviour' => 'grace' ) );
+$x6_cv[] = VCAP\ExpiryPolicy::coupon_expired( true, $x6_c );
+$x6_cv[] = VCAP\ExpiryPolicy::coupon_expired( true, $x6_other );
+$x6_set( array( 'vcap_expiry_grace_days' => '2' ) );
+$x6_cv[] = VCAP\ExpiryPolicy::coupon_expired( true, $x6_c );
+$x6_set( array( 'vcap_expiry_behaviour' => 'never', 'vcap_expiry_grace_days' => null ) );
+$x6_cv[]    = VCAP\ExpiryPolicy::coupon_expired( true, $x6_c );
+$x6_cv[]    = VCAP\ExpiryPolicy::coupon_expired( false, $x6_c );
+$x6_tickets = (string) file_get_contents( VCAP_PATH . 'src/Tickets.php' );
+check(
+	'SET-VC-06: redemption in the grace period – WooCommerce\'s expiry check of a voucher coupon follows the behaviour (expires: expired; grace 30: accepted; grace 2: expired; never: accepted), other coupons untouched; cart (CartCoupons), redemption API (RedemptionService) and check-in use Voucher::is_expired() / ExpiryPolicy::sql_cutoff()',
+	array( true, false, true, true, false, false ) === $x6_cv
+		&& str_contains( (string) file_get_contents( VCAP_PATH . 'src/Coupons/CartCoupons.php' ), 'Voucher::STATUS_EXPIRED === $voucher->status || $voucher->is_expired()' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'src/API/V1/RedemptionService.php' ), 'Voucher::STATUS_EXPIRED === $voucher->status || $voucher->is_expired()' )
+		&& str_contains( $x6_tickets, 'ExpiryPolicy::sql_cutoff( $now )' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'src/TaxAccounting.php' ), 'ExpiryPolicy::register();' ),
+	json_encode( $x6_cv )
+);
+
+// Staff extension limit.
+$x6_set( array( 'vcap_expiry_behaviour' => null ) );
+$x6_ve             = new Voucher();
+$x6_ve->expires_at = gmdate( 'Y-m-d H:i:s', time() + 10 * DAY_IN_SECONDS );
+$x6_never_v        = new Voucher();
+$x6_in             = static fn( int $days ): string => gmdate( 'Y-m-d H:i:s', time() + $days * DAY_IN_SECONDS );
+$x6_s0             = array( VCAP\ExpiryPolicy::staff_may_set( $x6_ve, $x6_in( 5000 ) ), VCAP\ExpiryPolicy::staff_may_set( $x6_ve, null ), null === VCAP\ExpiryPolicy::staff_extension_limit( $x6_ve ) );
+$x6_set( array( 'vcap_expiry_staff_extension_days' => '30' ) );
+$x6_s30 = array(
+	VCAP\ExpiryPolicy::staff_may_set( $x6_ve, $x6_in( 39 ) ),        // 10 + 29 days: allowed.
+	VCAP\ExpiryPolicy::staff_may_set( $x6_ve, $x6_in( 45 ) ),        // 10 + 35 days: too far.
+	VCAP\ExpiryPolicy::staff_may_set( $x6_ve, $x6_in( 2 ) ),         // Shortened: allowed.
+	VCAP\ExpiryPolicy::staff_may_set( $x6_ve, null ),                // "Never expires": unlimited extension.
+	VCAP\ExpiryPolicy::staff_may_set( $x6_v40, $x6_in( 29 ) ),       // Expired 40 days ago: counted from today.
+	VCAP\ExpiryPolicy::staff_may_set( $x6_never_v, $x6_in( 9000 ) ), // Gets a date: shorter than "never".
+);
+add_filter( 'vcap_expiry_staff_extension_days', static fn() => 0 );
+$x6_sf = VCAP\ExpiryPolicy::staff_may_set( $x6_ve, $x6_in( 45 ) );
+unset( $GLOBALS['vcap_test_filters']['vcap_expiry_staff_extension_days'] );
+$x6_admin = (string) file_get_contents( VCAP_PATH . 'src/Admin/VoucherAdmin.php' );
+check(
+	'SET-VC-06: staff extension – 0 = no limit (as before); 30 days: up to 30 days after the current expiry or today, shortening always allowed, removing the date refused; filter wins; voucher edit and bulk "Extend validity" check it',
+	array( true, true, true ) === $x6_s0 && array( true, false, true, false, true, true ) === $x6_s30 && $x6_sf
+		&& str_contains( $x6_admin, '$new_expires !== $v->expires_at && ! \\VCAP\\ExpiryPolicy::staff_may_set( $v, $new_expires )' ) && str_contains( $x6_admin, '! \\VCAP\\ExpiryPolicy::staff_may_set( $v, $new )' ),
+	json_encode( array( $x6_s0, $x6_s30, $x6_sf ) )
+);
+check(
+	'SET-VC-06: maintenance step, TAX.md and hooks – expiry step documented in Delivery, TAX.md marks the behaviour "zu prüfen", hooks documented',
+	str_contains( (string) file_get_contents( VCAP_PATH . 'src/Delivery.php' ), 'SET-VC-06: the expiry behaviour decides' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'TAX.md' ), 'SET-VC-06' )
+		&& str_contains( (string) file_get_contents( VCAP_PATH . 'docs/HOOKS.md' ), '| `vcap_expiry_behaviour` | 1.3.0 |' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'docs/HOOKS.md' ), '| `vcap_expiry_staff_extension_days` | 1.3.0 |' )
+);
+$GLOBALS['vcap_test_options'] = $x6_opts;
+$GLOBALS['vcap_test_filters'] = $x6_filters;
 VCAP\SettingsRegistry::reset();
 
 echo "\n$passed passed, $failed failed. Output: $out\n";

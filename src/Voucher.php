@@ -167,8 +167,12 @@ final class Voucher {
 		return 'balance' === $this->usage_mode;
 	}
 
+	/**
+	 * Whether the voucher counts as expired now. SET-VC-06: with the expiry behaviour "grace" only after the grace
+	 * days, with "never" not at all (ExpiryPolicy); the printed date is still $expires_at.
+	 */
 	public function is_expired(): bool {
-		return $this->expires_at && strtotime( $this->expires_at . ' UTC' ) < time();
+		return ExpiryPolicy::is_expired( $this->expires_at );
 	}
 
 	public function is_usable(): bool {
@@ -221,6 +225,10 @@ final class Voucher {
 	public function status_label(): string {
 		if ( self::STATUS_ACTIVE === $this->status && $this->is_expired() ) {
 			return self::statuses()[ self::STATUS_EXPIRED ];
+		}
+		if ( self::STATUS_ACTIVE === $this->status && ExpiryPolicy::past_date_redeemable( $this ) ) {
+			// SET-VC-06: grace period or "never expires" – a notice instead of the status "Expired".
+			return __( 'Active (validity date passed)', 'voucher-captain' );
 		}
 		return self::statuses()[ $this->status ] ?? $this->status;
 	}

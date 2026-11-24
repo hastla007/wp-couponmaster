@@ -513,10 +513,10 @@ final class VoucherRepository {
 		}
 		if ( 'expired' === $args['status'] ) {
 			$where[] = "(status = 'expired' OR (status = 'active' AND expires_at IS NOT NULL AND expires_at < %s))";
-			$vals[]  = $this->now();
+			$vals[]  = ExpiryPolicy::sql_cutoff( $this->now() ); // SET-VC-06: grace period / never expires.
 		} elseif ( 'active' === $args['status'] ) {
 			$where[] = "status = 'active' AND (expires_at IS NULL OR expires_at >= %s)";
-			$vals[]  = $this->now();
+			$vals[]  = ExpiryPolicy::sql_cutoff( $this->now() );
 		} elseif ( '' !== $args['status'] ) {
 			$where[] = 'status = %s';
 			$vals[]  = $args['status'];
@@ -740,14 +740,19 @@ final class VoucherRepository {
 		$start    = microtime( true );
 		$total    = 0;
 		$finished = true;
+		if ( ! ExpiryPolicy::expires_ever() ) {
+			return 0; // SET-VC-06 "never expires": the date is a notice only, nothing is marked expired or booked off.
+		}
 		do {
 			$now = $this->now();
-			$ids = array_map( 'intval', (array) $wpdb->get_col( $wpdb->prepare( "SELECT id FROM {$this->table()} WHERE status = 'active' AND expires_at IS NOT NULL AND expires_at < %s ORDER BY expires_at LIMIT %d", $now, self::MAINTENANCE_BATCH ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			// SET-VC-06: with a grace period a voucher expires (and its value is booked off) when the grace days end.
+			$cut = ExpiryPolicy::sql_cutoff( $now );
+			$ids = array_map( 'intval', (array) $wpdb->get_col( $wpdb->prepare( "SELECT id FROM {$this->table()} WHERE status = 'active' AND expires_at IS NOT NULL AND expires_at < %s ORDER BY expires_at LIMIT %d", $cut, self::MAINTENANCE_BATCH ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			if ( ! $ids ) {
 				break;
 			}
 			$in   = implode( ',', $ids );
-			$done = $wpdb->query( $wpdb->prepare( "UPDATE {$this->table()} SET status = 'expired', updated_at = %s WHERE id IN ({$in}) AND status = 'active' AND expires_at IS NOT NULL AND expires_at < %s", $now, $now ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$done = $wpdb->query( $wpdb->prepare( "UPDATE {$this->table()} SET status = 'expired', updated_at = %s WHERE id IN ({$in}) AND status = 'active' AND expires_at IS NOT NULL AND expires_at < %s", $now, $cut ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			if ( false === $done ) {
 				throw new \RuntimeException( 'Expired vouchers could not be updated: ' . esc_html( $wpdb->last_error ) );
 			}

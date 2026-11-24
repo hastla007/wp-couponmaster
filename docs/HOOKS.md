@@ -135,6 +135,9 @@ with a public API contract, the contract starts with 1.1.0). Add-ons check the c
 | `vcap_email_intro` | 1.2.0 | `src/Emails/VoucherEmail.php` | Intro text of a voucher email (e.g. a ticket voucher's reminder speaks of tickets, not of a remaining value). |
 | `vcap_email_locale` | 1.2.0 | `src/Compat/Multilingual.php`, `src/Integrations/ReviewSource.php` | – |
 | `vcap_event_labels` | 1.1.0 | `src/VoucherRepository.php` | Labels of connector events in the voucher history. |
+| `vcap_expiry_behaviour` | 1.3.0 | `src/ExpiryPolicy.php` | What happens when the validity of a voucher ends: "expires" (booked off at the date), "grace" (still redeemable for the grace days, booked off when they end) or "never" (date shown as a notice only). Gets the setting; the filter wins. Not legally checked – derecognition is income. |
+| `vcap_expiry_grace_days` | 1.3.0 | `src/ExpiryPolicy.php` | Days a voucher stays redeemable after its expiry date with the behaviour "grace". Gets the setting; the filter wins (at least 0). |
+| `vcap_expiry_staff_extension_days` | 1.3.0 | `src/ExpiryPolicy.php` | Days staff may extend the validity of a voucher by hand (voucher edit and bulk action "Extend validity"), counted from its current expiry date or today, whichever is later. 0 = no limit. Gets the setting; the filter wins. |
 | `vcap_field_definitions` | 1.0.0 | `src/Fields.php` | – |
 | `vcap_field_group_applies` | 1.0.0 | `src/Fields.php` | – |
 | `vcap_first_order_counting_statuses` | 1.1.0 | `src/FirstOrderCoupons.php` | – |
