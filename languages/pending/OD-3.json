@@ -1,0 +1,17 @@
+{
+	"No reminder was sent: with \"Never expire\" (Settings → General → When the validity ends) vouchers do not expire.": {
+		"du": "Es wurde keine Erinnerung versandt: Mit „Laufen nie ab“ (Einstellungen → Allgemein → Wenn die Gültigkeit endet) laufen Gutscheine nicht ab.",
+		"sie": "Es wurde keine Erinnerung versandt: Mit „Laufen nie ab“ (Einstellungen → Allgemein → Wenn die Gültigkeit endet) laufen Gutscheine nicht ab.",
+		"at": "Es wurde keine Erinnerung versandt: Mit „Laufen nie ab“ (Einstellungen → Allgemein → Wenn die Gültigkeit endet) laufen Gutscheine nicht ab."
+	},
+	"With \"Never expire\" no expiry reminders are sent.": {
+		"du": "Mit „Laufen nie ab“ werden keine Ablauferinnerungen versandt.",
+		"sie": "Mit „Laufen nie ab“ werden keine Ablauferinnerungen versandt.",
+		"at": "Mit „Laufen nie ab“ werden keine Ablauferinnerungen versandt."
+	},
+	"With \"Never expire\" (Settings → General → When the validity ends) no expiry reminders are sent.": {
+		"du": "Mit „Laufen nie ab“ (Einstellungen → Allgemein → Wenn die Gültigkeit endet) werden keine Ablauferinnerungen versandt.",
+		"sie": "Mit „Laufen nie ab“ (Einstellungen → Allgemein → Wenn die Gültigkeit endet) werden keine Ablauferinnerungen versandt.",
+		"at": "Mit „Laufen nie ab“ (Einstellungen → Allgemein → Wenn die Gültigkeit endet) werden keine Ablauferinnerungen versandt."
+	}
+}

@@ -391,7 +391,7 @@ final class Settings {
 					'title'    => __( 'Expiry reminders (days before)', 'voucher-captain' ),
 					'type'     => 'text',
 					'default'  => '0',
-					'desc_tip' => __( 'Email the voucher holder this many days before a voucher with remaining value expires. Several reminders are separated by commas, e.g. "30, 7, 1"; each one is sent once. 0 = no reminders. The email text is edited under WooCommerce → Settings → Emails.', 'voucher-captain' ),
+					'desc_tip' => __( 'Email the voucher holder this many days before a voucher with remaining value expires. Several reminders are separated by commas, e.g. "30, 7, 1"; each one is sent once. 0 = no reminders. The email text is edited under WooCommerce → Settings → Emails.', 'voucher-captain' ) . ' ' . __( 'With "Never expire" (Settings → General → When the validity ends) no expiry reminders are sent.', 'voucher-captain' ),
 				)
 			),
 			SettingsRegistry::field(
@@ -1124,7 +1124,7 @@ final class Settings {
 						'grace'   => __( 'Grace period: still redeemable for the days below', 'voucher-captain' ),
 						'never'   => __( 'Never expire: the expiry date is only shown as a notice', 'voucher-captain' ),
 					),
-					'desc_tip' => __( 'In the grace period the voucher is still accepted in the cart, at the counter and through the redemption API, with a notice; its remaining value is booked off only when the grace period ends. With "Never expire" nothing is booked off. Vouchers that already expired stay expired – extend them by hand.', 'voucher-captain' ),
+					'desc_tip' => __( 'In the grace period the voucher is still accepted in the cart, at the counter and through the redemption API, with a notice; its remaining value is booked off only when the grace period ends. With "Never expire" nothing is booked off. Vouchers that already expired stay expired – extend them by hand.', 'voucher-captain' ) . ' ' . __( 'With "Never expire" no expiry reminders are sent.', 'voucher-captain' ),
 				)
 			),
 			SettingsRegistry::field(

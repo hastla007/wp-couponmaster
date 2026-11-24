@@ -1372,7 +1372,8 @@ final class Delivery {
 	 * (ledger event 'expiry_reminder'); admins can suppress the reminder per voucher. Works in batches of 200
 	 * until every due voucher was handled or $budget seconds are used (the maintenance step then continues), so
 	 * many vouchers expiring on one day (e.g. on 31 December) are all reminded in time. Nothing is tried while
-	 * the email is disabled, and vouchers without a valid address are skipped (no failed attempt each day).
+	 * the email is disabled, and vouchers without a valid address are skipped (no failed attempt each day). With
+	 * the expiry behaviour "never" nothing is sent (OD-3, ExpiryPolicy::reminders_enabled()).
 	 *
 	 * @param float     $budget   Seconds; 0 = until done.
 	 * @param bool|null $finished Set to false when the budget ran out with vouchers left.
@@ -1380,6 +1381,9 @@ final class Delivery {
 	 */
 	public function send_expiry_reminders( float $budget = 0.0, ?bool &$finished = null ): int {
 		$finished = true;
+		if ( ! ExpiryPolicy::reminders_enabled() ) {
+			return 0; // OD-3: expiry behaviour "never" – vouchers do not expire, so nobody is reminded.
+		}
 		$offsets  = self::expiry_reminder_offsets( $this->settings->get( 'vcap_expiry_reminder_days' ) );
 		if ( ! $offsets ) {
 			return 0;

@@ -704,6 +704,9 @@ final class VoucherRepository {
 	 */
 	public function due_for_expiry_reminder( int $days, int $limit = 200, array $exclude = array(), int $after_days = 0 ): array {
 		global $wpdb;
+		if ( ! ExpiryPolicy::reminders_enabled() ) {
+			return array(); // OD-3: expiry behaviour "never" – no voucher is due for a reminder.
+		}
 		$exclude = array_values( array_filter( array_map( 'intval', $exclude ) ) );
 		$not_in  = $exclude ? ' AND v.id NOT IN (' . implode( ',', $exclude ) . ')' : '';
 		$rows    = $wpdb->get_results( // phpcs:ignore

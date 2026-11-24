@@ -1274,6 +1274,12 @@ final class VoucherAdmin {
 	 */
 	public function send_reminders( array $ids ): array {
 		$result = array( 'sent' => 0, 'skipped' => 0, 'failed' => 0 );
+		if ( ! \VCAP\ExpiryPolicy::reminders_enabled() ) {
+			// OD-3: with the expiry behaviour "never" vouchers do not expire – no reminder is sent.
+			$result['skipped'] = count( $ids );
+			Flash::add( 'error', __( 'No reminder was sent: with "Never expire" (Settings → General → When the validity ends) vouchers do not expire.', 'voucher-captain' ) );
+			return $result;
+		}
 		$emails = function_exists( 'WC' ) ? WC()->mailer()->get_emails() : array();
 		$email  = $emails['VCAP_Email_Voucher_Expiry'] ?? null;
 		if ( ! $email instanceof \WC_Email || ! method_exists( $email, 'trigger' ) || ! $email->is_enabled() ) {

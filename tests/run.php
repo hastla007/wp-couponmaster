@@ -6961,6 +6961,48 @@ check(
 	str_contains( (string) file_get_contents( VCAP_PATH . 'src/Delivery.php' ), 'SET-VC-06: the expiry behaviour decides' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'TAX.md' ), 'SET-VC-06' )
 		&& str_contains( (string) file_get_contents( VCAP_PATH . 'docs/HOOKS.md' ), '| `vcap_expiry_behaviour` | 1.3.0 |' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'docs/HOOKS.md' ), '| `vcap_expiry_staff_extension_days` | 1.3.0 |' )
 );
+// OD-3 (owner decision 24.11.2026): with "never" no expiry reminder is sent – maintenance, its query, bulk action.
+$x6_od3_saved = $GLOBALS['wpdb'] ?? null;
+$x6_od3_db    = new class() {
+	public string $prefix = 'wp_';
+	public int $queries   = 0;
+	public function prepare( $sql, ...$args ) {
+		return (string) $sql;
+	}
+	public function get_results( $sql, $mode = null ) {
+		++$this->queries;
+		return array();
+	}
+};
+$GLOBALS['wpdb'] = $x6_od3_db;
+$x6_od3_repo     = ( new ReflectionClass( VCAP\VoucherRepository::class ) )->newInstanceWithoutConstructor();
+$x6_od3_run      = static function () use ( $x6_od3_repo, $x6_od3_db ): array {
+	$x6_od3_db->queries = 0;
+	$x6_od3_repo->due_for_expiry_reminder( 30 );
+	return array( VCAP\ExpiryPolicy::reminders_enabled(), $x6_od3_db->queries );
+};
+$x6_set( array( 'vcap_expiry_behaviour' => null ) );
+$x6_od3_expires = $x6_od3_run();
+$x6_set( array( 'vcap_expiry_behaviour' => 'grace' ) );
+$x6_od3_grace = $x6_od3_run();
+$x6_set( array( 'vcap_expiry_behaviour' => 'never' ) );
+$x6_od3_never    = $x6_od3_run();
+$x6_od3_finished = false;
+// Without settings, repository or mailer the instance would fail at the first step: "never" returns before it.
+$x6_od3_sent = ( new ReflectionClass( Delivery::class ) )->newInstanceWithoutConstructor()->send_expiry_reminders( 0.0, $x6_od3_finished );
+delete_transient( 'vcap_flash_' . get_current_user_id() );
+$x6_od3_bulk  = ( new ReflectionClass( VCAP\Admin\VoucherAdmin::class ) )->newInstanceWithoutConstructor()->send_reminders( array( 1, 2 ) );
+$x6_od3_flash = wp_json_encode( VCAP\Admin\Flash::pending() );
+add_filter( 'vcap_expiry_behaviour', static fn() => 'grace' );
+$x6_od3_filter = VCAP\ExpiryPolicy::reminders_enabled();
+unset( $GLOBALS['vcap_test_filters']['vcap_expiry_behaviour'] );
+$GLOBALS['wpdb'] = $x6_od3_saved;
+check(
+	'OD-3: expiry behaviour "never" sends no expiry reminders – daily maintenance (send_expiry_reminders) sends 0 and finishes, its query finds nothing without asking the database, the bulk action "Send expiry reminder" skips all with a notice; "expires" and "grace" keep querying as before; the filter decides',
+	array( true, 1 ) === $x6_od3_expires && array( true, 1 ) === $x6_od3_grace && array( false, 0 ) === $x6_od3_never && 0 === $x6_od3_sent && true === $x6_od3_finished
+		&& array( 'sent' => 0, 'skipped' => 2, 'failed' => 0 ) === $x6_od3_bulk && str_contains( (string) $x6_od3_flash, 'Never expire' ) && $x6_od3_filter,
+	json_encode( array( $x6_od3_expires, $x6_od3_grace, $x6_od3_never, $x6_od3_sent, $x6_od3_finished, $x6_od3_bulk, $x6_od3_flash, $x6_od3_filter ) )
+);
 $GLOBALS['vcap_test_options'] = $x6_opts;
 $GLOBALS['vcap_test_filters'] = $x6_filters;
 VCAP\SettingsRegistry::reset();
