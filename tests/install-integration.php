@@ -328,6 +328,21 @@ update_option( 'woocommerce_default_country', $vc09_country );
 if ( false !== $vc09_applied ) {
 	update_option( VCAP\CountryProfiles::APPLIED_OPTION, $vc09_applied, false );
 }
+// SET-VC-11: with real WooCommerce the default issuer address is the formatted store address (with the country).
+$vc11_keep = array();
+foreach ( array( 'woocommerce_store_address', 'woocommerce_store_city', 'woocommerce_store_postcode', 'woocommerce_default_country', 'vcap_issuer_address' ) as $vc11_opt ) {
+	$vc11_keep[ $vc11_opt ] = get_option( $vc11_opt, false );
+}
+update_option( 'woocommerce_store_address', 'Musterstraße 1' );
+update_option( 'woocommerce_store_city', 'Berlin' );
+update_option( 'woocommerce_store_postcode', '10115' );
+update_option( 'woocommerce_default_country', 'DE:BE' );
+delete_option( 'vcap_issuer_address' );
+$vc11_address = VCAP\LegalInfo::issuer_address();
+vcap_inst_assert( str_contains( $vc11_address, 'Musterstraße 1' ) && str_contains( $vc11_address, '10115 Berlin' ) && str_contains( $vc11_address, 'Germany' ) && ! str_contains( $vc11_address, '<' ), 'SET-VC-11: the default issuer address is the WooCommerce store address as text lines with the country' );
+foreach ( $vc11_keep as $vc11_opt => $vc11_val ) {
+	false === $vc11_val ? delete_option( $vc11_opt ) : update_option( $vc11_opt, $vc11_val );
+}
 
 // A voucher coupon without its voucher (row deleted, data removed) is never redeemed as an ordinary coupon.
 $u_refused = 0;

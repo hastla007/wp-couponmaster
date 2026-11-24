@@ -690,6 +690,28 @@ works on the settings register (`config/settings.php`, `VCAP\SettingsRegistry`).
 
 Every change made this way is in the change log with the source "WP-CLI" (profile: "WP-CLI (country profile)").
 
+### Issuer and legal texts (SET-VC-11)
+
+`VCAP\LegalInfo` – block "Issuer and legal texts" in *Settings → Vouchers → General*. Settings (register, section
+General, `legal` = true, all empty by default): `vcap_issuer_name`, `vcap_issuer_address` (lines), `vcap_issuer_contact`,
+`vcap_terms_url`, `vcap_privacy_url`, `vcap_withdrawal_url` (http(s) only, checked on the page and on import/WP-CLI),
+`vcap_legal_text` (plain text). Placeholders in PDF templates and voucher emails (`Placeholders::definitions()`, so also
+the PDF designer list and "Available placeholders" of the email settings):
+
+| Placeholder | Value | Empty setting |
+|---|---|---|
+| `{issuer}` | name, address, contact – one per line | site name; WooCommerce store address with country; no contact |
+| `{legal_text}` | free legal text | nothing |
+| `{terms_url}` | terms and conditions link | WooCommerce terms page (`wc_terms_and_conditions_page_id()`) |
+| `{privacy_url}` | privacy policy link | WordPress privacy page (`get_privacy_policy_url()`) |
+| `{withdrawal_url}` | right of withdrawal link | nothing |
+
+The defaults are taken when the voucher is rendered. No default template or email text uses them, so existing vouchers
+and emails stay unchanged. Translation: WPML via `wpml-config.xml` (admin-texts), Polylang via
+`Compat\Multilingual::OPTIONS` (string translation). The texts are not legally checked (LEGAL_TEXTS.md section 1).
+Accessors: `LegalInfo::issuer()`, `issuer_name()`, `issuer_address()`, `issuer_contact()`, `legal_text()`,
+`terms_url()`, `privacy_url()`, `withdrawal_url()`, `placeholders()`.
+
 ### Country profiles (SET-VC-02)
 
 `VCAP\CountryProfiles` reads `config/country-profiles.php` (filter `vcap_country_profiles`). A profile only suggests

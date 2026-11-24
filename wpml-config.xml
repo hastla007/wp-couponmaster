@@ -68,6 +68,13 @@
 	</custom-fields>
 	<admin-texts>
 		<key name="vcap_default_terms" />
+		<key name="vcap_issuer_name" />
+		<key name="vcap_issuer_address" />
+		<key name="vcap_issuer_contact" />
+		<key name="vcap_terms_url" />
+		<key name="vcap_privacy_url" />
+		<key name="vcap_withdrawal_url" />
+		<key name="vcap_legal_text" />
 		<key name="vcap_terms_by_country">
 			<key name="*">
 				<key name="text" />

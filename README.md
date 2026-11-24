@@ -22,7 +22,7 @@ WooCommerce-Plugin für personalisierte **PDF-Gutscheine, Geschenkkarten, Guthab
 
 ### Platzhalter
 
-`{coupon_code}` `{coupon_value}` `{coupon_balance}` `{expiry_date}` `{issue_date}` `{product_name}` `{product_price}` `{buyer_name}` `{buyer_email}` `{recipient_name}` (only the recipient's own name) `{holder_name}` (recipient, else buyer) `{recipient_email}` `{message}` `{delivery_date}` `{order_number}` `{order_date}` `{event_date}` `{event_location}` `{ticket_admissions}` `{site_name}` `{site_url}` `{redeem_url}` (redeem page with the code filled in) and, for Pass Captain ticket vouchers, `{ticket_event}` `{ticket_quantity}`
+`{coupon_code}` `{coupon_value}` `{coupon_balance}` `{expiry_date}` `{issue_date}` `{product_name}` `{product_price}` `{buyer_name}` `{buyer_email}` `{recipient_name}` (only the recipient's own name) `{holder_name}` (recipient, else buyer) `{recipient_email}` `{message}` `{delivery_date}` `{order_number}` `{order_date}` `{event_date}` `{event_location}` `{ticket_admissions}` `{site_name}` `{site_url}` `{redeem_url}` (redeem page with the code filled in) `{issuer}` (issuer name, address, contact) `{legal_text}` `{terms_url}` `{privacy_url}` `{withdrawal_url}` (SET-VC-11, *Settings → Vouchers → General → Issuer and legal texts*; empty = site name, WooCommerce store address, terms page, privacy page) and, for Pass Captain ticket vouchers, `{ticket_event}` `{ticket_quantity}`
 
 Dynamische Platzhalter:
 

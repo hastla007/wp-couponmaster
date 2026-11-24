@@ -124,6 +124,8 @@ final class Settings {
 		( new Admin\CountryTableField() )->register();
 		// SET-VC-02: country profiles (preview, apply, cancel) in "General".
 		( new Admin\CountryProfilesAdmin() )->register();
+		// SET-VC-11: links of "Issuer and legal texts" only http(s), address and legal text as plain text.
+		LegalInfo::register_sanitizers();
 		// M12-84: "30, 7, 1" is stored normalised (largest first), anything else as 0 (no reminders).
 		add_filter(
 			'woocommerce_admin_settings_sanitize_option_vcap_expiry_reminder_days',
@@ -1428,7 +1430,8 @@ final class Settings {
 			array( 'type' => 'sectionend', 'id' => 'vcap_referral' ),
 		);
 		// SET-VC-02: the country profile comes first – it suggests values for the blocks below.
-		return array_merge( Admin\CountryProfilesAdmin::fields(), $fields, PaymentMethods::settings_fields() ); // SET-VC-19: block on "General".
+		// SET-VC-19: block "Payment methods for vouchers"; SET-VC-11: block "Issuer and legal texts".
+		return array_merge( Admin\CountryProfilesAdmin::fields(), $fields, PaymentMethods::settings_fields(), LegalInfo::settings_fields() );
 	}
 
 	/**

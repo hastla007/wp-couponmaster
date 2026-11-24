@@ -6031,5 +6031,121 @@ check(
 $GLOBALS['vcap_test_options'] = $vc09_saved;
 VCAP\CountryProfiles::reset();
 
+// SET-VC-11: issuer and legal texts in "General" – placeholders {issuer}, {legal_text}, {terms_url}, {privacy_url},
+// {withdrawal_url}; empty = shop details at render time; translatable with WPML (admin-texts) and Polylang.
+echo "SET-VC-11 issuer and legal texts\n";
+if ( ! function_exists( 'wc_terms_and_conditions_page_id' ) ) {
+	function wc_terms_and_conditions_page_id() { return (int) ( $GLOBALS['vcap_test_terms_page'] ?? 0 ); }
+}
+if ( ! function_exists( 'get_privacy_policy_url' ) ) {
+	function get_privacy_policy_url() { return (string) ( $GLOBALS['vcap_test_privacy_url'] ?? '' ); }
+}
+$vc11_saved = $GLOBALS['vcap_test_options'];
+$vc11_reg   = array();
+foreach ( VCAP\LegalInfo::OPTIONS as $vc11_key ) {
+	$vc11_entry           = VCAP\SettingsRegistry::get( $vc11_key );
+	$vc11_reg[ $vc11_key ] = null !== $vc11_entry ? array( $vc11_entry['type'], $vc11_entry['default'], $vc11_entry['section'], $vc11_entry['legal'], $vc11_entry['export'], $vc11_entry['secret'] ) : null;
+}
+$vc11_fields = array_values( array_filter( VCAP\LegalInfo::settings_fields(), static fn( $f ) => ! in_array( $f['type'], array( 'title', 'sectionend' ), true ) ) );
+$vc11_set_src = (string) file_get_contents( VCAP_PATH . 'src/Settings.php' );
+check(
+	'SET-VC-11: register – issuer name/address/contact, links terms/privacy/withdrawal and the legal text are settings of "General" with legal weight, empty by default, exported, no secret; the block "Issuer and legal texts" builds each field with SettingsRegistry::field() and shows its help visibly',
+	array(
+		'vcap_issuer_name'    => array( 'string', '', '', true, true, false ),
+		'vcap_issuer_address' => array( 'text', '', '', true, true, false ),
+		'vcap_issuer_contact' => array( 'string', '', '', true, true, false ),
+		'vcap_terms_url'      => array( 'string', '', '', true, true, false ),
+		'vcap_privacy_url'    => array( 'string', '', '', true, true, false ),
+		'vcap_withdrawal_url' => array( 'string', '', '', true, true, false ),
+		'vcap_legal_text'     => array( 'text', '', '', true, true, false ),
+	) === $vc11_reg
+		&& VCAP\LegalInfo::OPTIONS === array_column( $vc11_fields, 'id' ) && array() === array_filter( $vc11_fields, static fn( $f ) => isset( $f['desc_tip'] ) || '' === trim( (string) ( $f['desc'] ?? '' ) ) || ! str_contains( (string) $f['desc'], 'Not legally checked' ) )
+		&& str_contains( $vc11_set_src, 'PaymentMethods::settings_fields(), LegalInfo::settings_fields()' ) && str_contains( $vc11_set_src, 'LegalInfo::register_sanitizers();' ),
+	wp_json_encode( $vc11_reg )
+);
+// Defaults: the shop details at render time.
+$GLOBALS['vcap_test_options'] = array(
+	'woocommerce_default_country' => 'DE:BE',
+	'woocommerce_store_address'   => 'Musterstraße 1',
+	'woocommerce_store_postcode'  => '10115',
+	'woocommerce_store_city'      => 'Berlin',
+);
+$GLOBALS['vcap_test_privacy_url'] = 'https://shop.test/datenschutz/';
+$GLOBALS['vcap_test_terms_page']  = 0;
+$vc11_default  = Placeholders::replace( '{issuer}|{legal_text}|{terms_url}|{privacy_url}|{withdrawal_url}', $v );
+$vc11_no_store = ( static function () use ( $v ) {
+	$GLOBALS['vcap_test_options'] = array( 'woocommerce_default_country' => 'DE:BE' );
+	return Placeholders::replace( '{issuer}', $v );
+} )();
+check(
+	'SET-VC-11: empty settings take the shop details when the voucher is rendered – {issuer} = site name and WooCommerce store address (with country), {privacy_url} = the WordPress privacy page, {terms_url} = the WooCommerce terms page (none here), {legal_text} and {withdrawal_url} stay empty; without a store address only the name',
+	"Café Süß & Co\nMusterstraße 1\n10115 Berlin\nDE||" . '|https://shop.test/datenschutz/|' === $vc11_default && 'Café Süß & Co' === $vc11_no_store,
+	$vc11_default . ' / ' . $vc11_no_store
+);
+// Own values win; the links are only http(s).
+$GLOBALS['vcap_test_options'] = array(
+	'woocommerce_default_country' => 'DE:BE',
+	'woocommerce_store_address'   => 'Musterstraße 1',
+	'vcap_issuer_name'            => 'Gutschein GmbH',
+	'vcap_issuer_address'         => "Hauptstraße 5\n1010 Wien",
+	'vcap_issuer_contact'         => 'Tel. 01 234, gutschein@example.com',
+	'vcap_terms_url'              => 'https://shop.test/agb/',
+	'vcap_privacy_url'            => 'https://shop.test/privacy/',
+	'vcap_withdrawal_url'         => 'https://shop.test/widerruf/',
+	'vcap_legal_text'             => 'Rechtlicher Hinweis',
+);
+$vc11_own = Placeholders::values( $v );
+$GLOBALS['vcap_test_options']['vcap_terms_url'] = 'javascript:alert(1)';
+$vc11_bad_stored = VCAP\LegalInfo::terms_url();
+// Polylang translates the texts in the mail/visitor language (WPML translates the options itself).
+$GLOBALS['vcap_test_pll']      = array( 'en' => array( 'Rechtlicher Hinweis' => 'Legal notice', 'Gutschein GmbH' => 'Voucher Ltd' ) );
+$GLOBALS['vcap_test_pll_lang'] = 'en';
+$vc11_en                       = Placeholders::replace( '{issuer}|{legal_text}', $v );
+$GLOBALS['vcap_test_pll_lang'] = '';
+check(
+	'SET-VC-11: own values replace the defaults in PDF and email placeholders (Placeholders::values() and email_map()); a stored link that is no http(s) URL prints nothing; with Polylang the issuer and the legal text are printed in the current language',
+	"Gutschein GmbH\nHauptstraße 5\n1010 Wien\nTel. 01 234, gutschein@example.com" === $vc11_own['issuer'] && 'Rechtlicher Hinweis' === $vc11_own['legal_text'] && 'https://shop.test/agb/' === $vc11_own['terms_url']
+		&& 'https://shop.test/privacy/' === $vc11_own['privacy_url'] && 'https://shop.test/widerruf/' === $vc11_own['withdrawal_url'] && '' === $vc11_bad_stored
+		&& str_starts_with( $vc11_en, "Voucher Ltd\nHauptstraße 5" ) && str_ends_with( $vc11_en, '|Legal notice' )
+		&& array() === array_diff( array( '{issuer}', '{legal_text}', '{terms_url}', '{privacy_url}', '{withdrawal_url}' ), array_keys( Placeholders::email_map( null ) ) ),
+	wp_json_encode( array( $vc11_own, $vc11_en ) )
+);
+$vc11_url_errors = array(
+	VCAP\LegalInfo::sanitize_url_option( 'ftp://shop.test/agb', array( 'id' => 'vcap_terms_url', 'title' => 'Terms' ) ),
+	VCAP\LegalInfo::sanitize_url_option( ' https://shop.test/agb/ ', array( 'id' => 'vcap_terms_url' ) ),
+	VCAP\LegalInfo::sanitize_url_option( '', array( 'id' => 'vcap_terms_url' ) ),
+	VCAP\SettingsTransfer::validate( 'vcap_withdrawal_url', 'javascript:alert(1)' ),
+	VCAP\SettingsTransfer::validate( 'vcap_withdrawal_url', 'https://shop.test/widerruf/' ),
+	VCAP\SettingsTransfer::validate( 'vcap_legal_text', "<b>Hinweis</b>\nZeile 2" ),
+	VCAP\LegalInfo::sanitize_text( "<b>Hinweis</b>\nZeile 2" ),
+);
+check(
+	'SET-VC-11: links are checked on the settings page and on import/WP-CLI – an invalid link is not saved (the stored value stays) or refused, a valid one stored, empty = default page; address and legal text are plain text with line breaks',
+	null === $vc11_url_errors[0] && 'https://shop.test/agb/' === $vc11_url_errors[1] && '' === $vc11_url_errors[2] && is_wp_error( $vc11_url_errors[3] ) && 'https://shop.test/widerruf/' === $vc11_url_errors[4]
+		&& "Hinweis\nZeile 2" === $vc11_url_errors[5] && "Hinweis\nZeile 2" === $vc11_url_errors[6],
+	wp_json_encode( $vc11_url_errors )
+);
+// Existing vouchers and emails stay unchanged: no default template or default email text uses the new placeholders.
+$vc11_used = array();
+foreach ( VCAP\TemplatePostType::default_designs() as $vc11_design ) {
+	foreach ( (array) ( $vc11_design['elements'] ?? array() ) as $vc11_el ) {
+		$vc11_used[] = (string) ( $vc11_el['text'] ?? '' );
+	}
+}
+foreach ( array_merge( glob( VCAP_PATH . 'src/Emails/*.php' ), glob( VCAP_PATH . 'templates/emails/*.php' ), glob( VCAP_PATH . 'templates/emails/plain/*.php' ) ) as $vc11_file ) {
+	$vc11_used[] = (string) file_get_contents( $vc11_file );
+}
+$vc11_new_tokens = '/\{(issuer|legal_text|terms_url|privacy_url|withdrawal_url)\}/';
+$vc11_wpml       = (string) file_get_contents( VCAP_PATH . 'wpml-config.xml' );
+check(
+	'SET-VC-11: existing vouchers and emails are unchanged – no default PDF design, email class or email template uses the new placeholders; the PDF designer and the email settings offer them (definitions()); WPML (wpml-config.xml admin-texts) and Polylang (Multilingual::OPTIONS) translate all seven settings',
+	array() === preg_grep( $vc11_new_tokens, $vc11_used ) && array() === array_diff( array( 'issuer', 'legal_text', 'terms_url', 'privacy_url', 'withdrawal_url' ), array_keys( Placeholders::definitions() ) )
+		&& array() === array_diff( VCAP\LegalInfo::OPTIONS, VCAP\Compat\Multilingual::OPTIONS )
+		&& array() === array_filter( VCAP\LegalInfo::OPTIONS, static fn( $key ) => ! str_contains( $vc11_wpml, '<key name="' . $key . '" />' ) ),
+	wp_json_encode( preg_grep( $vc11_new_tokens, $vc11_used ) )
+);
+unset( $GLOBALS['vcap_test_privacy_url'], $GLOBALS['vcap_test_terms_page'] );
+$GLOBALS['vcap_test_options'] = $vc11_saved;
+
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );

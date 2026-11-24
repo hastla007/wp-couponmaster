@@ -55,6 +55,14 @@ $vcap_settings = array(
 	/* ---- General: payment methods for vouchers (SET-VC-19; filters vcap_voucher_excluded_gateways, vcap_offline_payment_methods win) ---- */
 	'vcap_voucher_excluded_gateways' => array( 'type' => 'list', 'default' => array(), 'section' => '' ),
 	'vcap_offline_payment_methods'   => array( 'type' => 'list', 'default' => array( 'cod', 'bacs', 'cheque' ), 'section' => '' ),
+	/* ---- General: issuer and legal texts (SET-VC-11; empty = shop details at render time, placeholders only) ---- */
+	'vcap_issuer_name'               => array( 'section' => '', 'legal' => true ),
+	'vcap_issuer_address'            => array( 'type' => 'text', 'section' => '', 'legal' => true ),
+	'vcap_issuer_contact'            => array( 'section' => '', 'legal' => true ),
+	'vcap_terms_url'                 => array( 'section' => '', 'legal' => true ),
+	'vcap_privacy_url'               => array( 'section' => '', 'legal' => true ),
+	'vcap_withdrawal_url'            => array( 'section' => '', 'legal' => true ),
+	'vcap_legal_text'                => array( 'type' => 'text', 'section' => '', 'legal' => true ),
 
 	/* ---- Codes ---- */
 	'vcap_code_prefix'               => array( 'section' => 'codes' ),

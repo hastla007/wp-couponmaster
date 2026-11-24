@@ -74,6 +74,23 @@ $md .= "| Einlösebedingungen (allgemein) | WooCommerce → Einstellungen → Gu
 $md .= "| Einlösebedingungen pro Land | ebenda → „Redemption conditions per country“: Tabelle mit einer Zeile je Land und Sprache (Spalten **Land**, **Sprache** – „All languages“ oder ein Sprachcode wie `de_AT` –, **Text**) | Rechnungsland entscheidet, innerhalb des Landes die Sprache des Kunden (sonst die Zeile „All languages“); Text wird am Gutschein festgeschrieben |\n";
 $md .= "| Gesetzliche Gültigkeit pro Land | ebenda → „Statutory validity per country“: Tabelle mit einer Zeile je Land (Spalten **Land**, **Jahre** – 0 = unbegrenzt –, **zum Jahresende**, **Quelle/Notiz**) | Ablaufdatum neuer Gutscheine mit gesetzlicher Gültigkeit; überschreibt die Standardwerte aus Abschnitt 2 |\n";
 $md .= "| Bedingungen je Produkt | Produkt → Gutschein → „Redemption conditions“ | ersetzt die allgemeinen Bedingungen |\n";
+// SET-VC-11: issuer and legal texts (block "Issuer and legal texts"; printed only where a template uses the placeholder).
+$legal_info = array(
+	'vcap_issuer_name'    => array( 'Aussteller: Name („Issuer name“)', '`{issuer}` (1. Zeile); leer = Name der Website' ),
+	'vcap_issuer_address' => array( 'Aussteller: Anschrift („Issuer address“)', '`{issuer}`; leer = Shop-Adresse aus WooCommerce (Einstellungen → Allgemein) mit Land' ),
+	'vcap_issuer_contact' => array( 'Aussteller: Kontakt („Issuer contact“)', '`{issuer}` (letzte Zeile); leer = keine Kontaktzeile' ),
+	'vcap_terms_url'      => array( 'Link AGB („Terms and conditions (link)“)', '`{terms_url}`; leer = AGB-Seite von WooCommerce' ),
+	'vcap_privacy_url'    => array( 'Link Datenschutz („Privacy policy (link)“)', '`{privacy_url}`; leer = Datenschutzseite von WordPress' ),
+	'vcap_withdrawal_url' => array( 'Link Widerruf („Right of withdrawal (link)“)', '`{withdrawal_url}`; leer = kein Link' ),
+	'vcap_legal_text'     => array( 'Freier Rechtstext für PDF und E-Mail („Legal text for PDF and email“)', '`{legal_text}`; leer = nichts' ),
+);
+foreach ( $legal_info as $option => $what ) {
+	if ( ! isset( $register[ $option ] ) ) {
+		$missing[] = $option;
+		continue;
+	}
+	$md .= '| ' . $cell( $what[0] ) . ' | ebenda → Block „Issuer and legal texts“ (`' . $option . '`, je Sprache über WPML/Polylang) | ' . $cell( $what[1] ) . "; nur wo eine Vorlage oder ein E-Mail-Text den Platzhalter nutzt – **Rechtsprüfung offen** |\n";
+}
 $md .= "| Restwert gekaufter Einmal-Wertgutscheine | Produkt → Gutschein → „Keep the rest“ (Standard aus) | aus: der nicht genutzte Rest verfällt, der Kunde wird im Warenkorb gewarnt (Text unten „Restwert“; Verfallklausel in AGB nach § 307 BGB bzw. ABGB prüfen); an: der Rest wird Kundenguthaben bzw. eine neue Geschenkkarte (TAX.md 4.3) |\n\n";
 $md .= "## 2. Gesetzliche Gültigkeit (Standardwerte, `config/markets.php`)\n\n| Land | Regel | Quelle | Rechtlich geprüft |\n|---|---|---|---|\n";
 foreach ( (array) $markets as $country => $m ) {

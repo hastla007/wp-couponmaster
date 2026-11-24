@@ -363,6 +363,11 @@ final class SettingsTransfer {
 		if ( ! is_scalar( $value ) ) {
 			return $invalid( __( 'text', 'voucher-captain' ) );
 		}
+		if ( in_array( $key, LegalInfo::URL_OPTIONS, true ) ) {
+			// SET-VC-11: a link of "Issuer and legal texts" – http(s) or empty (= the default page), like the page.
+			$url = LegalInfo::clean_url( $value );
+			return '' === $url && '' !== trim( (string) $value ) ? $invalid( __( 'a link starting with http:// or https://', 'voucher-captain' ) ) : $url;
+		}
 		if ( Emails\Branding::LOGO_OPTION === $key ) {
 			return Emails\Branding::sanitize_logo( (string) $value ); // PV-P4-5: like the page (keeps %20 of a URL).
 		}
