@@ -1432,8 +1432,7 @@ final class Settings {
 		);
 		// SET-VC-02: the country profile comes first – it suggests values for the blocks below.
 		// SET-VC-19: block "Payment methods for vouchers"; SET-VC-11: block "Issuer and legal texts".
-		return array_merge( Admin\CountryProfilesAdmin::fields(), $fields, PaymentMethods::settings_fields(), LegalInfo::settings_fields() );
-		return array_merge( Admin\CountryProfilesAdmin::fields(), $fields, PaymentMethods::settings_fields(), VoucherCurrency::settings_fields() ); // SET-VC-19, SET-VC-32: blocks on "General".
+		return array_merge( Admin\CountryProfilesAdmin::fields(), $fields, PaymentMethods::settings_fields(), VoucherCurrency::settings_fields(), LegalInfo::settings_fields() ); // SET-VC-19, SET-VC-32, SET-VC-11: blocks on "General".
 	}
 
 	/**

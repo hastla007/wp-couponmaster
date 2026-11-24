@@ -6060,7 +6060,7 @@ check(
 		'vcap_legal_text'     => array( 'text', '', '', true, true, false ),
 	) === $vc11_reg
 		&& VCAP\LegalInfo::OPTIONS === array_column( $vc11_fields, 'id' ) && array() === array_filter( $vc11_fields, static fn( $f ) => isset( $f['desc_tip'] ) || '' === trim( (string) ( $f['desc'] ?? '' ) ) || ! str_contains( (string) $f['desc'], 'Not legally checked' ) )
-		&& str_contains( $vc11_set_src, 'PaymentMethods::settings_fields(), LegalInfo::settings_fields()' ) && str_contains( $vc11_set_src, 'LegalInfo::register_sanitizers();' ),
+		&& str_contains( $vc11_set_src, 'VoucherCurrency::settings_fields(), LegalInfo::settings_fields()' ) && str_contains( $vc11_set_src, 'LegalInfo::register_sanitizers();' ),
 	wp_json_encode( $vc11_reg )
 );
 // Defaults: the shop details at render time.
