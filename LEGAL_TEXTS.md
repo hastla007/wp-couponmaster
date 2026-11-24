@@ -26,12 +26,12 @@ Spalte „Rechtlich geprüft“ nicht abgehakt ist.
 
 | Land | Regel | Quelle | Rechtlich geprüft |
 |---|---|---|---|
-| AT | 30 Jahre | OGH-Rechtsprechung (30 Jahre) | ☐ |
+| AT | 30 Jahre | OGH-Rechtsprechung (30 Jahre) – angewendet, nicht geprüft | ☐ |
 | BE | – (Standard: 3 Jahre zum Jahresende) | nicht geprüft | ☐ |
 | BG | – (Standard: 3 Jahre zum Jahresende) | nicht geprüft | ☐ |
 | CY | – (Standard: 3 Jahre zum Jahresende) | nicht geprüft | ☐ |
 | CZ | – (Standard: 3 Jahre zum Jahresende) | nicht geprüft | ☐ |
-| DE | 3 Jahre zum Jahresende | §§ 195, 199 BGB (3 Jahre zum Jahresende) | ☐ |
+| DE | 3 Jahre zum Jahresende | §§ 195, 199 BGB (3 Jahre zum Jahresende) – angewendet, nicht geprüft | ☐ |
 | DK | – (Standard: 3 Jahre zum Jahresende) | nicht geprüft | ☐ |
 | EE | – (Standard: 3 Jahre zum Jahresende) | nicht geprüft | ☐ |
 | ES | – (Standard: 3 Jahre zum Jahresende) | nicht geprüft | ☐ |
@@ -66,8 +66,8 @@ Hinweis „Rechtsprüfung“, bis die Prüfung im Profil vermerkt ist (`checked`
 
 | Profil | Gesetzliche Gültigkeit (Zeile) | Gültigkeit ohne eigene Angabe | Belegnummer an der Kasse | Empfängerdaten anonymisieren nach | Hinweis Aufbewahrung Buchhaltung (SET-VC-09) | Rechtlich geprüft |
 |---|---|---|---|---|---|---|
-| DE | 3 Jahre zum Jahresende – Quelle: §§ 195, 199 BGB (3 Jahre zum Jahresende) | gesetzlich (Zeile links) | Pflicht (Länderdaten `fiscal_receipt`) | 1095 Tage nach Ablauf/Einlösung | 8 bzw. 10 Jahre (§ 147 AO, § 257 HGB) | ☐ nicht geprüft |
-| AT | 30 Jahre – Quelle: OGH-Rechtsprechung (30 Jahre) | gesetzlich (Zeile links) | Pflicht (Länderdaten `fiscal_receipt`) | 1095 Tage nach Ablauf/Einlösung | 7 Jahre (§ 132 BAO) | ☐ nicht geprüft |
+| DE | 3 Jahre zum Jahresende – Quelle: §§ 195, 199 BGB (3 Jahre zum Jahresende) (nicht geprüft) | gesetzlich (Zeile links) | Pflicht (Länderdaten `fiscal_receipt`) | 1095 Tage nach Ablauf/Einlösung | 8 bzw. 10 Jahre (§ 147 AO, § 257 HGB) | ☐ nicht geprüft |
+| AT | 30 Jahre – Quelle: OGH-Rechtsprechung (30 Jahre) (nicht geprüft) | gesetzlich (Zeile links) | Pflicht (Länderdaten `fiscal_receipt`) | 1095 Tage nach Ablauf/Einlösung | 7 Jahre (§ 132 BAO) | ☐ nicht geprüft |
 | CH | 10 Jahre – Notiz: Art. 127 OR (10 Jahre) | gesetzlich (Zeile links) | – (kein Vorschlag) | 1095 Tage nach Ablauf/Einlösung | neutral: „Buchungsunterlagen unterliegen gesetzlichen Aufbewahrungsfristen.“ (kein Paragraf) | ☐ nicht geprüft |
 | EU | – (kein Vorschlag) | – (bleibt) | – (bleibt) | – (bleibt) | neutral: „Buchungsunterlagen unterliegen gesetzlichen Aufbewahrungsfristen.“ (kein Paragraf) | ☐ nicht geprüft |
 | OTHER | – (kein Vorschlag) | – (bleibt) | – (bleibt) | – (bleibt) | neutral: „Buchungsunterlagen unterliegen gesetzlichen Aufbewahrungsfristen.“ (kein Paragraf) | ☐ nicht geprüft |

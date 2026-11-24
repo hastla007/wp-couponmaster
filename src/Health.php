@@ -600,13 +600,34 @@ final class Health {
 	 * Norway too): verified voucher validity, country conditions and a translation for each; selling countries
 	 * without market data are named (the shop's defaults apply there).
 	 */
+	/**
+	 * OD-5: Site Health text of a selling country whose statutory validity is not legally checked – the rule applied
+	 * (e.g. DE 3 years to the end of the year, AT 30 years, both "still to be checked"), else the shop's default.
+	 *
+	 * @param array{years:int, end_of_year:bool, source:string, verified:bool}|null $rule Rule applied (Markets::expiry_rule()).
+	 */
+	public static function validity_gap( ?array $rule ): string {
+		if ( null === $rule ) {
+			return __( 'statutory validity not verified (3 years to the end of the year is used)', 'voucher-captain' );
+		}
+		$years = (int) $rule['years'];
+		if ( $years < 1 ) {
+			return __( 'statutory validity not legally checked (no limit is used)', 'voucher-captain' );
+		}
+		return $rule['end_of_year']
+			/* translators: %d: number of years */
+			? sprintf( _n( 'statutory validity not legally checked (%d year to the end of the year is used)', 'statutory validity not legally checked (%d years to the end of the year are used)', $years, 'voucher-captain' ), $years )
+			/* translators: %d: number of years */
+			: sprintf( _n( 'statutory validity not legally checked (%d year is used)', 'statutory validity not legally checked (%d years are used)', $years, 'voucher-captain' ), $years );
+	}
+
 	public function test_markets(): array {
 		$selling = Markets::selling_countries();
 		$gaps    = array();
 		foreach ( Markets::readiness( $selling ) as $country => $state ) {
 			$missing = array();
 			if ( ! $state['validity'] ) {
-				$missing[] = __( 'statutory validity not verified (3 years to the end of the year is used)', 'voucher-captain' );
+				$missing[] = self::validity_gap( $state['rule'] );
 			}
 			if ( ! $state['terms'] ) {
 				$missing[] = __( 'no redemption conditions', 'voucher-captain' );

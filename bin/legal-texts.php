@@ -96,7 +96,9 @@ $md .= "## 2. Gesetzliche Gültigkeit (Standardwerte, `config/markets.php`)\n\n|
 foreach ( (array) $markets as $country => $m ) {
 	$rule = $m['voucher_expiry'] ?? null;
 	$text = is_array( $rule ) ? ( 0 === (int) $rule['years'] ? 'unbegrenzt' : (int) $rule['years'] . ' Jahre' . ( ! empty( $rule['end_of_year'] ) ? ' zum Jahresende' : '' ) ) : '– (Standard: 3 Jahre zum Jahresende)';
-	$md  .= "| {$country} | {$text} | " . $cell( is_array( $rule ) ? (string) ( $rule['source'] ?? '' ) : 'nicht geprüft' ) . " | ☐ |\n";
+	// OD-5: a rule with "verified" => false (DE, AT) is applied, but still to be checked.
+	$unchecked = is_array( $rule ) && array_key_exists( 'verified', $rule ) && empty( $rule['verified'] );
+	$md       .= "| {$country} | {$text} | " . $cell( is_array( $rule ) ? (string) ( $rule['source'] ?? '' ) . ( $unchecked ? ' – angewendet, nicht geprüft' : '' ) : 'nicht geprüft' ) . " | ☐ |\n";
 }
 // Section 3: what the country profiles suggest (applied only after a preview the admin confirms; SET-VC-02).
 $years_text = static fn( array $rule ): string => 0 === (int) ( $rule['years'] ?? 0 ) ? 'unbegrenzt' : (int) $rule['years'] . ' Jahre' . ( ! empty( $rule['end_of_year'] ) ? ' zum Jahresende' : '' );
@@ -111,7 +113,7 @@ foreach ( (array) $profiles as $id => $p ) {
 	$row      = $p['expiry_row'] ?? null;
 	if ( 'market' === $row ) {
 		$rule = $markets[ $country ]['voucher_expiry'] ?? null;
-		$row  = is_array( $rule ) ? $years_text( $rule ) . ' – Quelle: ' . (string) ( $rule['source'] ?? '' ) : '– (keine Länderdaten)';
+		$row  = is_array( $rule ) ? $years_text( $rule ) . ' – Quelle: ' . (string) ( $rule['source'] ?? '' ) . ( array_key_exists( 'verified', $rule ) && empty( $rule['verified'] ) ? ' (nicht geprüft)' : '' ) : '– (keine Länderdaten)';
 	} elseif ( is_array( $row ) ) {
 		$row = $years_text( $row ) . ( '' !== (string) ( $row['note'] ?? '' ) ? ' – Notiz: ' . (string) $row['note'] : '' );
 	} else {

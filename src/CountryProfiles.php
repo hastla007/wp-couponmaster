@@ -229,14 +229,16 @@ final class CountryProfiles {
 		if ( null === $profile || '' === $profile['country'] ) {
 			return null;
 		}
-		$row = $profile['expiry_row'];
+		$row        = $profile['expiry_row'];
+		$unverified = false;
 		if ( 'market' === $row ) {
 			$market = Markets::get( $profile['country'] );
 			$rule   = is_array( $market['voucher_expiry'] ?? null ) ? $market['voucher_expiry'] : null;
 			if ( null === $rule ) {
 				return null;
 			}
-			$row = array(
+			$unverified = ! Markets::rule_verified( $rule ); // OD-5: DE/AT "still to be checked".
+			$row        = array(
 				'years'       => (int) $rule['years'],
 				'end_of_year' => ! empty( $rule['end_of_year'] ),
 				'note'        => (string) ( $rule['source'] ?? '' ),
@@ -245,8 +247,8 @@ final class CountryProfiles {
 		if ( ! is_array( $row ) ) {
 			return null;
 		}
-		if ( ! $profile['checked'] ) {
-			// The stored row keeps the mark until the admin edits the note (owner rule S8).
+		if ( ! $profile['checked'] || $unverified ) {
+			// The stored row keeps the mark until the admin edits the note (owner rule S8; OD-5 for unchecked market rules).
 			$note        = trim( (string) ( $row['note'] ?? '' ) );
 			$row['note'] = '' !== $note ? $note . ' – ' . self::review_mark() : self::review_mark();
 		}

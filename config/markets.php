@@ -9,9 +9,14 @@
  * - locale:         main WordPress locale for customer texts,
  * - languages:      optional, all WordPress locales customers of that country may use (default: the main locale),
  * - eu:             EU member state (true) or not (false) – "known country" and "EU member" are separate,
- * - voucher_expiry: statutory default validity of vouchers, verified for that country:
- *                   array{years:int, end_of_year:bool, source:string} – years 0 = never expires;
- *                   null = not verified yet: the shop's default rule applies and Site Health points it out.
+ * - voucher_expiry: statutory default validity of vouchers applied for that country:
+ *                   array{years:int, end_of_year:bool, source:string, verified?:bool} – years 0 = never expires;
+ *                   verified = the rule is legally checked (missing = true, the meaning before 1.3.0 for data of
+ *                   the filter "vcap_markets"); false = applied, but not legally checked yet: Site Health, readiness,
+ *                   country profiles and LEGAL_TEXTS.md show "not checked" / "nicht geprüft".
+ *                   DE (3 years to the end of the year) and AT (30 years): verified => false – owner decision OD-5 of
+ *                   24.11.2026 "still to be checked"; the values and the rule applied stay the same.
+ *                   null = no rule: the shop's default rule applies and Site Health points it out.
  *                   CH, LI, GB, NO: null = not legally checked yet (owner rule S8; legal check per country before
  *                   sales start).
  * - fiscal_receipt: the till receipt documents the sale (DE KassenSichV, AT RKSV) – the automatic setting
@@ -25,12 +30,12 @@
 defined( 'ABSPATH' ) || exit;
 
 return array(
-	'AT' => array( 'currency' => 'EUR', 'eu' => true, 'fiscal_receipt' => true, 'locale' => 'de_AT', 'voucher_expiry' => array( 'years' => 30, 'end_of_year' => false, 'source' => 'OGH-Rechtsprechung (30 Jahre)' ) ),
+	'AT' => array( 'currency' => 'EUR', 'eu' => true, 'fiscal_receipt' => true, 'locale' => 'de_AT', 'voucher_expiry' => array( 'years' => 30, 'end_of_year' => false, 'source' => 'OGH-Rechtsprechung (30 Jahre)', 'verified' => false ) ),
 	'BE' => array( 'currency' => 'EUR', 'eu' => true, 'fiscal_receipt' => false, 'locale' => 'nl_BE', 'voucher_expiry' => null ),
 	'BG' => array( 'currency' => 'EUR', 'eu' => true, 'fiscal_receipt' => false, 'locale' => 'bg_BG', 'voucher_expiry' => null ),
 	'CY' => array( 'currency' => 'EUR', 'eu' => true, 'fiscal_receipt' => false, 'locale' => 'el', 'voucher_expiry' => null ),
 	'CZ' => array( 'currency' => 'CZK', 'eu' => true, 'fiscal_receipt' => false, 'locale' => 'cs_CZ', 'voucher_expiry' => null ),
-	'DE' => array( 'currency' => 'EUR', 'eu' => true, 'fiscal_receipt' => true, 'locale' => 'de_DE', 'voucher_expiry' => array( 'years' => 3, 'end_of_year' => true, 'source' => '§§ 195, 199 BGB (3 Jahre zum Jahresende)' ) ),
+	'DE' => array( 'currency' => 'EUR', 'eu' => true, 'fiscal_receipt' => true, 'locale' => 'de_DE', 'voucher_expiry' => array( 'years' => 3, 'end_of_year' => true, 'source' => '§§ 195, 199 BGB (3 Jahre zum Jahresende)', 'verified' => false ) ),
 	'DK' => array( 'currency' => 'DKK', 'eu' => true, 'fiscal_receipt' => false, 'locale' => 'da_DK', 'voucher_expiry' => null ),
 	'EE' => array( 'currency' => 'EUR', 'eu' => true, 'fiscal_receipt' => false, 'locale' => 'et', 'voucher_expiry' => null ),
 	'ES' => array( 'currency' => 'EUR', 'eu' => true, 'fiscal_receipt' => false, 'locale' => 'es_ES', 'voucher_expiry' => null ),

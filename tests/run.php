@@ -77,8 +77,21 @@ check(
 	json_encode( array( $m_rcpt, $m_rcpt_filter_ch, $m_rcpt_filter_de, $m_rcpt_no_de ) )
 );
 check( 'currency and locale per country', 'PLN' === VCAP\Markets::get( 'PL' )['currency'] && 'de_AT' === VCAP\Markets::get( 'AT' )['locale'] );
-check( 'verified validity: DE 3 years to the end of the year, AT 30 years', array( 'years' => 3, 'end_of_year' => true ) === ProductConfig::statutory_rule( 'DE' ) && array( 'years' => 30, 'end_of_year' => false ) === ProductConfig::statutory_rule( 'AT' ) );
+check( 'statutory validity applied: DE 3 years to the end of the year, AT 30 years (OD-5: still to be checked, the rule stays the same)', array( 'years' => 3, 'end_of_year' => true ) === ProductConfig::statutory_rule( 'DE' ) && array( 'years' => 30, 'end_of_year' => false ) === ProductConfig::statutory_rule( 'AT' ) );
 check( 'unverified country: shop default (3 years to the end of the year)', null === VCAP\Markets::expiry_rule( 'FR' ) && array( 'years' => 3, 'end_of_year' => true ) === ProductConfig::statutory_rule( 'FR' ) );
+$od5_de        = VCAP\Markets::expiry_rule( 'DE' );
+$od5_at        = VCAP\Markets::expiry_rule( 'AT' );
+$od5_verified  = array_keys( array_filter( VCAP\Markets::all(), static fn( $m ) => is_array( $m['voucher_expiry'] ?? null ) && VCAP\Markets::rule_verified( $m['voucher_expiry'] ) ) );
+$od5_legal     = (string) file_get_contents( VCAP_PATH . 'LEGAL_TEXTS.md' );
+check(
+	'OD-5: statutory validity DE (3 years to the end of the year) and AT (30 years) is "still to be checked" – applied unchanged, but not verified (no market rule counts as verified); Site Health names the rule applied ("not legally checked"); a rule without the key (filter data from before) stays verified; LEGAL_TEXTS.md shows "nicht geprüft"',
+	is_array( $od5_de ) && false === $od5_de['verified'] && 3 === $od5_de['years'] && $od5_de['end_of_year'] && is_array( $od5_at ) && false === $od5_at['verified'] && 30 === $od5_at['years'] && ! $od5_at['end_of_year']
+		&& array() === $od5_verified && VCAP\Markets::rule_verified( array( 'years' => 5 ) ) && ! VCAP\Markets::rule_verified( array( 'years' => 5, 'verified' => false ) )
+		&& 'statutory validity not legally checked (3 years to the end of the year are used)' === VCAP\Health::validity_gap( $od5_de ) && 'statutory validity not legally checked (30 years are used)' === VCAP\Health::validity_gap( $od5_at )
+		&& 'statutory validity not verified (3 years to the end of the year is used)' === VCAP\Health::validity_gap( null ) && 'statutory validity not legally checked (no limit is used)' === VCAP\Health::validity_gap( array( 'years' => 0, 'end_of_year' => false, 'source' => '', 'verified' => false ) )
+		&& str_contains( $od5_legal, '| DE | 3 Jahre zum Jahresende | §§ 195, 199 BGB (3 Jahre zum Jahresende) – angewendet, nicht geprüft | ☐ |' ) && str_contains( $od5_legal, '| AT | 30 Jahre | OGH-Rechtsprechung (30 Jahre) – angewendet, nicht geprüft | ☐ |' ),
+	wp_json_encode( array( $od5_de, $od5_at, $od5_verified ) )
+);
 check( 'setting is parsed per line (years, "end", 0 = never)', array( 'FR' => array( 'years' => 5, 'end_of_year' => true ), 'IT' => array( 'years' => 10, 'end_of_year' => false ), 'NL' => array( 'years' => 0, 'end_of_year' => false ) ) === VCAP\Markets::parse_expiry( "fr: 5 end\nIT=10\nNL: 0\nbroken line\nXX" ) );
 $GLOBALS['vcap_test_options'][ VCAP\Markets::EXPIRY_OPTION ] = "FR: 5 end\nAT: 1";
 check( 'the shop setting wins over the market data', array( 'years' => 5, 'end_of_year' => true ) === ProductConfig::statutory_rule( 'FR' ) && array( 'years' => 1, 'end_of_year' => false ) === ProductConfig::statutory_rule( 'AT' ) );
@@ -4822,7 +4835,7 @@ $m_health = (string) file_get_contents( VCAP_PATH . 'src/Health.php' );
 check(
 	'SET-VC-03: readiness covers Switzerland – validity not verified, no conditions, French (fr_CH, offered by Polylang) untranslated while de_CH uses the de_DE_formal file; unknown selling countries are listed separately',
 	array( 'CH', 'DE' ) === array_keys( $m_ready ) && false === $m_ready['CH']['validity'] && false === $m_ready['CH']['terms'] && false === $m_ready['CH']['translation'] && array( 'fr_CH' ) === $m_ready['CH']['untranslated'] && 'de_CH' === $m_ready['CH']['locale']
-		&& true === $m_ready['DE']['validity'] && true === $m_ready['DE']['translation']
+		&& false === $m_ready['DE']['validity'] && null !== $m_ready['DE']['rule'] && true === $m_ready['DE']['translation'] // OD-5: DE applied, not checked.
 		&& true === $m_ready_set['CH']['validity'] && true === $m_ready_set['CH']['terms']
 		&& array( 'BR', 'US' ) === VCAP\Markets::unknown_selling_countries( array( 'US', 'CH', 'BR', 'DE' ) )
 		&& str_contains( $m_health, 'Markets::unknown_selling_countries( $selling )' ) && str_contains( $m_health, 'Voucher rules are set for every country you sell to' ) && ! str_contains( $m_health, 'every EU country' ),
