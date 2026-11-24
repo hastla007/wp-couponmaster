@@ -1568,7 +1568,7 @@ final class Install {
 				)
 			);
 		} else {
-			// The uninstall takes the rights from every role but keeps the role while the data is kept: given back.
+			// Uninstalls of earlier builds took the rights from every role but kept the role with the data: given back.
 			$cashier = get_role( self::CASHIER_ROLE );
 			if ( ! $customised && $cashier && ! $cashier->has_cap( 'vcap_scan_tickets' ) ) {
 				$cashier->add_cap( 'vcap_scan_tickets' );

@@ -169,6 +169,27 @@ ledger (history) id of the booking. Two bookings of the same customer in the sam
 in a workflow event store (suite spec R-7.9a). Register the action with 7 or 5 accepted arguments to get it; existing
 listeners with fewer arguments keep working. `0` when no ledger row was written in this request.
 
+**Voucher expires soon (since contract 1.9.0, VC-13).** `vcap_voucher_expiring( VCAP\Voucher $voucher, int
+$days_before, string $expires_at )` is a workflow event of the daily maintenance (step `expiring`, before the expiry
+reminder emails): a voucher whose printed expiry date comes within a lead time. Payload: `$voucher` – the voucher as
+it was found (status `active`, delivered, no ticket, remaining value: balance above 0 in balance mode, single-use
+vouchers not redeemed); `$days_before` – the lead time it was found for (e.g. `30` or `7`); `$expires_at` – the printed
+expiry date, UTC `Y-m-d H:i:s`. Lead times: filter `vcap_voucher_expiring_days` (default `array( 30, 7 )`, 1–365,
+empty = never), independent of the reminder email (`vcap_expiry_reminder_days`). Each lead time covers the vouchers
+ending within its days and after the next smaller lead time, so a voucher found late (e.g. issued 10 days before its
+expiry) gets only the fitting one (7). Exactly once per voucher, lead time and expiry date (claim
+`expiring:{id}:{days}:{expires_at}`, fired after the claim is committed): a second run reports nothing new, a voucher
+extended later is reported again for its new date. Never with the expiry behaviour "never" (`vcap_expiry_behaviour`,
+SET-VC-06); with a grace period the printed date counts, not the end of the grace days.
+
+```php
+if ( defined( 'VCAP_CONTRACT_VERSION' ) && version_compare( VCAP_CONTRACT_VERSION, '1.9.0', '>=' ) ) {
+    add_action( 'vcap_voucher_expiring', function ( VCAP\Voucher $voucher, int $days_before, string $expires_at ) {
+        my_workflow_trigger( 'voucher_expiring', array( 'voucher_id' => $voucher->id, 'days' => $days_before, 'expires_at' => $expires_at ) );
+    }, 10, 3 );
+}
+```
+
 ## Issuing vouchers without an order (schema 1.8.0)
 
 `vcap()->issuer->issue_standalone( array $args )` issues one voucher without a WooCommerce order – for company orders with a list of recipients (one call per recipient), goodwill vouchers or prizes. It uses the same code generation, WooCommerce coupon, `issued` ledger entry and email delivery as a purchased voucher and returns the `VCAP\Voucher` or a `WP_Error`.
@@ -704,7 +725,7 @@ the PDF designer list and "Available placeholders" of the email settings):
 
 | Placeholder | Value | Empty setting |
 |---|---|---|
-| `{issuer}` | name, address, contact – one per line | site name; WooCommerce store address with country; no contact |
+| `{issuer}` | name, address, contact – one per line | site name; WooCommerce store address, always with the country; contact = sender address of the WooCommerce emails (`woocommerce_email_from_address`, OD-4), nothing if that is empty (no other address) |
 | `{legal_text}` | free legal text | nothing |
 | `{terms_url}` | terms and conditions link | WooCommerce terms page (`wc_terms_and_conditions_page_id()`) |
 | `{privacy_url}` | privacy policy link | WordPress privacy page (`get_privacy_policy_url()`) |
@@ -713,7 +734,7 @@ the PDF designer list and "Available placeholders" of the email settings):
 The defaults are taken when the voucher is rendered. No default template or email text uses them, so existing vouchers
 and emails stay unchanged. Translation: WPML via `wpml-config.xml` (admin-texts), Polylang via
 `Compat\Multilingual::OPTIONS` (string translation). The texts are not legally checked (LEGAL_TEXTS.md section 1).
-Accessors: `LegalInfo::issuer()`, `issuer_name()`, `issuer_address()`, `issuer_contact()`, `legal_text()`,
+Accessors: `LegalInfo::issuer()`, `issuer_name()`, `issuer_address()`, `issuer_contact()`, `sender_address()`, `legal_text()`,
 `terms_url()`, `privacy_url()`, `withdrawal_url()`, `placeholders()`.
 
 ### Sequential voucher number (SET-VC-13)
@@ -803,10 +824,10 @@ counter columns, payment methods, retention days) and the Form Captain hooks bel
 | `vcap_customer_can_resend` | filter | `bool $allowed` (setting `vcap_customer_can_resend`, default yes), `Voucher` | 1.1.0 | SET-VC-18: whether the buyer may resend a delivered voucher from My Account; the filter gets the setting and wins. |
 | `vcap_customer_can_change`, `vcap_recipient_fix_days`, `vcap_recipient_fix_max`, `vcap_topup_min_remaining_days`, `vcap_checkin_undo_minutes`, `vcap_counter_reversal_minutes` | filter | the setting of the same name, `Voucher` | 1.2.0 | SET-VC-18: customer self-service and deadlines are settings (Settings → Vouchers → Delivery & downloads "Customer self-service", Redemption & balance "Top-ups and counter"; defaults as in 1.2.0: yes, 30 days, 2, 30 days, 10 min, 15 min). Each filter gets the setting instead of the fixed value and wins; the floors of 1.2.0 stay (link at least 1 day, at most 2 corrections, windows not below 0). |
 | `vcap_printed_link_grace_days` | filter | `int $days` (setting `vcap_printed_link_grace_days`, default 30), `Voucher` | 1.3.0 | SET-VC-18: days the download link printed on a voucher (QR code) stays valid after the voucher expired (`Downloads::printed_link_grace_days()`). |
-| `vcap_balance_deduct_statuses`, `vcap_balance_restore_statuses` | filter | the setting of the same name instead of the fixed list (`string[]`; deduct default `['processing','completed']` – paid statuses only, empty = default; restore default `['cancelled','refunded','failed']` – only these, empty = all three) | 1.0.0 | SET-VC-05 (1.12 no. 7): order statuses that charge and book back balances are settings (Settings → Vouchers → Redemption & balance → *Refund & cancellation*); each filter gets the setting and wins. Helpers `Coupons\Settlement::restore_statuses()`, `setting_deduct_statuses()`, `setting_restore_statuses()`. |
+| `vcap_balance_deduct_statuses`, `vcap_balance_restore_statuses` | filter | the setting of the same name instead of the fixed list (`string[]`; deduct default `['processing','completed']` – paid statuses only, empty = default; restore default `['cancelled','refunded','failed']` – any registered status except the paid ones (`wc_get_is_paid_statuses()`, OD-8), empty = default) | 1.0.0 | SET-VC-05 (1.12 no. 7): order statuses that charge and book back balances are settings (Settings → Vouchers → Redemption & balance → *Refund & cancellation*); each filter gets the setting and wins. Helpers `Coupons\Settlement::restore_statuses()`, `setting_deduct_statuses()`, `setting_restore_statuses()`. |
 | `vcap_allow_refund_of_spent_vouchers` | filter | `bool $allow` (setting of the same name, default no), `WC_Order`, `float $amount`, `float $spent` | 1.1.0 | SET-VC-05 (1.12 no. 1): see the next row. |
 | `vcap_allow_refund_of_spent_top_ups`, `vcap_allow_refund_of_used_bonus`, `vcap_refund_guest_as_gift_card`, `vcap_keep_status_on_partial_return`, `vcap_restore_extension_days` | filter | the setting of the same name instead of the fixed default (`bool` no / no / yes / yes; days `int` 0, 0–3650) and the arguments as before | 1.2.0 | SET-VC-05 (1.12 no. 1–6): refund and cancellation rules are settings (Settings → Vouchers → Redemption & balance → *Refund & cancellation*, legal weight, not legally checked; TAX.md 5.3); each filter gets the setting and wins. |
-| `vcap_expiry_behaviour`, `vcap_expiry_grace_days`, `vcap_expiry_staff_extension_days` | filter | `string $behaviour` (setting `vcap_expiry_behaviour`: `expires` default, `grace`, `never`); `int $days` (setting `vcap_expiry_grace_days`, default 30; `vcap_expiry_staff_extension_days`, default 0 = no limit) | 1.3.0 | SET-VC-06: what happens when the validity ends (`VCAP\ExpiryPolicy`, Settings → Vouchers → General "When the validity ends"). `expires` = as before (expired and booked off at the date); `grace` = still redeemable for the grace days (cart, Store API, admin orders, redemption API, counter; `Voucher::is_expired()` and WooCommerce's coupon expiry check follow it), the "expired" booking and the liability's "expired" bucket move to the end of the grace period; `never` = the date is a notice only, nothing expires or is booked off. Staff extension: voucher edit and bulk "Extend validity" refuse a date more than the days after the current expiry or today. The filters get the setting and win. Not legally or tax checked (TAX.md 6.1a). |
+| `vcap_expiry_behaviour`, `vcap_expiry_grace_days`, `vcap_expiry_staff_extension_days` | filter | `string $behaviour` (setting `vcap_expiry_behaviour`: `expires` default, `grace`, `never`); `int $days` (setting `vcap_expiry_grace_days`, default 30; `vcap_expiry_staff_extension_days`, default 0 = no limit) | 1.3.0 | SET-VC-06: what happens when the validity ends (`VCAP\ExpiryPolicy`, Settings → Vouchers → General "When the validity ends"). `expires` = as before (expired and booked off at the date); `grace` = still redeemable for the grace days (cart, Store API, admin orders, redemption API, counter; `Voucher::is_expired()` and WooCommerce's coupon expiry check follow it), the "expired" booking and the liability's "expired" bucket move to the end of the grace period; `never` = the date is a notice only, nothing expires or is booked off, and no expiry reminder is sent (OD-3: `Delivery::send_expiry_reminders()` sends nothing, `VoucherRepository::due_for_expiry_reminder()` finds nothing, the bulk action "Send expiry reminder" skips all; `ExpiryPolicy::reminders_enabled()`); `expires` and `grace` keep the reminders unchanged. Staff extension: voucher edit and bulk "Extend validity" refuse a date more than the days after the current expiry or today. The filters get the setting and win. Not legally or tax checked (TAX.md 6.1a). |
 | `vcap_affiliate_commission_on_voucher_sales`, `vcap_passcaptain_restore_on_revoke` | filter | the setting of the same name (`bool`, default yes) and the arguments as before | 1.1.0 | SET-VC-33 (1.12 no. 38, 39): see the next row. |
 | `vcap_physical_activation_statuses`, `vcap_review_first_redemption_only`, `vcap_subscription_issue_on_switch` | filter | the setting of the same name (statuses `string[]` default `['completed']`; first redemption only `bool` default yes; subscription switch `bool` default no) and the arguments as before | 1.2.0 | SET-VC-33 (1.12 no. 12, 35, 38–40): rules of physical cards and partner plugins are settings (Settings → Vouchers → Integrations (API) → *Integration rules*); each filter gets the setting and wins. Physical cards: only paid statuses, empty = completed. |
 | `vcap_settings_partner_active` | filter | `bool $active`, `string $partner` (`review`, `affiliate`, `passcaptain`, `subscriptions`) | 1.3.0 | SET-VC-33: whether the rules of a partner plugin are shown in *Integration rules* (a hidden rule keeps its value and still applies). |

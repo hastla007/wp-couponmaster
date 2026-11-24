@@ -40,7 +40,10 @@ final class Settlement {
 	/** SET-VC-05: option of the order statuses that book balances back (filter of the same name wins). */
 	public const RESTORE_OPTION = 'vcap_balance_restore_statuses';
 
-	/** Statuses the restore setting can choose (the end statuses of an order that was not kept). */
+	/**
+	 * Default statuses of the restore setting (the end statuses of an order that was not kept). OD-8: the setting can
+	 * choose any registered order status except the paid ones (restore_choices()).
+	 */
 	public const RESTORE_CHOICES = array( 'cancelled', 'refunded', 'failed' );
 
 	/**
@@ -55,7 +58,7 @@ final class Settlement {
 
 	/**
 	 * Order statuses (without "wc-") at which balances are booked back and reservations released. SET-VC-05: the
-	 * setting (cancelled, refunded, failed; empty = all three) is the default of the filter
+	 * setting (any status except the paid ones, OD-8; empty = cancelled, refunded, failed) is the default of the filter
 	 * "vcap_balance_restore_statuses", which wins.
 	 *
 	 * @return mixed What the filter returns (an array of statuses).
@@ -78,13 +81,16 @@ final class Settlement {
 	}
 
 	/**
-	 * The restore statuses of the setting: only cancelled, refunded and failed; all three when none is left.
+	 * The restore statuses of the setting: registered order statuses except the paid ones (OD-8 – booking a balance
+	 * back at a paid status would hand the value out twice); cancelled, refunded and failed when none is left.
 	 *
 	 * @param mixed $value Stored value (default: the setting).
 	 * @return string[]
 	 */
 	public static function setting_restore_statuses( $value = null ): array {
-		$list = array_values( array_intersect( self::status_list( null === $value ? Settings::value( self::RESTORE_OPTION ) : $value ), self::RESTORE_CHOICES ) );
+		$list = array_values( array_intersect( self::status_list( null === $value ? Settings::value( self::RESTORE_OPTION ) : $value ), array_keys( self::restore_choices() ) ) );
+		// A status chosen for charging is never also one for booking back (no contradictory pair, e.g. a custom "shipped").
+		$list = array_values( array_diff( $list, self::setting_deduct_statuses() ) );
 		return $list ? $list : self::RESTORE_CHOICES;
 	}
 
@@ -98,15 +104,26 @@ final class Settlement {
 	}
 
 	/**
-	 * Statuses the restore setting offers (status => label).
+	 * Statuses the restore setting offers (status without "wc-" => label). OD-8 (owner decision 24.11.2026): every
+	 * registered order status (wc_get_order_statuses(), custom statuses included) except the paid ones
+	 * (wc_get_is_paid_statuses()); cancelled, refunded and failed are always offered.
 	 *
 	 * @return array<string, string>
 	 */
 	public static function restore_choices(): array {
-		$labels  = function_exists( 'wc_get_order_statuses' ) ? wc_get_order_statuses() : array();
-		$choices = array();
+		$labels = function_exists( 'wc_get_order_statuses' ) ? (array) wc_get_order_statuses() : array();
 		foreach ( self::RESTORE_CHOICES as $status ) {
-			$choices[ $status ] = (string) ( $labels[ 'wc-' . $status ] ?? ucfirst( $status ) );
+			$labels += array( 'wc-' . $status => ucfirst( $status ) );
+		}
+		// Same list and filter as WooCommerce's wc_get_is_paid_statuses().
+		$paid    = function_exists( 'wc_get_is_paid_statuses' ) ? wc_get_is_paid_statuses() : apply_filters( 'woocommerce_order_is_paid_statuses', array( 'processing', 'completed' ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's own filter.
+		$paid    = self::status_list( $paid );
+		$choices = array();
+		foreach ( $labels as $key => $label ) {
+			$status = self::status_list( array( (string) $key ) )[0] ?? '';
+			if ( '' !== $status && ! in_array( $status, $paid, true ) && ! isset( $choices[ $status ] ) ) {
+				$choices[ $status ] = is_scalar( $label ) ? (string) $label : $status;
+			}
 		}
 		return $choices;
 	}

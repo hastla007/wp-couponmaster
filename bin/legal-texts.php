@@ -77,8 +77,8 @@ $md .= "| Bedingungen je Produkt | Produkt → Gutschein → „Redemption condi
 // SET-VC-11: issuer and legal texts (block "Issuer and legal texts"; printed only where a template uses the placeholder).
 $legal_info = array(
 	'vcap_issuer_name'    => array( 'Aussteller: Name („Issuer name“)', '`{issuer}` (1. Zeile); leer = Name der Website' ),
-	'vcap_issuer_address' => array( 'Aussteller: Anschrift („Issuer address“)', '`{issuer}`; leer = Shop-Adresse aus WooCommerce (Einstellungen → Allgemein) mit Land' ),
-	'vcap_issuer_contact' => array( 'Aussteller: Kontakt („Issuer contact“)', '`{issuer}` (letzte Zeile); leer = keine Kontaktzeile' ),
+	'vcap_issuer_address' => array( 'Aussteller: Anschrift („Issuer address“)', '`{issuer}`; leer = Shop-Adresse aus WooCommerce (Einstellungen → Allgemein), immer mit Land' ),
+	'vcap_issuer_contact' => array( 'Aussteller: Kontakt („Issuer contact“)', '`{issuer}` (letzte Zeile); leer = Absenderadresse der WooCommerce-E-Mails (`woocommerce_email_from_address`, Inhaber-Entscheidung OD-4), ist auch sie leer: keine Kontaktzeile' ),
 	'vcap_terms_url'      => array( 'Link AGB („Terms and conditions (link)“)', '`{terms_url}`; leer = AGB-Seite von WooCommerce' ),
 	'vcap_privacy_url'    => array( 'Link Datenschutz („Privacy policy (link)“)', '`{privacy_url}`; leer = Datenschutzseite von WordPress' ),
 	'vcap_withdrawal_url' => array( 'Link Widerruf („Right of withdrawal (link)“)', '`{withdrawal_url}`; leer = kein Link' ),
@@ -96,7 +96,9 @@ $md .= "## 2. Gesetzliche Gültigkeit (Standardwerte, `config/markets.php`)\n\n|
 foreach ( (array) $markets as $country => $m ) {
 	$rule = $m['voucher_expiry'] ?? null;
 	$text = is_array( $rule ) ? ( 0 === (int) $rule['years'] ? 'unbegrenzt' : (int) $rule['years'] . ' Jahre' . ( ! empty( $rule['end_of_year'] ) ? ' zum Jahresende' : '' ) ) : '– (Standard: 3 Jahre zum Jahresende)';
-	$md  .= "| {$country} | {$text} | " . $cell( is_array( $rule ) ? (string) ( $rule['source'] ?? '' ) : 'nicht geprüft' ) . " | ☐ |\n";
+	// OD-5: a rule with "verified" => false (DE, AT) is applied, but still to be checked.
+	$unchecked = is_array( $rule ) && array_key_exists( 'verified', $rule ) && empty( $rule['verified'] );
+	$md       .= "| {$country} | {$text} | " . $cell( is_array( $rule ) ? (string) ( $rule['source'] ?? '' ) . ( $unchecked ? ' – angewendet, nicht geprüft' : '' ) : 'nicht geprüft' ) . " | ☐ |\n";
 }
 // Section 3: what the country profiles suggest (applied only after a preview the admin confirms; SET-VC-02).
 $years_text = static fn( array $rule ): string => 0 === (int) ( $rule['years'] ?? 0 ) ? 'unbegrenzt' : (int) $rule['years'] . ' Jahre' . ( ! empty( $rule['end_of_year'] ) ? ' zum Jahresende' : '' );
@@ -111,7 +113,7 @@ foreach ( (array) $profiles as $id => $p ) {
 	$row      = $p['expiry_row'] ?? null;
 	if ( 'market' === $row ) {
 		$rule = $markets[ $country ]['voucher_expiry'] ?? null;
-		$row  = is_array( $rule ) ? $years_text( $rule ) . ' – Quelle: ' . (string) ( $rule['source'] ?? '' ) : '– (keine Länderdaten)';
+		$row  = is_array( $rule ) ? $years_text( $rule ) . ' – Quelle: ' . (string) ( $rule['source'] ?? '' ) . ( array_key_exists( 'verified', $rule ) && empty( $rule['verified'] ) ? ' (nicht geprüft)' : '' ) : '– (keine Länderdaten)';
 	} elseif ( is_array( $row ) ) {
 		$row = $years_text( $row ) . ( '' !== (string) ( $row['note'] ?? '' ) ? ' – Notiz: ' . (string) $row['note'] : '' );
 	} else {
@@ -164,6 +166,13 @@ foreach ( $retention_rows as $option => $what ) {
 	$range = ( isset( $entry['min'] ) ? (string) $entry['min'] : '0' ) . ' – ' . ( isset( $entry['max'] ) ? (string) $entry['max'] : 'offen' );
 	$md   .= '| `' . $option . '` | ' . $cell( $what[0] ) . ' | ' . $cell( (string) ( $entry['default'] ?? '' ) . ' (' . $what[1] . ')' ) . ' | ' . $range . " | ☐ |\n";
 }
+
+// OD-1 / OD-2 (owner decisions 24.11.2026): what an erasure of personal data keeps.
+$md .= "\nWas eine Löschung personenbezogener Daten (WordPress-Löschanfrage, Anonymisierung nach Frist) bewusst behält\n";
+$md .= "(Inhaberentscheidung 24.11.2026, im Vorschlag für die Datenschutzerklärung genannt):\n\n";
+$md .= "| Daten | Was bleibt | Grundlage | Rechtlich geprüft |\n|---|---|---|---|\n";
+$md .= "| Zustimmungs-Checkbox (SET-VC-12) | Text wie angezeigt, Häkchen und Zeitpunkt der Bestellung an Gutschein und Bestellposition sowie der Verlaufseintrag „Consent given“ – ohne Name und Adresse | Nachweis der Zustimmung (berechtigtes Interesse) – **Rechtsprüfung offen** | ☐ |\n";
+$md .= "| Änderungsprotokoll und Sicherungen der Einstellungen (SET-VC-16, PV-P2-6) | was wann geändert wurde; das Mitarbeiterkonto wird entfernt (angezeigt als „unknown“) | Löschfunktion neben dem Export (PV-P1-7/PV-P4-3) | ☐ |\n";
 
 $md .= "\n## 5. Feste Texte des Plugins\n";
 foreach ( $topics as $topic => $ids ) {

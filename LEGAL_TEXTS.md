@@ -14,8 +14,8 @@ Spalte „Rechtlich geprüft“ nicht abgehakt ist.
 | Gesetzliche Gültigkeit pro Land | ebenda → „Statutory validity per country“: Tabelle mit einer Zeile je Land (Spalten **Land**, **Jahre** – 0 = unbegrenzt –, **zum Jahresende**, **Quelle/Notiz**) | Ablaufdatum neuer Gutscheine mit gesetzlicher Gültigkeit; überschreibt die Standardwerte aus Abschnitt 2 |
 | Bedingungen je Produkt | Produkt → Gutschein → „Redemption conditions“ | ersetzt die allgemeinen Bedingungen |
 | Aussteller: Name („Issuer name“) | ebenda → Block „Issuer and legal texts“ (`vcap_issuer_name`, je Sprache über WPML/Polylang) | `{issuer}` (1. Zeile); leer = Name der Website; nur wo eine Vorlage oder ein E-Mail-Text den Platzhalter nutzt – **Rechtsprüfung offen** |
-| Aussteller: Anschrift („Issuer address“) | ebenda → Block „Issuer and legal texts“ (`vcap_issuer_address`, je Sprache über WPML/Polylang) | `{issuer}`; leer = Shop-Adresse aus WooCommerce (Einstellungen → Allgemein) mit Land; nur wo eine Vorlage oder ein E-Mail-Text den Platzhalter nutzt – **Rechtsprüfung offen** |
-| Aussteller: Kontakt („Issuer contact“) | ebenda → Block „Issuer and legal texts“ (`vcap_issuer_contact`, je Sprache über WPML/Polylang) | `{issuer}` (letzte Zeile); leer = keine Kontaktzeile; nur wo eine Vorlage oder ein E-Mail-Text den Platzhalter nutzt – **Rechtsprüfung offen** |
+| Aussteller: Anschrift („Issuer address“) | ebenda → Block „Issuer and legal texts“ (`vcap_issuer_address`, je Sprache über WPML/Polylang) | `{issuer}`; leer = Shop-Adresse aus WooCommerce (Einstellungen → Allgemein), immer mit Land; nur wo eine Vorlage oder ein E-Mail-Text den Platzhalter nutzt – **Rechtsprüfung offen** |
+| Aussteller: Kontakt („Issuer contact“) | ebenda → Block „Issuer and legal texts“ (`vcap_issuer_contact`, je Sprache über WPML/Polylang) | `{issuer}` (letzte Zeile); leer = Absenderadresse der WooCommerce-E-Mails (`woocommerce_email_from_address`, Inhaber-Entscheidung OD-4), ist auch sie leer: keine Kontaktzeile; nur wo eine Vorlage oder ein E-Mail-Text den Platzhalter nutzt – **Rechtsprüfung offen** |
 | Link AGB („Terms and conditions (link)“) | ebenda → Block „Issuer and legal texts“ (`vcap_terms_url`, je Sprache über WPML/Polylang) | `{terms_url}`; leer = AGB-Seite von WooCommerce; nur wo eine Vorlage oder ein E-Mail-Text den Platzhalter nutzt – **Rechtsprüfung offen** |
 | Link Datenschutz („Privacy policy (link)“) | ebenda → Block „Issuer and legal texts“ (`vcap_privacy_url`, je Sprache über WPML/Polylang) | `{privacy_url}`; leer = Datenschutzseite von WordPress; nur wo eine Vorlage oder ein E-Mail-Text den Platzhalter nutzt – **Rechtsprüfung offen** |
 | Link Widerruf („Right of withdrawal (link)“) | ebenda → Block „Issuer and legal texts“ (`vcap_withdrawal_url`, je Sprache über WPML/Polylang) | `{withdrawal_url}`; leer = kein Link; nur wo eine Vorlage oder ein E-Mail-Text den Platzhalter nutzt – **Rechtsprüfung offen** |
@@ -26,12 +26,12 @@ Spalte „Rechtlich geprüft“ nicht abgehakt ist.
 
 | Land | Regel | Quelle | Rechtlich geprüft |
 |---|---|---|---|
-| AT | 30 Jahre | OGH-Rechtsprechung (30 Jahre) | ☐ |
+| AT | 30 Jahre | OGH-Rechtsprechung (30 Jahre) – angewendet, nicht geprüft | ☐ |
 | BE | – (Standard: 3 Jahre zum Jahresende) | nicht geprüft | ☐ |
 | BG | – (Standard: 3 Jahre zum Jahresende) | nicht geprüft | ☐ |
 | CY | – (Standard: 3 Jahre zum Jahresende) | nicht geprüft | ☐ |
 | CZ | – (Standard: 3 Jahre zum Jahresende) | nicht geprüft | ☐ |
-| DE | 3 Jahre zum Jahresende | §§ 195, 199 BGB (3 Jahre zum Jahresende) | ☐ |
+| DE | 3 Jahre zum Jahresende | §§ 195, 199 BGB (3 Jahre zum Jahresende) – angewendet, nicht geprüft | ☐ |
 | DK | – (Standard: 3 Jahre zum Jahresende) | nicht geprüft | ☐ |
 | EE | – (Standard: 3 Jahre zum Jahresende) | nicht geprüft | ☐ |
 | ES | – (Standard: 3 Jahre zum Jahresende) | nicht geprüft | ☐ |
@@ -66,8 +66,8 @@ Hinweis „Rechtsprüfung“, bis die Prüfung im Profil vermerkt ist (`checked`
 
 | Profil | Gesetzliche Gültigkeit (Zeile) | Gültigkeit ohne eigene Angabe | Belegnummer an der Kasse | Empfängerdaten anonymisieren nach | Hinweis Aufbewahrung Buchhaltung (SET-VC-09) | Rechtlich geprüft |
 |---|---|---|---|---|---|---|
-| DE | 3 Jahre zum Jahresende – Quelle: §§ 195, 199 BGB (3 Jahre zum Jahresende) | gesetzlich (Zeile links) | Pflicht (Länderdaten `fiscal_receipt`) | 1095 Tage nach Ablauf/Einlösung | 8 bzw. 10 Jahre (§ 147 AO, § 257 HGB) | ☐ nicht geprüft |
-| AT | 30 Jahre – Quelle: OGH-Rechtsprechung (30 Jahre) | gesetzlich (Zeile links) | Pflicht (Länderdaten `fiscal_receipt`) | 1095 Tage nach Ablauf/Einlösung | 7 Jahre (§ 132 BAO) | ☐ nicht geprüft |
+| DE | 3 Jahre zum Jahresende – Quelle: §§ 195, 199 BGB (3 Jahre zum Jahresende) (nicht geprüft) | gesetzlich (Zeile links) | Pflicht (Länderdaten `fiscal_receipt`) | 1095 Tage nach Ablauf/Einlösung | 8 bzw. 10 Jahre (§ 147 AO, § 257 HGB) | ☐ nicht geprüft |
+| AT | 30 Jahre – Quelle: OGH-Rechtsprechung (30 Jahre) (nicht geprüft) | gesetzlich (Zeile links) | Pflicht (Länderdaten `fiscal_receipt`) | 1095 Tage nach Ablauf/Einlösung | 7 Jahre (§ 132 BAO) | ☐ nicht geprüft |
 | CH | 10 Jahre – Notiz: Art. 127 OR (10 Jahre) | gesetzlich (Zeile links) | – (kein Vorschlag) | 1095 Tage nach Ablauf/Einlösung | neutral: „Buchungsunterlagen unterliegen gesetzlichen Aufbewahrungsfristen.“ (kein Paragraf) | ☐ nicht geprüft |
 | EU | – (kein Vorschlag) | – (bleibt) | – (bleibt) | – (bleibt) | neutral: „Buchungsunterlagen unterliegen gesetzlichen Aufbewahrungsfristen.“ (kein Paragraf) | ☐ nicht geprüft |
 | OTHER | – (kein Vorschlag) | – (bleibt) | – (bleibt) | – (bleibt) | neutral: „Buchungsunterlagen unterliegen gesetzlichen Aufbewahrungsfristen.“ (kein Paragraf) | ☐ nicht geprüft |
@@ -87,6 +87,14 @@ Abschnitt 3).
 | `vcap_review_revoked_retention_days` | Zurückgezogene Bewertungsnotizen löschen nach | 90 (Tage) | 30 – 3650 | ☐ |
 | `vcap_command_log_days` | Protokoll der Gutscheinbefehle (ohne Codes) behalten | 90 (Tage) | 30 – 3650 | ☐ |
 | `vcap_scanner_failed_lookup_days` | Fehlgeschlagene Kassenabfragen je Mitarbeiter behalten | 92 (Tage) | 31 – 3650 | ☐ |
+
+Was eine Löschung personenbezogener Daten (WordPress-Löschanfrage, Anonymisierung nach Frist) bewusst behält
+(Inhaberentscheidung 24.11.2026, im Vorschlag für die Datenschutzerklärung genannt):
+
+| Daten | Was bleibt | Grundlage | Rechtlich geprüft |
+|---|---|---|---|
+| Zustimmungs-Checkbox (SET-VC-12) | Text wie angezeigt, Häkchen und Zeitpunkt der Bestellung an Gutschein und Bestellposition sowie der Verlaufseintrag „Consent given“ – ohne Name und Adresse | Nachweis der Zustimmung (berechtigtes Interesse) – **Rechtsprüfung offen** | ☐ |
+| Änderungsprotokoll und Sicherungen der Einstellungen (SET-VC-16, PV-P2-6) | was wann geändert wurde; das Mitarbeiterkonto wird entfernt (angezeigt als „unknown“) | Löschfunktion neben dem Export (PV-P1-7/PV-P4-3) | ☐ |
 
 ## 5. Feste Texte des Plugins
 
@@ -131,7 +139,7 @@ Abschnitt 3).
 
 | Englisch (Quelltext) | Deutsch (DE, du) | Deutsch (DE, Sie) | Deutsch (AT) | Fundstelle | Freigabe |
 |---|---|---|---|---|---|
-| Enter the code in the cart or at checkout on %s to redeem it. | Gib den Code im Warenkorb oder an der Kasse auf %s ein, um ihn einzulösen. | Geben Sie den Code im Warenkorb oder an der Kasse auf %s ein, um ihn einzulösen. | Geben Sie den Code im Warenkorb oder an der Kasse auf %s ein, um ihn einzulösen. | src/Channels.php:72 | ☐ |
+| Enter the code in the cart or at checkout on %s to redeem it. | Gib den Code im Warenkorb oder an der Kasse auf %s ein, um ihn einzulösen. | Geben Sie den Code im Warenkorb oder an der Kasse auf %s ein, um ihn einzulösen. | Geben Sie den Code im Warenkorb oder an der Kassa auf %s ein, um ihn einzulösen. | src/Channels.php:72 | ☐ |
 | This voucher has already been fully redeemed. | Dieser Gutschein wurde bereits vollständig eingelöst. | Dieser Gutschein wurde bereits vollständig eingelöst. | Dieser Gutschein wurde bereits vollständig eingelöst. | src/Coupons/CartCoupons.php:82 | ☐ |
 
 ## 6. Freigabe

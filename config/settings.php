@@ -220,7 +220,8 @@ $vcap_settings = array(
 
 	/* ---- Integrations (API) ---- */
 	'vcap_redemption_ttl'            => array( 'type' => 'int', 'default' => 15, 'min' => 1, 'max' => 1440, 'section' => 'api' ),
-	'vcap_redemption_max_failures'   => array( 'type' => 'int', 'default' => 10, 'min' => 0, 'section' => 'api' ),
+	// OD-7 (owner decision 24.11.2026): at least 1 – 0 no longer switches the per-user count off; a stored 0 reads as 1.
+	'vcap_redemption_max_failures'   => array( 'type' => 'int', 'default' => 10, 'min' => 1, 'section' => 'api' ),
 	// SET-VC-31 (1.12 no. 23): invalid codes per 15 minutes across all API callers (brake); floor as above.
 	'vcap_redemption_site_wide_failures' => array( 'type' => 'int', 'default' => 300, 'min' => 50, 'max' => 10000, 'section' => 'api' ),
 	// SET-VC-20: accounting export, country-neutral (block "Accounting export", AccountingExport). The three accounts
@@ -248,7 +249,7 @@ $vcap_settings = array(
 	// SET-VC-33 (1.12 no. 12, 35, 38–40): rules of physical cards and partner plugins; defaults = the fixed values of
 	// 1.2.0, the filters of the same name get the setting and win. Partner fields are shown only while the partner
 	// plugin is active (Settings::partner_active()).
-	'vcap_physical_activation_statuses'          => array( 'type' => 'list', 'default' => array( 'completed' ), 'section' => 'api' ),
+	'vcap_physical_activation_statuses'          => array( 'type' => 'list', 'default' => array( 'completed' ), 'section' => 'delivery' ),
 	'vcap_review_first_redemption_only'          => array( 'type' => 'bool', 'default' => 'yes', 'section' => 'api' ),
 	'vcap_affiliate_commission_on_voucher_sales' => array( 'type' => 'bool', 'default' => 'yes', 'section' => 'api' ),
 	'vcap_passcaptain_restore_on_revoke'         => array( 'type' => 'bool', 'default' => 'yes', 'section' => 'api' ),

@@ -13,7 +13,9 @@ defined( 'ABSPATH' ) || exit;
  * Records every change of a setting of the register (config/settings.php): who, when, which setting, from which
  * value to which, and the source (settings page, import, reset, WP-CLI, …). Secrets are recorded with masked values.
  * Kept for "vcap_settings_log_days" days (default 365, 0 = until the entry limit) and cleaned up by the daily
- * maintenance (step "settings_log"); entries of a user are part of that user's personal data export.
+ * maintenance (step "settings_log"); entries of a user are part of that user's personal data export. OD-2 (owner
+ * decision 24.11.2026): the personal data eraser anonymises the user in the entries and in the automatic settings
+ * backups (user id 0, shown as "unknown"); what was changed is kept.
  *
  * Stored in one option that is never autoloaded, limited to MAX_ENTRIES (newest kept). PV-P1-5/P6-3: changes made
  * inside with() (import, reset, profile, WP-CLI) or while the settings tab is saved are collected and written once
@@ -56,12 +58,13 @@ final class SettingsLog {
 	/** @var array<int, array{time: int, user: int, key: string, from: string, to: string, source: string, via: string}> Entries not written yet. */
 	private static array $buffer = array();
 
-	/** Hooks: option changes, personal data export. */
+	/** Hooks: option changes, personal data export and erasure. */
 	public function register(): void {
 		add_action( 'added_option', array( self::class, 'added' ), 10, 2 );
 		add_action( 'updated_option', array( self::class, 'updated' ), 10, 3 );
 		add_action( 'delete_option', array( self::class, 'deleting' ), 10, 1 );
 		add_filter( 'wp_privacy_personal_data_exporters', array( self::class, 'exporters' ) );
+		add_filter( 'wp_privacy_personal_data_erasers', array( self::class, 'erasers' ) );
 		add_action( 'woocommerce_settings_save_vcap', array( self::class, 'begin_page' ), 0 );
 		add_action( 'woocommerce_update_options', array( self::class, 'end_page' ), PHP_INT_MAX );
 		add_action( 'shutdown', array( self::class, 'flush' ) );
@@ -284,6 +287,75 @@ final class SettingsLog {
 			'callback'               => array( self::class, 'export_personal_data' ),
 		);
 		return $exporters;
+	}
+
+	/**
+	 * OD-2: personal data eraser of the change log and the automatic settings backups, next to the exporter.
+	 *
+	 * @param mixed $erasers What the previous filter returned.
+	 * @return array<string, mixed>
+	 */
+	public static function erasers( $erasers ): array {
+		$erasers = is_array( $erasers ) ? $erasers : array();
+		$erasers['voucher-captain-settings-log'] = array(
+			'eraser_friendly_name' => __( 'Voucher settings changes', 'voucher-captain' ),
+			'callback'             => array( self::class, 'erase_personal_data' ),
+		);
+		return $erasers;
+	}
+
+	/**
+	 * OD-2: anonymises a user (found by email address) in the change log and the automatic settings backups – the user
+	 * id becomes 0 (shown as "unknown"); time, setting, values and source stay. The same goes for the user who applied
+	 * the last country profile (option "vcap_country_profile").
+	 *
+	 * @param string $email Email address.
+	 * @param int    $page  Page (everything is done at once).
+	 * @return array{items_removed: bool, items_retained: bool, messages: string[], done: bool}
+	 */
+	public static function erase_personal_data( $email, $page = 1 ): array {
+		$user    = function_exists( 'get_user_by' ) ? get_user_by( 'email', (string) $email ) : false;
+		$id      = is_object( $user ) && isset( $user->ID ) ? (int) $user->ID : 0;
+		$removed = $id > 0 && self::anonymise_user( $id ) + SettingsTransfer::anonymise_backups( $id ) + CountryProfiles::anonymise_user( $id ) > 0;
+		return array(
+			'items_removed'  => $removed,
+			'items_retained' => false,
+			'messages'       => array(),
+			'done'           => true,
+		);
+	}
+
+	/**
+	 * OD-2: sets the user of a user's entries to 0 (written and buffered ones).
+	 *
+	 * @return int Entries anonymised.
+	 */
+	public static function anonymise_user( int $user_id ): int {
+		if ( $user_id <= 0 ) {
+			return 0;
+		}
+		self::flush();
+		$log   = self::stored_entries();
+		$count = 0;
+		foreach ( $log as $i => $row ) {
+			if ( $row['user'] === $user_id ) {
+				$log[ $i ]['user'] = 0;
+				++$count;
+			}
+		}
+		if ( $count > 0 ) {
+			update_option( self::OPTION, $log, false );
+		}
+		return $count;
+	}
+
+	/** Name of the user of an entry or backup for the screen: display name, "#id" of a deleted account, "unknown" for 0. */
+	public static function user_label( int $user_id ): string {
+		if ( $user_id <= 0 ) {
+			return __( 'unknown', 'voucher-captain' );
+		}
+		$user = function_exists( 'get_userdata' ) ? get_userdata( $user_id ) : false;
+		return $user instanceof \WP_User ? $user->display_name : '#' . $user_id;
 	}
 
 	/**

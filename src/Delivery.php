@@ -24,7 +24,7 @@ final class Delivery {
 	 * Daily maintenance, one Action Scheduler action per step so that a failing or slow step never keeps the others
 	 * from running. Cheap purges first, mails and PDFs last.
 	 */
-	public const MAINTENANCE_STEPS = array( 'tmp_pdfs', 'rate_limits', 'mail_failures', 'scan_keys', 'claims', 'upload_dir', 'expire_overdue', 'retention', 'voucher_requests', 'review_refs', 'protocols', 'settings_log', 'legacy_rows', 'delivery_net', 'expiry_reminders' );
+	public const MAINTENANCE_STEPS = array( 'tmp_pdfs', 'rate_limits', 'mail_failures', 'scan_keys', 'claims', 'upload_dir', 'expire_overdue', 'retention', 'voucher_requests', 'review_refs', 'protocols', 'settings_log', 'legacy_rows', 'delivery_net', 'expiring', 'expiry_reminders' );
 
 	public function __construct( private Settings $settings, private VoucherRepository $repo ) {}
 
@@ -1372,7 +1372,8 @@ final class Delivery {
 	 * (ledger event 'expiry_reminder'); admins can suppress the reminder per voucher. Works in batches of 200
 	 * until every due voucher was handled or $budget seconds are used (the maintenance step then continues), so
 	 * many vouchers expiring on one day (e.g. on 31 December) are all reminded in time. Nothing is tried while
-	 * the email is disabled, and vouchers without a valid address are skipped (no failed attempt each day).
+	 * the email is disabled, and vouchers without a valid address are skipped (no failed attempt each day). With
+	 * the expiry behaviour "never" nothing is sent (OD-3, ExpiryPolicy::reminders_enabled()).
 	 *
 	 * @param float     $budget   Seconds; 0 = until done.
 	 * @param bool|null $finished Set to false when the budget ran out with vouchers left.
@@ -1380,6 +1381,9 @@ final class Delivery {
 	 */
 	public function send_expiry_reminders( float $budget = 0.0, ?bool &$finished = null ): int {
 		$finished = true;
+		if ( ! ExpiryPolicy::reminders_enabled() ) {
+			return 0; // OD-3: expiry behaviour "never" – vouchers do not expire, so nobody is reminded.
+		}
 		$offsets  = self::expiry_reminder_offsets( $this->settings->get( 'vcap_expiry_reminder_days' ) );
 		if ( ! $offsets ) {
 			return 0;
@@ -1433,6 +1437,82 @@ final class Delivery {
 			} while ( $more );
 		}
 		return $sent;
+	}
+
+	/**
+	 * VC-13: fires "vcap_voucher_expiring" for redeemable vouchers with remaining value whose printed expiry date
+	 * comes within a lead time (filter "vcap_voucher_expiring_days", default 30 and 7 days; independent of the
+	 * expiry reminder email). Each lead time covers the vouchers ending within its days and after the next smaller
+	 * one, so a voucher found late gets only the lead time that fits. Once per voucher, lead time and expiry date
+	 * (claim "expiring:{id}:{days}:{expires_at}"): a voucher extended later is reported again for its new date.
+	 * Nothing with the expiry behaviour "never" (ExpiryPolicy); with a grace period the printed date counts.
+	 * Works in batches of 200 until done or $budget seconds are used (the maintenance step then continues).
+	 *
+	 * @param float     $budget   Seconds; 0 = until done.
+	 * @param bool|null $finished Set to false when the budget ran out with vouchers left.
+	 * @return int Events fired.
+	 */
+	public function report_expiring( float $budget = 0.0, ?bool &$finished = null ): int {
+		$finished = true;
+		if ( ! ExpiryPolicy::expires_ever() ) {
+			return 0; // SET-VC-06 "never": the date is a notice only, nothing expires.
+		}
+		$lead_times = self::expiring_days();
+		$start      = microtime( true );
+		$fired      = 0;
+		foreach ( $lead_times as $i => $days ) {
+			$after  = (int) ( $lead_times[ $i + 1 ] ?? 0 );
+			$cursor = null;
+			do {
+				$batch = $this->repo->due_for_expiring_event( $days, $after, 200, $cursor );
+				foreach ( $batch as $voucher ) {
+					if ( $budget > 0 && microtime( true ) - $start >= $budget ) {
+						$finished = false;
+						return $fired;
+					}
+					$expires = (string) $voucher->expires_at;
+					$cursor  = array( $expires, $voucher->id );
+					$claim   = 'expiring:' . $voucher->id . ':' . $days . ':' . $expires;
+					// Read first (a voucher stays in its window for days), claimed once; fired after the claim is stored.
+					if ( '' === $expires || null !== Claim::taken_at( $claim ) || ! Claim::take( $claim ) ) {
+						continue;
+					}
+					/**
+					 * A redeemable voucher with remaining value expires soon (args: Voucher, lead time in days, printed
+					 * expiry date UTC "Y-m-d H:i:s"; daily maintenance): once per voucher, lead
+					 * time (filter "vcap_voucher_expiring_days") and expiry date, so a voucher extended later is
+					 * reported again for its new date. Never with the expiry behaviour "never"; with a grace period
+					 * the printed date counts. Fired after the claim is committed.
+					 *
+					 * @since 1.3.0 (contract 1.9.0)
+					 * @param Voucher $voucher     The voucher (state when it was found).
+					 * @param int     $days_before Lead time in days the voucher was found for (e.g. 30 or 7).
+					 * @param string  $expires_at  Printed expiry date, UTC "Y-m-d H:i:s".
+					 */
+					Db::action( 'vcap_voucher_expiring', $voucher, $days, $expires );
+					++$fired;
+				}
+				$more = count( $batch ) === 200;
+			} while ( $more );
+		}
+		return $fired;
+	}
+
+	/**
+	 * VC-13: lead times of "vcap_voucher_expiring" in days (1–365, without duplicates, largest first).
+	 *
+	 * @return int[]
+	 */
+	public static function expiring_days(): array {
+		/**
+		 * Lead times in days at which "vcap_voucher_expiring" reports a voucher before its expiry date (1–365;
+		 * empty = never). Independent of the expiry reminder email ("vcap_expiry_reminder_days").
+		 *
+		 * @since 1.3.0 (contract 1.9.0)
+		 * @param int[] $days Default array( 30, 7 ).
+		 */
+		$days = apply_filters( 'vcap_voucher_expiring_days', array( 30, 7 ) );
+		return self::expiry_reminder_offsets( implode( ',', array_map( 'strval', is_array( $days ) ? $days : array( $days ) ) ) );
 	}
 
 	/** M12-84: note of an "expiry_reminder" event sent N days before the expiry ("days_before=N"). */
@@ -1565,6 +1645,10 @@ final class Delivery {
 				return Install::hash_event_notes( $budget );
 			case 'delivery_net':
 				return $this->deliver_due( $budget );
+			case 'expiring':
+				// VC-13: workflow event "vcap_voucher_expiring" once per voucher, lead time and expiry date.
+				$this->report_expiring( $budget, $finished );
+				return $finished;
 			case 'expiry_reminders':
 				$this->send_expiry_reminders( $budget, $finished );
 				return $finished;

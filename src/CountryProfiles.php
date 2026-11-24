@@ -229,14 +229,16 @@ final class CountryProfiles {
 		if ( null === $profile || '' === $profile['country'] ) {
 			return null;
 		}
-		$row = $profile['expiry_row'];
+		$row        = $profile['expiry_row'];
+		$unverified = false;
 		if ( 'market' === $row ) {
 			$market = Markets::get( $profile['country'] );
 			$rule   = is_array( $market['voucher_expiry'] ?? null ) ? $market['voucher_expiry'] : null;
 			if ( null === $rule ) {
 				return null;
 			}
-			$row = array(
+			$unverified = ! Markets::rule_verified( $rule ); // OD-5: DE/AT "still to be checked".
+			$row        = array(
 				'years'       => (int) $rule['years'],
 				'end_of_year' => ! empty( $rule['end_of_year'] ),
 				'note'        => (string) ( $rule['source'] ?? '' ),
@@ -245,8 +247,8 @@ final class CountryProfiles {
 		if ( ! is_array( $row ) ) {
 			return null;
 		}
-		if ( ! $profile['checked'] ) {
-			// The stored row keeps the mark until the admin edits the note (owner rule S8).
+		if ( ! $profile['checked'] || $unverified ) {
+			// The stored row keeps the mark until the admin edits the note (owner rule S8; OD-5 for unchecked market rules).
 			$note        = trim( (string) ( $row['note'] ?? '' ) );
 			$row['note'] = '' !== $note ? $note . ' – ' . self::review_mark() : self::review_mark();
 		}
@@ -506,6 +508,22 @@ final class CountryProfiles {
 			'changed' => $changed,
 			'backup'  => $backup,
 		);
+	}
+
+	/**
+	 * OD-2: sets the user who applied the last country profile to 0 when it is the given user (erasure request).
+	 *
+	 * @param int $user_id User id.
+	 * @return int 1 when anonymised, else 0.
+	 */
+	public static function anonymise_user( int $user_id ): int {
+		$applied = get_option( self::APPLIED_OPTION, false );
+		if ( $user_id <= 0 || ! is_array( $applied ) || $user_id !== (int) ( $applied['user'] ?? 0 ) ) {
+			return 0;
+		}
+		$applied['user'] = 0;
+		update_option( self::APPLIED_OPTION, $applied, false );
+		return 1;
 	}
 
 	/**

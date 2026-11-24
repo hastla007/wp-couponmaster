@@ -1069,12 +1069,13 @@ final class RedemptionService {
 	}
 
 	/**
-	 * Configured number of invalid codes per caller and 15 minutes (0 = no limit).
+	 * Configured number of invalid codes per caller and 15 minutes – at least 1 (OD-7): a 0 stored by earlier
+	 * versions, update_option() or an import reads as 1, so the per-user count cannot be switched off.
 	 *
 	 * @return int
 	 */
 	private function max_failures(): int {
-		return (int) get_option( 'vcap_redemption_max_failures', 10 );
+		return \VCAP\SettingsRegistry::bounded_int( 'vcap_redemption_max_failures' );
 	}
 
 	/**

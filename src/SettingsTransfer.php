@@ -678,6 +678,31 @@ final class SettingsTransfer {
 		return $out;
 	}
 
+	/**
+	 * OD-2 (owner decision 24.11.2026, personal data eraser): the backups taken by this user keep their settings, the
+	 * user becomes 0 ("unknown").
+	 *
+	 * @return int Backups anonymised.
+	 */
+	public static function anonymise_backups( int $user_id ): int {
+		if ( $user_id <= 0 ) {
+			return 0;
+		}
+		$stored = get_option( self::BACKUP_OPTION, array() );
+		$stored = is_array( $stored ) ? $stored : array();
+		$count  = 0;
+		foreach ( $stored as $time => $backup ) {
+			if ( is_array( $backup ) && (int) ( $backup['user'] ?? 0 ) === $user_id ) {
+				$stored[ $time ]['user'] = 0;
+				++$count;
+			}
+		}
+		if ( $count > 0 ) {
+			update_option( self::BACKUP_OPTION, $stored, false );
+		}
+		return $count;
+	}
+
 	/** JSON of a backup ('' when there is none; 0 = the newest). */
 	public static function backup_json( int $time = 0 ): string {
 		$backups = self::backups();

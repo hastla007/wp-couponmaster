@@ -16,8 +16,8 @@ defined( 'ABSPATH' ) || exit;
  * take them away.
  * Saving needs the table's own nonce and both manage_woocommerce and manage_options – a shop manager sees the table
  * but cannot change it (granting rights to roles is an administrator's decision). Once saved, upgrades keep the saved
- * assignment (Install::add_caps() then only ensures the administrator's); every uninstall removes the rights from
- * every role (uninstall.php).
+ * assignment (Install::add_caps() then only ensures the administrator's); an uninstall with "Remove all data"
+ * removes the rights from every role (uninstall.php); one that keeps the data keeps them and the saved table (OD-6).
  *
  * @since 1.3.0
  */

@@ -391,7 +391,7 @@ final class Settings {
 					'title'    => __( 'Expiry reminders (days before)', 'voucher-captain' ),
 					'type'     => 'text',
 					'default'  => '0',
-					'desc_tip' => __( 'Email the voucher holder this many days before a voucher with remaining value expires. Several reminders are separated by commas, e.g. "30, 7, 1"; each one is sent once. 0 = no reminders. The email text is edited under WooCommerce → Settings → Emails.', 'voucher-captain' ),
+					'desc_tip' => __( 'Email the voucher holder this many days before a voucher with remaining value expires. Several reminders are separated by commas, e.g. "30, 7, 1"; each one is sent once. 0 = no reminders. The email text is edited under WooCommerce → Settings → Emails.', 'voucher-captain' ) . ' ' . __( 'With "Never expire" (Settings → General → When the validity ends) no expiry reminders are sent.', 'voucher-captain' ),
 				)
 			),
 			SettingsRegistry::field(
@@ -568,6 +568,26 @@ final class Settings {
 			),
 			array( 'type' => 'sectionend', 'id' => 'vcap_custom_css_block' ),
 		);
+		// Physical gift cards are an own function (product switch "Physical card"), not a partner rule (table 1.12 no. 12).
+		$fields[] = array(
+			'type'  => 'title',
+			'title' => __( 'Physical gift cards', 'voucher-captain' ),
+			'id'    => 'vcap_physical_cards',
+		);
+		$fields[] = SettingsRegistry::field(
+			PhysicalCards::STATUSES_OPTION,
+			array(
+				'title'   => __( 'Activate physical cards at', 'voucher-captain' ),
+				'type'    => 'multiselect',
+				'class'   => 'wc-enhanced-select',
+				'options' => PhysicalCards::status_choices(),
+				'desc'    => __( 'Physical gift cards stay inactive until their order reaches one of these statuses (default: Completed, i.e. shipped). Only paid statuses can be chosen; empty = Completed.', 'voucher-captain' ),
+			)
+		);
+		$fields[] = array(
+			'type' => 'sectionend',
+			'id'   => 'vcap_physical_cards',
+		);
 		return $fields;
 	}
 
@@ -595,7 +615,7 @@ final class Settings {
 					'title'             => __( 'Invalid code attempts', 'voucher-captain' ),
 					'type'              => 'number',
 					'custom_attributes' => array( 'step' => 1 ),
-					'desc_tip'          => __( 'Number of invalid codes a user may enter within 15 minutes before further attempts are blocked. 0 = no limit.', 'voucher-captain' ),
+					'desc_tip'          => __( 'Number of invalid codes a user may enter within 15 minutes before further attempts are blocked (default 10, at least 1).', 'voucher-captain' ),
 				)
 			),
 			SettingsRegistry::field(
@@ -672,17 +692,7 @@ final class Settings {
 				'type'  => 'title',
 				'title' => __( 'Integration rules', 'voucher-captain' ),
 				'id'    => 'vcap_integration_rules',
-				'desc'  => __( 'Rules for physical gift cards and for partner plugins. A rule of a partner plugin is shown only while that plugin is active; its saved value is kept.', 'voucher-captain' ),
-			),
-			SettingsRegistry::field(
-				PhysicalCards::STATUSES_OPTION,
-				array(
-					'title'   => __( 'Activate physical cards at', 'voucher-captain' ),
-					'type'    => 'multiselect',
-					'class'   => 'wc-enhanced-select',
-					'options' => PhysicalCards::status_choices(),
-					'desc'    => __( 'Physical gift cards stay inactive until their order reaches one of these statuses (default: Completed, i.e. shipped). Only paid statuses can be chosen; empty = Completed.', 'voucher-captain' ),
-				)
+				'desc'  => __( 'Rules for partner plugins. A rule is shown only while its plugin is active; its saved value is kept.', 'voucher-captain' ),
 			),
 		);
 		$partner = array(
@@ -917,7 +927,7 @@ final class Settings {
 					'type'    => 'multiselect',
 					'class'   => 'wc-enhanced-select',
 					'options' => Coupons\Settlement::restore_choices(),
-					'desc'    => __( 'Balances charged by an order are booked back (if "Restore balance on cancellation" is on) and reservations released when it reaches one of these statuses (default: all three). Empty = all three.', 'voucher-captain' ) . $note,
+					'desc'    => __( 'Balances charged by an order are booked back (if "Restore balance on cancellation" is on) and reservations released when it reaches one of these statuses (default: Cancelled, Refunded, Failed). Any order status except the paid ones can be chosen; empty = the default.', 'voucher-captain' ) . $note,
 				)
 			),
 			array( 'type' => 'sectionend', 'id' => 'vcap_refund_rules' ),
@@ -1114,7 +1124,7 @@ final class Settings {
 						'grace'   => __( 'Grace period: still redeemable for the days below', 'voucher-captain' ),
 						'never'   => __( 'Never expire: the expiry date is only shown as a notice', 'voucher-captain' ),
 					),
-					'desc_tip' => __( 'In the grace period the voucher is still accepted in the cart, at the counter and through the redemption API, with a notice; its remaining value is booked off only when the grace period ends. With "Never expire" nothing is booked off. Vouchers that already expired stay expired – extend them by hand.', 'voucher-captain' ),
+					'desc_tip' => __( 'In the grace period the voucher is still accepted in the cart, at the counter and through the redemption API, with a notice; its remaining value is booked off only when the grace period ends. With "Never expire" nothing is booked off. Vouchers that already expired stay expired – extend them by hand.', 'voucher-captain' ) . ' ' . __( 'With "Never expire" no expiry reminders are sent.', 'voucher-captain' ),
 				)
 			),
 			SettingsRegistry::field(

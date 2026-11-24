@@ -414,20 +414,32 @@ final class Markets {
 	}
 
 	/**
-	 * Statutory validity of a country: the shop's own setting first, then the verified market data, else null
-	 * (not verified – the caller applies its default).
+	 * Statutory validity of a country: the shop's own setting first, then the market data, else null (no rule – the
+	 * caller applies its default). "verified": whether the rule is legally checked – the shop's own row counts as the
+	 * shop's decision (true); market data with "verified" => false (DE, AT: owner decision OD-5) is applied the same
+	 * way, but reported as not checked (readiness(), Site Health, country profiles, LEGAL_TEXTS.md).
 	 *
-	 * @return array{years:int, end_of_year:bool, source:string}|null
+	 * @return array{years:int, end_of_year:bool, source:string, verified:bool}|null
 	 */
 	public static function expiry_rule( string $country ): ?array {
 		$country = strtoupper( $country );
 		$own     = self::expiry_rules( get_option( self::EXPIRY_OPTION, '' ) );
 		if ( isset( $own[ $country ] ) ) {
-			return $own[ $country ] + array( 'source' => 'setting' );
+			return $own[ $country ] + array( 'source' => 'setting', 'verified' => true );
 		}
 		$market = self::get( $country );
 		$rule   = is_array( $market['voucher_expiry'] ?? null ) ? $market['voucher_expiry'] : null;
-		return $rule ? array( 'years' => (int) $rule['years'], 'end_of_year' => ! empty( $rule['end_of_year'] ), 'source' => (string) ( $rule['source'] ?? 'markets' ) ) : null;
+		return $rule ? array( 'years' => (int) $rule['years'], 'end_of_year' => ! empty( $rule['end_of_year'] ), 'source' => (string) ( $rule['source'] ?? 'markets' ), 'verified' => self::rule_verified( $rule ) ) : null;
+	}
+
+	/**
+	 * OD-5: whether a "voucher_expiry" rule of the market data is legally checked ("verified"; missing = true, the
+	 * meaning of a rule before 1.3.0).
+	 *
+	 * @param array<string, mixed> $rule Rule of config/markets.php.
+	 */
+	public static function rule_verified( array $rule ): bool {
+		return ! array_key_exists( 'verified', $rule ) || ! empty( $rule['verified'] );
 	}
 
 	/**
@@ -455,10 +467,11 @@ final class Markets {
 	/**
 	 * Countries in the market data the shop sells to (EU and non-EU, e.g. Switzerland), with what is still missing
 	 * for each: verified validity, country terms, translation ("untranslated": offered locales of that country
-	 * without a translation).
+	 * without a translation). "validity" is true only for a legally checked rule (or the shop's own row); "rule" is
+	 * the rule applied (null = the shop's default), e.g. DE/AT: applied, but "validity" false (OD-5).
 	 *
 	 * @param string[]|null $countries Selling countries (default: WooCommerce "Selling location(s)").
-	 * @return array<string, array{validity:bool, terms:bool, translation:bool, locale:string, untranslated:string[]}>
+	 * @return array<string, array{validity:bool, rule:?array{years:int, end_of_year:bool, source:string, verified:bool}, terms:bool, translation:bool, locale:string, untranslated:string[]}>
 	 */
 	public static function readiness( ?array $countries = null ): array {
 		$countries = $countries ?? self::selling_countries();
@@ -480,8 +493,10 @@ final class Markets {
 				}
 			}
 			$country         = strtoupper( (string) $country );
+			$rule            = self::expiry_rule( $country );
 			$out[ $country ] = array(
-				'validity'     => null !== self::expiry_rule( $country ),
+				'validity'     => null !== $rule && $rule['verified'],
+				'rule'         => $rule,
 				'terms'        => isset( $terms[ $country ] ) || $general,
 				'translation'  => ! $untranslated,
 				'locale'       => $market['locale'],

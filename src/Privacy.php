@@ -341,6 +341,19 @@ final class Privacy {
 	/** Voucher columns the eraser writes (M12-06): the personal data, never balance or status. */
 	public const ERASED_COLUMNS = array( 'recipient_email', 'recipient_name', 'message', 'fields', 'buyer_email', 'buyer_name' );
 
+	/**
+	 * The fields of a voucher after the erasure of the recipient ('recipient': none of them) or of the buyer ('buyer':
+	 * the merchant's own fields were typed by the buyer and go, the recipient's stay with the recipient). OD-1 (owner
+	 * decision 24.11.2026): the consent stays in both cases as proof – text, value and time, no name or address.
+	 *
+	 * @param array<string, mixed> $fields Voucher::$fields.
+	 * @return array<string, mixed>
+	 */
+	public static function erased_fields( array $fields, string $scope ): array {
+		$kept = 'buyer' === $scope ? array_filter( $fields, static fn( $key ) => in_array( (string) $key, array_merge( Fields::RECIPIENT_FIELDS, array( 'delivery_date' ) ), true ), ARRAY_FILTER_USE_KEY ) : array();
+		return $kept + Consent::retained( $fields );
+	}
+
 	public function erase( string $email, int $page = 1 ): array {
 		$removed  = false;
 		$retained = false;
@@ -353,7 +366,7 @@ final class Privacy {
 				$voucher->recipient_email = '';
 				$voucher->recipient_name  = '';
 				$voucher->message         = '';
-				$voucher->fields          = array();
+				$voucher->fields          = self::erased_fields( $voucher->fields, 'recipient' );
 				if ( $voucher->order_item_id ) {
 					$items[ $voucher->order_item_id ] = 'recipient';
 				}
@@ -361,9 +374,8 @@ final class Privacy {
 			if ( 0 === strcasecmp( $voucher->buyer_email, $email ) ) {
 				$voucher->buyer_email = '';
 				$voucher->buyer_name  = '';
-				// The merchant's own fields were typed by the buyer (the recipient's go with the recipient).
-				$voucher->fields = array_filter( $voucher->fields, static fn( $key ) => in_array( (string) $key, array_merge( Fields::RECIPIENT_FIELDS, array( 'delivery_date' ) ), true ), ARRAY_FILTER_USE_KEY );
-				$changed         = true;
+				$voucher->fields      = self::erased_fields( $voucher->fields, 'buyer' );
+				$changed              = true;
 				if ( $voucher->order_item_id && ! isset( $items[ $voucher->order_item_id ] ) ) {
 					$items[ $voucher->order_item_id ] = 'buyer';
 				}
@@ -497,6 +509,9 @@ final class Privacy {
 			__( 'To protect voucher codes against guessing and our server against overload, we count code entries, PDF previews and downloads per visitor for a short time window (at most one hour). For this we store the counter under a keyed hash of your IP address (made with a secret key of this website, so it cannot be turned back into the address), never the address itself. The counters are deleted by the daily cleanup, at the latest about one day after the window has ended.', 'voucher-captain' ),
 			self::internal_records_paragraph(),
 		);
+		// OD-1 / OD-2 (owner decisions 24.11.2026): what an erasure keeps (consent as proof, settings changes without the staff account).
+		$paragraphs[] = __( 'Consent checkbox: when a voucher asks you to confirm a text (for example the voucher terms) before buying, we keep the text as shown and the time of your order with the order and the voucher. When your personal data is erased, we keep this text and time as proof that the consent was given, but without your name or address.', 'voucher-captain' );
+		$paragraphs[] = __( 'Settings changes: when staff change the voucher settings, we record who changed which setting and when, and keep a backup of the settings before an import or reset. When a staff member\'s personal data is erased, the staff account is removed from these records; what was changed is kept.', 'voucher-captain' );
 		return $paragraphs;
 	}
 

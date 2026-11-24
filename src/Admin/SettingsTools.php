@@ -358,8 +358,7 @@ final class SettingsTools {
 		}
 		$table .= '</tr></thead><tbody>';
 		foreach ( $rows as $row ) {
-			$user   = $row['user'] > 0 ? get_userdata( $row['user'] ) : false;
-			$name   = $user instanceof \WP_User ? $user->display_name : ( $row['user'] > 0 ? '#' . $row['user'] : '—' );
+			$name   = SettingsLog::user_label( $row['user'] ); // OD-2: an erased or missing user shows as "unknown".
 			$table .= '<tr><td>' . esc_html( wp_date( 'Y-m-d H:i', $row['time'] ) ) . '</td><td>' . esc_html( $name ) . '</td><td>' . self::setting_cell( (string) $row['key'] ) . '</td><td>' . esc_html( self::value_text( (string) $row['key'], $row['from'] ) ) . '</td><td>' . esc_html( self::value_text( (string) $row['key'], $row['to'] ) ) . '</td><td>' . esc_html( SettingsLog::source_label( $row ) ) . '</td></tr>';
 		}
 		echo SettingsUi::scroll( $table . '</tbody></table>' ) . '</td></tr>'; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped above.

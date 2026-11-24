@@ -16,8 +16,9 @@ defined( 'ABSPATH' ) || exit;
  * {withdrawal_url} (Placeholders), so existing vouchers and emails stay unchanged.
  *
  * Every field is empty by default and then filled at render time from the shop: the site name, the WooCommerce
- * store address, the WooCommerce terms and conditions page and the WordPress privacy policy page (no default for the
- * contact and the withdrawal link). The texts are translated per language: WPML through wpml-config.xml
+ * store address (always with the country), the WooCommerce terms and conditions page, the WordPress privacy policy
+ * page and, for the contact, the sender address of the WooCommerce emails (owner decision OD-4 of 24.11.2026; nothing
+ * when that is empty too – no other address). The withdrawal link has no default. The texts are translated per language: WPML through wpml-config.xml
  * (admin-texts), Polylang through Compat\Multilingual (string translation). Nothing here is legally checked.
  *
  * @since 1.3.0
@@ -118,9 +119,21 @@ final class LegalInfo {
 		return '' !== $address ? $address : self::store_address();
 	}
 
-	/** Contact (phone, email, …): the setting, '' when empty. */
+	/**
+	 * Contact (phone, email, …): the setting, else the sender address of the WooCommerce emails
+	 * ("woocommerce_email_from_address", OD-4); '' when both are empty or the sender address is invalid. No other
+	 * address (e.g. the WordPress admin email) is used.
+	 */
 	public static function issuer_contact(): string {
-		return self::text( self::CONTACT_OPTION );
+		$contact = self::text( self::CONTACT_OPTION );
+		return '' !== $contact ? $contact : self::sender_address();
+	}
+
+	/** OD-4: sender address of the WooCommerce emails (WooCommerce → Settings → Emails), '' when empty or invalid. */
+	public static function sender_address(): string {
+		$from = get_option( 'woocommerce_email_from_address', '' );
+		$from = is_scalar( $from ) ? sanitize_email( trim( (string) $from ) ) : '';
+		return '' !== $from && is_email( $from ) ? $from : '';
 	}
 
 	/** {issuer}: name, address and contact, one per line; empty parts are left out. */
@@ -226,7 +239,7 @@ final class LegalInfo {
 			array(
 				'type'  => 'title',
 				'title' => __( 'Issuer and legal texts', 'voucher-captain' ),
-				'desc'  => __( 'Printed only where a PDF template or an email text uses the placeholders {issuer}, {legal_text}, {terms_url}, {privacy_url} or {withdrawal_url}; existing templates and emails stay unchanged. Empty fields use the shop details: the site name, the WooCommerce store address, the WooCommerce terms and conditions page and the privacy policy page. With WPML or Polylang the texts are translated per language (String Translation).', 'voucher-captain' ),
+				'desc'  => __( 'Printed only where a PDF template or an email text uses the placeholders {issuer}, {legal_text}, {terms_url}, {privacy_url} or {withdrawal_url}; existing templates and emails stay unchanged. Empty fields use the shop details: the site name, the WooCommerce store address, the sender address of the WooCommerce emails, the WooCommerce terms and conditions page and the privacy policy page. With WPML or Polylang the texts are translated per language (String Translation).', 'voucher-captain' ),
 				'id'    => 'vcap_legal_info',
 			),
 			SettingsRegistry::field(
@@ -251,9 +264,10 @@ final class LegalInfo {
 			SettingsRegistry::field(
 				self::CONTACT_OPTION,
 				array(
-					'title'    => __( 'Issuer contact', 'voucher-captain' ),
-					'type'     => 'text',
-					'desc_tip' => __( 'E.g. phone and email address for questions about vouchers. Empty = no contact line.', 'voucher-captain' ) . ' ' . $check,
+					'title'       => __( 'Issuer contact', 'voucher-captain' ),
+					'type'        => 'text',
+					'placeholder' => self::sender_address(),
+					'desc_tip'    => __( 'E.g. phone and email address for questions about vouchers. Empty = the sender address of the WooCommerce emails (WooCommerce → Settings → Emails); no contact line if that is empty too.', 'voucher-captain' ) . ' ' . $check,
 				)
 			),
 			SettingsRegistry::field(

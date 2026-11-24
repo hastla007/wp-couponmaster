@@ -11,7 +11,9 @@ defined( 'ABSPATH' ) || exit;
  *   and books its remaining value off ("expired" with the amount, TaxAccounting / M12-29);
  * - "grace": the voucher stays redeemable for "vcap_expiry_grace_days" more days (cart, Store API, orders edited in
  *   the admin, redemption API, counter); it expires – and its value is booked off – only when the grace period ends;
- * - "never": the date is only shown as a notice; the voucher never expires and nothing is booked off.
+ * - "never": the date is only shown as a notice; the voucher never expires and nothing is booked off. No expiry
+ *   reminder is sent in this mode (owner decision OD-3 of 24.11.2026: automatic and bulk-action reminders; see
+ *   reminders_enabled()).
  *
  * The printed expiry date stays the date stored on the voucher; only the moment it counts as expired moves. Vouchers
  * that already expired before the setting was changed stay expired (extend them by hand).
@@ -118,6 +120,15 @@ final class ExpiryPolicy {
 
 	/** Whether the daily maintenance marks overdue vouchers as expired (and books their value off) at all. */
 	public static function expires_ever(): bool {
+		return self::NEVER !== self::behaviour();
+	}
+
+	/**
+	 * OD-3 (owner decision 24.11.2026): whether expiry reminders are sent at all. With "never" a voucher does not
+	 * expire, so no reminder is sent (daily maintenance, its query and the bulk action "Send expiry reminder");
+	 * "expires" and "grace" keep the reminders unchanged (counted from the printed date, as before).
+	 */
+	public static function reminders_enabled(): bool {
 		return self::NEVER !== self::behaviour();
 	}
 

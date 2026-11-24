@@ -1,8 +1,9 @@
 <?php
 /**
  * Uninstall: only removes data when "Remove all data when the plugin is deleted" is on (switched on only with the typed
- * word LÖSCHEN/DELETE, VCAP\Admin\DataRemoval; each site of a network decides for itself). Always: scheduled jobs,
- * the plugin's rights on every role (SET-VC-21) and leftovers of the license client of earlier builds are removed,
+ * word LÖSCHEN/DELETE, VCAP\Admin\DataRemoval; each site of a network decides for itself). Always: scheduled jobs
+ * and leftovers of the license client of earlier builds are removed; the plugin's rights on every role (SET-VC-21)
+ * only together with the data (owner decision OD-6: kept data keeps its rights and the saved table),
  * gift card and store credit coupons and coupons with rules only Voucher Captain checks are suspended (draft) – without the plugin nothing would deduct their
  * balance or check their rules; with data deletion all Voucher Captain coupons go to the trash (restorable there),
  * the other WooCommerce coupons are kept.
@@ -117,6 +118,8 @@ function vcap_uninstall_coupons( bool $delete_data ): array {
  * SET-VC-21: removes the plugin's rights (vcap_manage_vouchers, vcap_scan_tickets, vcap_increase_balance) from every
  * role of the current site – also from roles an administrator gave them in "Rights per role" – and forgets that the
  * table was saved, so a new installation starts with the default assignment again.
+ * OD-6 (owner decision 24.11.2026): only called when the site deletes its data; when the data is kept, the rights
+ * and the saved table (vcap_role_caps_customised) are kept as well, so a reinstall works with the same assignment.
  */
 function vcap_uninstall_caps(): void {
 	vcap_uninstall_autoload();
@@ -137,10 +140,10 @@ function vcap_uninstall_site(): bool {
 	$delete_data = 'yes' === get_option( 'vcap_delete_on_uninstall', 'no' );
 	vcap_uninstall_coupons( $delete_data ); // First: needs the voucher table, which data deletion drops.
 	vcap_uninstall_jobs(); // Every uninstall, also when the data is kept: nothing would run the jobs any more.
-	vcap_uninstall_caps(); // Every uninstall: rights of a plugin that is gone (a new installation gives the defaults).
 	if ( ! $delete_data ) {
-		return false;
+		return false; // OD-6: kept data keeps the role rights and the saved "Rights per role" table.
 	}
+	vcap_uninstall_caps(); // OD-6: the rights go only together with the data (a new installation gives the defaults).
 
 	global $wpdb;
 	foreach ( array( 'vcap_vouchers', 'vcap_events', 'vcap_code_pool', 'vcap_redemptions', 'vcap_promotion_usage', 'vcap_claims', 'vcap_promotion_counts', 'vcap_rate_limits', 'vcap_scan_keys', 'vcap_fc_requests' ) as $table ) {

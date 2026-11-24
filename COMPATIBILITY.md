@@ -58,7 +58,7 @@ Country-specific data is configuration, not code:
 
 | What | Where |
 |---|---|
-| Currency, main locale (and further languages, e.g. Switzerland de_CH/fr_CH/it_CH) and EU membership of the 27 EU countries plus Switzerland, Liechtenstein, the United Kingdom and Norway; verified statutory voucher validity (Germany 3 years to the end of the year, Austria 30 years; the non-EU countries are not legally checked); till-receipt duty `fiscal_receipt` (Germany, Austria) for the automatic "Receipt no. required" | `config/markets.php` (data file), filter `vcap_markets`; `Markets::known()` = country in the data, `Markets::is_eu()` = EU member |
+| Currency, main locale (and further languages, e.g. Switzerland de_CH/fr_CH/it_CH) and EU membership of the 27 EU countries plus Switzerland, Liechtenstein, the United Kingdom and Norway; statutory voucher validity (Germany 3 years to the end of the year, Austria 30 years – applied, but not legally checked yet: `verified` => false, owner decision OD-5 of 24.11.2026, so Site Health, readiness, country profiles and LEGAL_TEXTS.md show "not checked"; the non-EU countries have no rule and are not legally checked); till-receipt duty `fiscal_receipt` (Germany, Austria) for the automatic "Receipt no. required" | `config/markets.php` (data file), filter `vcap_markets`; `Markets::known()` = country in the data, `Markets::is_eu()` = EU member |
 | Statutory validity of further countries (or different rules) | setting *Vouchers → Settings → Statutory validity per country* (`DE: 3 end`, `AT: 30`) – countries without a rule use 3 years to the end of the year |
 | Redemption conditions / consumer information per country | setting *Redemption conditions per country*; the billing country decides and the text is fixed on the voucher |
 | Currency minor units (ISO 4217) | `config/currencies.php`, filter `vcap_currency_decimals` |
@@ -66,7 +66,7 @@ Country-specific data is configuration, not code:
 | Languages | translation files `languages/voucher-captain-{locale}.mo` (included: de_DE ("du"), de_DE_formal and de_AT ("Sie"); de_CH uses de_DE_formal, de_CH_informal de_DE; POT for further languages) |
 
 *Tools → Site Health* checks every country in WooCommerce's selling locations that is in the country data (EU and
-non-EU, e.g. Switzerland): verified validity, conditions and a translation of every language of that country the shop
+non-EU, e.g. Switzerland): verified validity (Germany and Austria count as not checked yet – the rule applied is named, OD-5), conditions and a translation of every language of that country the shop
 offers (test "Some selling countries need voucher settings"); selling countries without country data are named. `tests/run.php` covers the configuration.
 
 ## PDF fonts, scripts and images

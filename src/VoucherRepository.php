@@ -704,6 +704,9 @@ final class VoucherRepository {
 	 */
 	public function due_for_expiry_reminder( int $days, int $limit = 200, array $exclude = array(), int $after_days = 0 ): array {
 		global $wpdb;
+		if ( ! ExpiryPolicy::reminders_enabled() ) {
+			return array(); // OD-3: expiry behaviour "never" – no voucher is due for a reminder.
+		}
 		$exclude = array_values( array_filter( array_map( 'intval', $exclude ) ) );
 		$not_in  = $exclude ? ' AND v.id NOT IN (' . implode( ',', $exclude ) . ')' : '';
 		$rows    = $wpdb->get_results( // phpcs:ignore
@@ -723,6 +726,40 @@ final class VoucherRepository {
 			),
 			ARRAY_A
 		);
+		return array_map( array( Voucher::class, 'from_row' ), $rows ? $rows : array() );
+	}
+
+	/**
+	 * VC-13: vouchers for the workflow event "vcap_voucher_expiring" – the rules of due_for_expiry_reminder() (active,
+	 * delivered, no ticket, remaining value; printed expiry date after $after_days and within $days), without the
+	 * reminder's own ledger and backoff conditions (the event is claimed once per voucher, lead time and date).
+	 * Keyset pages in (expires_at, id) order: $cursor = array( expires_at, id ) of the last voucher of the page before.
+	 *
+	 * @param array{0:string,1:int}|null $cursor
+	 * @return Voucher[]
+	 */
+	public function due_for_expiring_event( int $days, int $after_days = 0, int $limit = 200, ?array $cursor = null ): array {
+		global $wpdb;
+		$args = array( gmdate( 'Y-m-d H:i:s', time() + max( 0, $after_days ) * DAY_IN_SECONDS ), gmdate( 'Y-m-d H:i:s', time() + max( 0, $days ) * DAY_IN_SECONDS ) );
+		$page = '';
+		if ( $cursor ) {
+			$page = ' AND ( v.expires_at > %s OR ( v.expires_at = %s AND v.id > %d ) )';
+			array_push( $args, (string) $cursor[0], (string) $cursor[0], (int) $cursor[1] );
+		}
+		$args[] = max( 1, $limit );
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- table name and the placeholders of $page, values in $args.
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT v.* FROM {$this->table()} v
+				WHERE v.status = 'active' AND v.expires_at > %s AND v.expires_at <= %s
+				AND v.delivered_at IS NOT NULL AND v.type <> 'ticket'
+				AND ( v.usage_mode <> 'balance' OR v.balance > 0 ){$page}
+				ORDER BY v.expires_at ASC, v.id ASC LIMIT %d",
+				$args
+			),
+			ARRAY_A
+		);
+		// phpcs:enable
 		return array_map( array( Voucher::class, 'from_row' ), $rows ? $rows : array() );
 	}
 
@@ -829,7 +866,8 @@ final class VoucherRepository {
 	 * Erase personal data of vouchers that ended more than $days ago: candidates found through the indexes
 	 * (status, updated_at) and expires_at, MAINTENANCE_BATCH ids per short transaction (notes, then the voucher
 	 * row), so checkouts never wait for one long lock over the whole tables. A database error is thrown (the
-	 * maintenance step records it, see Delivery::run_maintenance_step()), never swallowed.
+	 * maintenance step records it, see Delivery::run_maintenance_step()), never swallowed. OD-1: the consent (text,
+	 * value, time) and its history entry stay as proof.
 	 *
 	 * @param float     $budget   Seconds; 0 = until done.
 	 * @param bool|null $finished Set to false when the budget ran out with vouchers left.
@@ -868,11 +906,14 @@ final class VoucherRepository {
 				self::erase_coupon_addresses( (int) $copy['coupon_id'], (int) $copy['id'] );
 				Fields::erase_item_data( Fields::voucher_item( (int) $copy['order_item_id'] ), 'all' );
 			}
+			// OD-1 (owner decision 24.11.2026): the consent stays as proof – text, value and time in the fields (no name or
+			// address) and the coded history entry "Consent given".
+			$consents = (array) $wpdb->get_results( $wpdb->prepare( "SELECT v.id, v.fields FROM {$this->table()} v WHERE v.id IN ({$in}) AND v.fields LIKE %s AND {$eligibility}", '%' . $wpdb->esc_like( '"' . Consent::KEY . '"' ) . '%', $cutoff, $cutoff ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- integer ids and constant SQL (two placeholders are in $eligibility).
 			if ( $transaction && ! Db::begin() ) {
 				throw new \RuntimeException( 'Retention: transaction could not be started: ' . esc_html( $wpdb->last_error ) );
 			}
 			try {
-				$notes   = $wpdb->query( "UPDATE {$this->events_table()} SET note = '[personal data removed by retention]', actor_email_hash = '' WHERE voucher_id IN ({$in}) AND note <> ''" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- integer ids.
+				$notes   = $wpdb->query( $wpdb->prepare( "UPDATE {$this->events_table()} SET note = '[personal data removed by retention]', actor_email_hash = '' WHERE voucher_id IN ({$in}) AND note <> '' AND note NOT LIKE %s", $wpdb->esc_like( Note::PREFIX . '{"c":"' . Consent::NOTE . '"' ) . '%' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- integer ids.
 				$updated = false === $notes ? false : $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 					$wpdb->prepare(
 						"UPDATE {$this->table()} AS v SET buyer_name = '', buyer_email = '', recipient_name = '', recipient_email = '', message = '', fields = '[]', updated_at = %s
@@ -882,6 +923,13 @@ final class VoucherRepository {
 						$cutoff
 					)
 				);
+				foreach ( $consents as $row ) {
+					$decoded = json_decode( (string) $row['fields'], true );
+					$kept    = Consent::retained( $decoded );
+					if ( false !== $updated && $kept && false === $wpdb->query( $wpdb->prepare( "UPDATE {$this->table()} SET fields = %s WHERE id = %d AND fields = '[]'", (string) wp_json_encode( $kept ), (int) $row['id'] ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name; only a row the update above has just emptied.
+						$updated = false;
+					}
+				}
 				if ( false === $updated || ( $transaction && ! Db::commit() ) ) {
 					throw new \RuntimeException( 'Retention: personal data could not be removed: ' . esc_html( $wpdb->last_error ) );
 				}

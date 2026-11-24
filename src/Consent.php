@@ -20,6 +20,10 @@ defined( 'ABSPATH' ) || exit;
  * text as shown and the time of the order ("given_at", UTC) in "_vcap_fields"; the voucher takes it over with its
  * fields, gets a history entry "Consent given" and the personal data export of WordPress lists it.
  *
+ * OD-1 (owner decision 24.11.2026): the erasure of personal data (WordPress eraser, retention of the daily maintenance)
+ * keeps the consent – text, value and time on the voucher and the order line, and the history entry "Consent given" –
+ * as proof, without name or address (retained()). Legal basis (legitimate interest) not legally checked yet.
+ *
  * The text and its legal effect (e.g. for the right of withdrawal) are not legally checked.
  *
  * @since 1.3.0
@@ -166,6 +170,28 @@ final class Consent {
 		return array(
 			'text'     => (string) ( $field['label'] ?? '' ),
 			'given_at' => (string) ( $field['given_at'] ?? '' ),
+		);
+	}
+
+	/**
+	 * OD-1 (owner decision 24.11.2026): what of the fields survives the erasure of the buyer's (or recipient's) personal
+	 * data – the consent only, as proof: the text as shown, the checkbox value and the time (UTC), nothing else (no
+	 * name, no address). Empty when the fields hold no consent. Legal basis (legitimate interest) not legally checked.
+	 *
+	 * @param mixed $fields "_vcap_fields" / Voucher::$fields.
+	 * @return array<string, array{label: string, value: string, given_at: string}>
+	 */
+	public static function retained( $fields ): array {
+		$field = is_array( $fields ) && is_array( $fields[ self::KEY ] ?? null ) ? $fields[ self::KEY ] : null;
+		if ( null === $field || '' === (string) ( $field['value'] ?? '' ) ) {
+			return array();
+		}
+		return array(
+			self::KEY => array(
+				'label'    => self::clean( (string) ( $field['label'] ?? '' ) ),
+				'value'    => mb_substr( sanitize_text_field( (string) $field['value'] ), 0, 20 ),
+				'given_at' => (string) preg_replace( '/[^0-9: -]/', '', (string) ( $field['given_at'] ?? '' ) ),
+			),
 		);
 	}
 
