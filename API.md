@@ -678,7 +678,7 @@ works on the settings register (`config/settings.php`, `VCAP\SettingsRegistry`).
 
 | Command | Does |
 |---|---|
-| `wp vcap settings list [--section=<section>] [--format=table\|json\|csv\|yaml]` | Every setting with section, type, value, default and export flag (secrets masked). Sections: `general`, `redemption`, `promotions`, `codes`, `delivery`, `privacy`, `api` and those of add-ons. |
+| `wp vcap settings list [--section=<section>] [--format=table\|json\|csv\|yaml]` | Every setting with section, type, value, default and export flag (secrets masked). Sections: `general`, `redemption`, `promotions`, `codes`, `delivery`, `privacy`, `api` and those of add-ons; `hidden` lists the entries without a settings field (e.g. option arrays of an add-on). |
 | `wp vcap settings get <option> [--format=plain\|json]` | Stored value (default where nothing is saved); a table row by row (`AT 30 note; …`). Secrets are refused. |
 | `wp vcap settings set <option> <value>` | Checked like the page (see *Checks*); tables and lists take a JSON array (lists also comma-separated values); refused values change nothing (exit code 1). "Remove all data" stays with `wp vcap data-removal`. |
 | `wp vcap settings export [--file=<path>] [--backup[=<time>]]` | The export JSON (or an automatic backup) to the output or a file. |

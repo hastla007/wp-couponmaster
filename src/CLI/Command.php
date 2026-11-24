@@ -553,7 +553,8 @@ final class Command {
 
 	/** "wp vcap settings list". */
 	private function settings_list( array $assoc_args ): void {
-		$section = self::section_arg( (string) ( $assoc_args['section'] ?? '' ) );
+		$arg     = (string) ( $assoc_args['section'] ?? '' );
+		$section = 'hidden' === $arg ? 'hidden' : self::section_arg( $arg ); // Entries without a settings field (e.g. an add-on's option arrays).
 		if ( false === $section ) {
 			self::error( 'Unknown section.' );
 			return;
