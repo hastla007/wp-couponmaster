@@ -6444,6 +6444,13 @@ add_filter( 'vcap_balance_deduct_statuses', static function ( $s ) use ( &$v05_s
 add_filter( 'vcap_balance_restore_statuses', static function ( $s ) use ( &$v05_seen7 ) { $v05_seen7[] = $s; return array( 'failed' ); } );
 $v05_f7 = array( VCAP\Coupons\Settlement::deduct_statuses(), VCAP\Coupons\Settlement::restore_statuses() );
 check( 'SET-VC-05: no. 7 statuses – filters vcap_balance_deduct_statuses and vcap_balance_restore_statuses get the setting and win', array( array( 'completed' ), array( 'cancelled' ) ) === $v05_seen7 && array( array( 'shipped' ), array( 'failed' ) ) === $v05_f7 );
+$GLOBALS['vcap_test_options'][ VCAP\Coupons\Settlement::DEDUCT_OPTION ]  = array( 'processing', 'completed', 'shipped' );
+$GLOBALS['vcap_test_options'][ VCAP\Coupons\Settlement::RESTORE_OPTION ] = array( 'cancelled', 'shipped' );
+add_filter( 'wc_order_statuses', static fn( $s ) => $s + array( 'wc-shipped' => 'Shipped' ) );
+$od8_pair = VCAP\Coupons\Settlement::setting_restore_statuses();
+array_pop( $GLOBALS['vcap_test_filters']['wc_order_statuses'] );
+unset( $GLOBALS['vcap_test_options'][ VCAP\Coupons\Settlement::DEDUCT_OPTION ], $GLOBALS['vcap_test_options'][ VCAP\Coupons\Settlement::RESTORE_OPTION ] );
+check( 'OD-8: a status chosen for charging is never also used for booking back (no contradictory pair)', array( 'cancelled' ) === $od8_pair, wp_json_encode( $od8_pair ) );
 // OD-8: book back at any registered status except the paid ones (custom statuses too); the default stays the three.
 $GLOBALS['vcap_test_filters'] = $v05_saved_filters;
 add_filter( 'wc_order_statuses', static fn( $s ) => $s + array( 'wc-pending' => 'Pending payment', 'wc-on-hold' => 'On hold', 'wc-cancelled' => 'Cancelled', 'wc-refunded' => 'Refunded', 'wc-failed' => 'Failed', 'wc-awaiting-return' => 'Awaiting return', 'wc-paid-later' => 'Paid later' ) );

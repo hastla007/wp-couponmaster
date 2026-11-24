@@ -89,6 +89,8 @@ final class Settlement {
 	 */
 	public static function setting_restore_statuses( $value = null ): array {
 		$list = array_values( array_intersect( self::status_list( null === $value ? Settings::value( self::RESTORE_OPTION ) : $value ), array_keys( self::restore_choices() ) ) );
+		// A status chosen for charging is never also one for booking back (no contradictory pair, e.g. a custom "shipped").
+		$list = array_values( array_diff( $list, self::setting_deduct_statuses() ) );
 		return $list ? $list : self::RESTORE_CHOICES;
 	}
 
