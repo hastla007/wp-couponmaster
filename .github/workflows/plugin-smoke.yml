@@ -24,7 +24,7 @@ jobs:
       matrix:
         php: ['8.5']
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Set up PHP
         uses: shivammathur/setup-php@v2
         with:
@@ -93,7 +93,7 @@ jobs:
           --health-timeout=5s
           --health-retries=10
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Set up PHP 8.5
         uses: shivammathur/setup-php@v2
         with:
@@ -161,7 +161,7 @@ jobs:
           --health-timeout=5s
           --health-retries=10
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Set up PHP 8.5
         uses: shivammathur/setup-php@v2
         with:
@@ -236,7 +236,7 @@ jobs:
           --health-timeout=5s
           --health-retries=10
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Set up PHP 8.5
         uses: shivammathur/setup-php@v2
         with:
@@ -295,7 +295,7 @@ jobs:
           --health-timeout=5s
           --health-retries=10
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Set up PHP 8.5
         uses: shivammathur/setup-php@v2
         with:
@@ -399,7 +399,7 @@ jobs:
           --health-timeout=5s
           --health-retries=10
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Set up PHP 8.5
@@ -487,7 +487,7 @@ jobs:
           --health-timeout=5s
           --health-retries=10
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Set up PHP 8.5
         uses: shivammathur/setup-php@v2
         with:
@@ -551,7 +551,7 @@ jobs:
           --health-timeout=5s
           --health-retries=10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Set up PHP 8.5
         uses: shivammathur/setup-php@v2
         with:
@@ -602,7 +602,7 @@ jobs:
           --health-timeout=5s
           --health-retries=10
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Set up PHP 8.5
         uses: shivammathur/setup-php@v2
         with:
@@ -628,7 +628,7 @@ jobs:
           php wp-cli.phar --path=wp-test rewrite structure '/%postname%/'
           php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/e2e/setup.php"
           php wp-cli.phar --path=wp-test rewrite flush
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
       - name: Install Playwright and axe
@@ -693,7 +693,7 @@ jobs:
           fi
       - name: Upload browser test results
         if: failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: browser-e2e-results
           path: |
@@ -705,7 +705,7 @@ jobs:
   quality:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Set up PHP 8.5
         uses: shivammathur/setup-php@v2
         with:
@@ -741,7 +741,7 @@ jobs:
     # full reports stay informational until the existing findings are worked off.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Set up PHP 8.5
@@ -819,7 +819,7 @@ jobs:
         run: phpstan analyse --configuration=phpstan-wide.neon.dist --no-progress --memory-limit=1G --generate-baseline=phpstan-baseline.generated.neon --allow-empty-baseline || true
       - name: Upload the reports and the generated baseline
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: phpstan-baseline
           path: |
@@ -848,7 +848,7 @@ jobs:
           --health-timeout=5s
           --health-retries=10
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Set up PHP 8.5
         uses: shivammathur/setup-php@v2
         with:
@@ -885,7 +885,7 @@ jobs:
           exit $status
       - name: Upload the Plugin Check result
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: plugin-check
           path: plugin-check.csv
